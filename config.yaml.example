@@ -1,0 +1,78 @@
+model_list:
+  # OpenAI models (standard)
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: os.environ/OPENAI_API_KEY
+    rpm: 100
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    rpm: 100
+
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: os.environ/OPENAI_API_KEY
+    rpm: 200
+
+  # OpenAI-compatible endpoint with custom base URL
+  # Use api_base to point at any OpenAI-compatible service (Azure, vLLM, LM Studio, etc.)
+  # api_base supports os.environ/ expansion just like api_key.
+  # - model_name: my-local-model
+  #   litellm_params:
+  #     model: openai/llama-3
+  #     api_key: os.environ/LOCAL_API_KEY
+  #     api_base: os.environ/OPENAI_BASE_URL   # e.g. http://localhost:11434/v1
+  #   rpm: 0
+
+  # OpenAI embedding models
+  - model_name: text-embedding-ada-002
+    litellm_params:
+      model: openai/text-embedding-ada-002
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Anthropic models (standard)
+  - model_name: claude-3-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20240620
+      api_key: os.environ/ANTHROPIC_API_KEY
+    rpm: 50
+
+  - model_name: claude-3-opus
+    litellm_params:
+      model: anthropic/claude-3-opus-20240229
+      api_key: os.environ/ANTHROPIC_API_KEY
+    rpm: 30
+
+  - model_name: claude-3-haiku
+    litellm_params:
+      model: anthropic/claude-3-haiku-20240307
+      api_key: os.environ/ANTHROPIC_API_KEY
+    rpm: 100
+
+  # Anthropic-compatible endpoint with custom base URL
+  # Use api_base to point at a custom Anthropic-compatible gateway or proxy.
+  # - model_name: my-gateway-claude
+  #   litellm_params:
+  #     model: anthropic/claude-3-5-sonnet-20240620
+  #     api_key: os.environ/ANTHROPIC_API_KEY
+  #     api_base: os.environ/ANTHROPIC_BASE_URL  # e.g. https://my-gateway.example.com/v1
+
+router_settings:
+  routing_strategy: simple-shuffle  # or "round-robin"
+  num_retries: 2
+  allowed_fails: 3
+  cooldown_time: 30s
+
+general_settings:
+  master_key: os.environ/PROXY_MASTER_KEY
+  database_url: ./proxy.db
+  port: 8080
