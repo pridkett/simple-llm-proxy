@@ -35,21 +35,37 @@ type Status struct {
 	ModelCount int        `json:"model_count"`
 }
 
+// EffectiveSpecResult is returned by GetEffectiveSpec and describes how cost data was resolved.
+type EffectiveSpecResult struct {
+	Spec  ModelSpec
+	Found bool
+	// Source indicates how the spec was resolved:
+	// "custom" = user-defined custom spec, "override" = cost map key override,
+	// "auto" = matched via deployment actual_model, "" = not found.
+	Source string
+	// Key is the cost map key that was matched (empty when Source is "custom" or "").
+	Key string
+}
+
 // Manager downloads and caches the LiteLLM cost/context map.
 // All methods are safe for concurrent use.
 type Manager struct {
-	mu         sync.RWMutex
-	sourceURL  string
-	models     map[string]ModelSpec
-	loadedAt   *time.Time
-	httpClient *http.Client
+	mu           sync.RWMutex
+	sourceURL    string
+	models       map[string]ModelSpec
+	loadedAt     *time.Time
+	httpClient   *http.Client
+	overrideKeys map[string]string    // proxyModelName → cost map key override
+	customSpecs  map[string]ModelSpec // proxyModelName → custom spec
 }
 
 // New creates a Manager with DefaultURL and a 30-second HTTP timeout.
 func New() *Manager {
 	return &Manager{
-		sourceURL:  DefaultURL,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		sourceURL:    DefaultURL,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		overrideKeys: make(map[string]string),
+		customSpecs:  make(map[string]ModelSpec),
 	}
 }
 
@@ -207,4 +223,71 @@ func (m *Manager) GetModel(name string) (ModelSpec, bool) {
 	}
 	spec, ok := m.models[name]
 	return spec, ok
+}
+
+// SetOverrideKey sets a cost map lookup key override for a proxy model name.
+// When GetEffectiveSpec is called for this model, it will look up this key in the
+// cost map instead of auto-detecting from candidate actual model strings.
+// Pass key="" to clear a previous override (treated as no override).
+func (m *Manager) SetOverrideKey(proxyModel, key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if key == "" {
+		delete(m.overrideKeys, proxyModel)
+	} else {
+		m.overrideKeys[proxyModel] = key
+	}
+}
+
+// SetCustomSpec stores a fully custom ModelSpec for a proxy model name.
+// When GetEffectiveSpec is called for this model, this spec is returned directly
+// without consulting the cost map.
+func (m *Manager) SetCustomSpec(proxyModel string, spec ModelSpec) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.customSpecs[proxyModel] = spec
+}
+
+// ClearOverride removes any override (key or custom) for the given proxy model name,
+// reverting to auto-detection behaviour.
+func (m *Manager) ClearOverride(proxyModel string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.overrideKeys, proxyModel)
+	delete(m.customSpecs, proxyModel)
+}
+
+// GetEffectiveSpec resolves the ModelSpec for a proxy model name using this precedence:
+//  1. Custom spec set via SetCustomSpec → Source="custom"
+//  2. Override key set via SetOverrideKey, looked up in the cost map → Source="override"
+//  3. Auto-detection: first candidateActualModel that matches in the cost map → Source="auto"
+//  4. Not found → Found=false
+//
+// All reads are performed under a single read lock for consistency.
+func (m *Manager) GetEffectiveSpec(proxyModel string, candidateActualModels []string) EffectiveSpecResult {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// 1. Custom spec takes highest precedence.
+	if spec, ok := m.customSpecs[proxyModel]; ok {
+		return EffectiveSpecResult{Spec: spec, Found: true, Source: "custom"}
+	}
+
+	// 2. Override key.
+	if key, ok := m.overrideKeys[proxyModel]; ok && key != "" {
+		if spec, ok := m.models[key]; ok {
+			return EffectiveSpecResult{Spec: spec, Found: true, Source: "override", Key: key}
+		}
+		// Override key is set but not found in the cost map (map not loaded or key typo).
+		return EffectiveSpecResult{Found: false, Source: "override", Key: key}
+	}
+
+	// 3. Auto-detect from candidate actual model strings.
+	for _, candidate := range candidateActualModels {
+		if spec, ok := m.models[candidate]; ok {
+			return EffectiveSpecResult{Spec: spec, Found: true, Source: "auto", Key: candidate}
+		}
+	}
+
+	return EffectiveSpecResult{}
 }

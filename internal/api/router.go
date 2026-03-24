@@ -43,6 +43,9 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Post("/v1/completions", handler.Completions())
 		mux.Post("/v1/embeddings", handler.Embeddings(r, store))
 		mux.Get("/v1/models", handler.Models(r))
+		mux.Get("/v1/models/{model}", handler.ModelDetail(r, cm))
+		mux.Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
+		mux.Patch("/v1/models/{model}/costs", handler.PatchModelCosts(cm, store))
 
 		// Admin endpoints
 		mux.Get("/admin/status", handler.AdminStatus(r, startTime))

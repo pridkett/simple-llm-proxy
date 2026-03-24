@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -73,6 +74,13 @@ func main() {
 		}
 	}()
 
+	// Seed cost overrides from SQLite into the costmap Manager.
+	// This restores user-defined mappings across server restarts.
+	// Done before the HTTP server starts so all routes see consistent state.
+	if store != nil {
+		seedCostOverrides(context.Background(), store, cm)
+	}
+
 	// Create HTTP router
 	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec)
 
@@ -110,4 +118,29 @@ func main() {
 	}
 
 	log.Println("Server exited")
+}
+
+// seedCostOverrides reads persisted cost overrides from storage and loads them into the
+// costmap Manager's in-memory state. Called once at startup before serving requests.
+func seedCostOverrides(ctx context.Context, store storage.Storage, cm *costmap.Manager) {
+	overrides, err := store.ListCostOverrides(ctx)
+	if err != nil {
+		log.Printf("Warning: failed to load cost overrides from storage: %v", err)
+		return
+	}
+	for _, ov := range overrides {
+		if ov.CostMapKey != nil {
+			cm.SetOverrideKey(ov.ModelName, *ov.CostMapKey)
+		} else if ov.CustomSpec != nil {
+			var spec costmap.ModelSpec
+			if err := json.Unmarshal([]byte(*ov.CustomSpec), &spec); err != nil {
+				log.Printf("Warning: failed to decode custom cost spec for model %q: %v", ov.ModelName, err)
+				continue
+			}
+			cm.SetCustomSpec(ov.ModelName, spec)
+		}
+	}
+	if len(overrides) > 0 {
+		log.Printf("Loaded %d cost override(s) from storage", len(overrides))
+	}
 }

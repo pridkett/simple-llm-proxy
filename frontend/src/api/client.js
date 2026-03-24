@@ -145,4 +145,36 @@ export const api = {
       body: JSON.stringify({ url }),
     })
   },
+
+  /**
+   * GET /v1/models/{model} — returns model detail with cost information
+   * @param {string} modelName
+   */
+  modelDetail(modelName) {
+    return request(`/v1/models/${encodeURIComponent(modelName)}`)
+  },
+
+  /**
+   * PATCH /v1/models/{model}/cost_map_key — set a cost map key override
+   * @param {string} modelName
+   * @param {string} costMapKey  e.g. "openai/gpt-4"
+   */
+  patchModelCostMapKey(modelName, costMapKey) {
+    return request(`/v1/models/${encodeURIComponent(modelName)}/cost_map_key`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cost_map_key: costMapKey }),
+    })
+  },
+
+  /**
+   * PATCH /v1/models/{model}/costs — set a fully custom cost spec
+   * @param {string} modelName
+   * @param {object} costs  Fields matching costmap.ModelSpec
+   */
+  patchModelCosts(modelName, costs) {
+    return request(`/v1/models/${encodeURIComponent(modelName)}/costs`, {
+      method: 'PATCH',
+      body: JSON.stringify(costs),
+    })
+  },
 }

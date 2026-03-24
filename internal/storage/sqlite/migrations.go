@@ -49,6 +49,14 @@ func (s *Storage) migrate(ctx context.Context) error {
 			version INTEGER PRIMARY KEY,
 			applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+
+		// Migration 5: Create cost_overrides table for model cost map mappings
+		`CREATE TABLE IF NOT EXISTS cost_overrides (
+			model_name   TEXT PRIMARY KEY,
+			cost_map_key TEXT,
+			custom_spec  TEXT,
+			updated_at   DATETIME NOT NULL DEFAULT (datetime('now'))
+		)`,
 	}
 
 	for i, migration := range migrations {
