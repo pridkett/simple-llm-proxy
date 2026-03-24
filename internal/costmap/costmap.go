@@ -75,9 +75,19 @@ func (m *Manager) Load(ctx context.Context) error {
 		return fmt.Errorf("unexpected status %d from cost map URL", resp.StatusCode)
 	}
 
-	models := make(map[string]ModelSpec)
-	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+	// Decode loosely into map[string]interface{} so entries with unexpected
+	// types (e.g. the "sample_spec" documentation stub) don't fail the entire
+	// load. UseNumber preserves numeric precision.
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
+	var raw map[string]map[string]interface{}
+	if err := dec.Decode(&raw); err != nil {
 		return fmt.Errorf("decoding cost map JSON: %w", err)
+	}
+
+	models := make(map[string]ModelSpec, len(raw))
+	for name, entry := range raw {
+		models[name] = parseModelSpec(entry)
 	}
 
 	now := time.Now()
@@ -131,6 +141,60 @@ func (m *Manager) Status() Status {
 		URL:        m.sourceURL,
 		ModelCount: len(m.models),
 	}
+}
+
+// parseModelSpec converts a loosely-typed map from JSON decoding into a ModelSpec.
+// Unknown or non-numeric values are silently ignored (zero value used).
+func parseModelSpec(entry map[string]interface{}) ModelSpec {
+	return ModelSpec{
+		MaxTokens:                    asInt(entry["max_tokens"]),
+		MaxInputTokens:               asInt(entry["max_input_tokens"]),
+		MaxOutputTokens:              asInt(entry["max_output_tokens"]),
+		InputCostPerToken:            asFloat(entry["input_cost_per_token"]),
+		OutputCostPerToken:           asFloat(entry["output_cost_per_token"]),
+		LiteLLMProvider:              asString(entry["litellm_provider"]),
+		Mode:                         asString(entry["mode"]),
+		SupportsFunctionCalling:      asBool(entry["supports_function_calling"]),
+		SupportsParallelFunctionCalling: asBool(entry["supports_parallel_function_calling"]),
+		SupportsVision:               asBool(entry["supports_vision"]),
+	}
+}
+
+func asInt(v interface{}) int {
+	switch n := v.(type) {
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return int(i)
+		}
+		if f, err := n.Float64(); err == nil {
+			return int(f)
+		}
+	}
+	return 0
+}
+
+func asFloat(v interface{}) float64 {
+	switch n := v.(type) {
+	case json.Number:
+		if f, err := n.Float64(); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func asString(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func asBool(v interface{}) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return false
 }
 
 // GetModel returns the ModelSpec for a given model name.
