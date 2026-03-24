@@ -62,6 +62,36 @@ type ModelInfo struct {
 	OwnedBy string `json:"owned_by"`
 }
 
+// CostsInfo holds cost and context window data for a model.
+// All numeric fields are zero-valued when no cost mapping is available.
+type CostsInfo struct {
+	MaxTokens                       int     `json:"max_tokens"`
+	MaxInputTokens                  int     `json:"max_input_tokens"`
+	MaxOutputTokens                 int     `json:"max_output_tokens"`
+	InputCostPerToken               float64 `json:"input_cost_per_token"`
+	OutputCostPerToken              float64 `json:"output_cost_per_token"`
+	LiteLLMProvider                 string  `json:"litellm_provider,omitempty"`
+	Mode                            string  `json:"mode,omitempty"`
+	SupportsFunctionCalling         bool    `json:"supports_function_calling"`
+	SupportsParallelFunctionCalling bool    `json:"supports_parallel_function_calling"`
+	SupportsVision                  bool    `json:"supports_vision"`
+	// Source indicates how costs were resolved:
+	// "auto" = matched via deployment actual_model, "override" = cost map key override,
+	// "custom" = user-defined custom spec, "" = not found.
+	Source     string `json:"source,omitempty"`
+	CostMapKey string `json:"cost_map_key,omitempty"`
+}
+
+// ModelDetailResponse is the response for GET /v1/models/{model}.
+// It extends the basic model info with cost and capability data.
+type ModelDetailResponse struct {
+	ID      string    `json:"id"`
+	Object  string    `json:"object"`
+	Created int64     `json:"created"`
+	OwnedBy string    `json:"owned_by"`
+	Costs   CostsInfo `json:"costs"`
+}
+
 // StreamChunk represents a streaming response chunk.
 type StreamChunk struct {
 	ID                string   `json:"id"`
