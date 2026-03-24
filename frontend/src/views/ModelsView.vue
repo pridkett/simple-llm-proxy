@@ -109,46 +109,50 @@
                 <p class="text-xs text-gray-500">
                   Select the LiteLLM cost map entry for this model. Type to filter.
                 </p>
-                <div class="relative">
-                  <div class="flex gap-2">
-                    <div class="relative flex-1">
-                      <input
-                        :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
-                        class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 font-mono"
-                        placeholder="e.g. openai/gpt-4"
-                        autocomplete="off"
-                        @input="onCostKeyInput(model.model_name, $event.target.value)"
-                        @focus="openDropdown(model.model_name)"
-                        @blur="scheduleCloseDropdown(model.model_name)"
-                      />
-                      <!-- Autocomplete dropdown -->
-                      <div
-                        v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
-                        class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
-                      >
-                        <button
-                          v-for="entry in filteredCostMapModels(model.model_name)"
-                          :key="entry.name"
-                          type="button"
-                          class="w-full text-left px-3 py-2 hover:bg-indigo-50 border-b border-gray-50 last:border-0"
-                          @mousedown.prevent="selectCostMapKey(model.model_name, entry.name)"
-                        >
-                          <div class="font-mono text-xs text-gray-900 truncate">{{ entry.name }}</div>
-                          <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
-                            <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
-                            <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
-                            <span v-if="entry.max_tokens">{{ entry.max_tokens.toLocaleString() }} tok</span>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      class="btn-primary text-xs"
-                      :disabled="saving[model.model_name]"
-                      @click="saveCostMapKey(model.model_name)"
-                    >{{ saving[model.model_name] ? 'Saving…' : 'Save' }}</button>
-                  </div>
+                <div class="flex gap-2">
+                  <input
+                    :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
+                    class="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 font-mono"
+                    placeholder="e.g. openai/gpt-4"
+                    autocomplete="off"
+                    @input="onCostKeyInput(model.model_name, $event.target.value, $event)"
+                    @focus="openDropdown(model.model_name, $event)"
+                    @blur="scheduleCloseDropdown(model.model_name)"
+                  />
+                  <button
+                    class="btn-primary text-xs"
+                    :disabled="saving[model.model_name]"
+                    @click="saveCostMapKey(model.model_name)"
+                  >{{ saving[model.model_name] ? 'Saving…' : 'Save' }}</button>
                 </div>
+                <!-- Dropdown teleported to <body> to escape card's overflow:hidden -->
+                <Teleport to="body">
+                  <div
+                    v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
+                    class="fixed z-50 bg-white border border-gray-200 rounded shadow-xl overflow-y-auto"
+                    :style="{
+                      top: (dropdownPos[model.model_name]?.top ?? 0) + 'px',
+                      left: (dropdownPos[model.model_name]?.left ?? 0) + 'px',
+                      width: (dropdownPos[model.model_name]?.width ?? 300) + 'px',
+                      maxHeight: '220px',
+                    }"
+                  >
+                    <button
+                      v-for="entry in filteredCostMapModels(model.model_name)"
+                      :key="entry.name"
+                      type="button"
+                      class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
+                      @mousedown.prevent="selectCostMapKey(model.model_name, entry.name)"
+                    >
+                      <div class="font-mono text-xs text-gray-900 truncate">{{ entry.name }}</div>
+                      <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
+                        <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
+                        <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
+                        <span v-if="entry.max_tokens">{{ entry.max_tokens.toLocaleString() }} tok</span>
+                      </div>
+                    </button>
+                  </div>
+                </Teleport>
                 <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600">{{ saveErrors[model.model_name] }}</p>
               </div>
 
@@ -248,6 +252,7 @@ const customCostInputs = reactive({})
 const saving = reactive({})
 const saveErrors = reactive({})
 const showDropdowns = reactive({})
+const dropdownPos = reactive({}) // modelName → {top, left, width} in viewport px
 
 // Cost map model list for autocomplete — loaded once on first editor open.
 const costMapModelList = ref([])
@@ -308,13 +313,24 @@ function setCostTab(modelName, tab) { costTabs[modelName] = tab }
 
 // --- Autocomplete helpers ---
 
-function onCostKeyInput(modelName, value) {
-  costKeyInputs[modelName] = value
-  showDropdowns[modelName] = true
+function updateDropdownPos(modelName, el) {
+  const rect = el.getBoundingClientRect()
+  dropdownPos[modelName] = {
+    top: rect.bottom + 4,  // 4px gap below the input; fixed = viewport-relative
+    left: rect.left,
+    width: rect.width,
+  }
 }
 
-function openDropdown(modelName) {
+function onCostKeyInput(modelName, value, event) {
+  costKeyInputs[modelName] = value
   showDropdowns[modelName] = true
+  updateDropdownPos(modelName, event.target)
+}
+
+function openDropdown(modelName, event) {
+  showDropdowns[modelName] = true
+  updateDropdownPos(modelName, event.target)
 }
 
 function scheduleCloseDropdown(modelName) {
