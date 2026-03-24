@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"sync"
 	"time"
 )
@@ -211,6 +212,31 @@ func asBool(v interface{}) bool {
 		return b
 	}
 	return false
+}
+
+// ModelEntry pairs a model name with its spec, used for listing.
+type ModelEntry struct {
+	Name string
+	Spec ModelSpec
+}
+
+// ListModels returns all models in the cost map as a slice sorted by name.
+// Returns nil if the cost map has not been loaded.
+func (m *Manager) ListModels() []ModelEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.models == nil {
+		return nil
+	}
+	entries := make([]ModelEntry, 0, len(m.models))
+	for name, spec := range m.models {
+		entries = append(entries, ModelEntry{Name: name, Spec: spec})
+	}
+	// Sort by name for stable output.
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name < entries[j].Name
+	})
+	return entries
 }
 
 // GetModel returns the ModelSpec for a given model name.

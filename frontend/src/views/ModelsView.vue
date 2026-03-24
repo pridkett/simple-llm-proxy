@@ -24,13 +24,8 @@
               </p>
             </div>
             <div class="flex items-center gap-3">
-              <StatusBadge
-                :status="model.healthy_deployments > 0 ? 'healthy' : 'cooldown'"
-              />
-              <button
-                class="btn-secondary text-xs"
-                @click="togglePlayground(model.model_name)"
-              >
+              <StatusBadge :status="model.healthy_deployments > 0 ? 'healthy' : 'cooldown'" />
+              <button class="btn-secondary text-xs" @click="togglePlayground(model.model_name)">
                 {{ openPlaygrounds.has(model.model_name) ? 'Hide test' : 'Test' }}
               </button>
             </div>
@@ -80,25 +75,14 @@
                     'bg-blue-100 text-blue-700': model.costs.source === 'override',
                     'bg-purple-100 text-purple-700': model.costs.source === 'custom',
                   }"
-                >
-                  {{ model.costs.source }}
-                </span>
+                >{{ model.costs.source }}</span>
                 <span v-else class="text-xs text-gray-400">not mapped</span>
               </div>
               <div class="flex items-center gap-4 text-xs text-gray-600">
-                <span v-if="model.costs?.input_cost_per_token">
-                  In: {{ formatCostPerToken(model.costs.input_cost_per_token) }}
-                </span>
-                <span v-if="model.costs?.output_cost_per_token">
-                  Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}
-                </span>
-                <span v-if="model.costs?.max_tokens">
-                  Max: {{ model.costs.max_tokens.toLocaleString() }} tok
-                </span>
-                <button
-                  class="btn-secondary text-xs"
-                  @click="toggleCostEditor(model.model_name)"
-                >
+                <span v-if="model.costs?.input_cost_per_token">In: {{ formatCostPerToken(model.costs.input_cost_per_token) }}</span>
+                <span v-if="model.costs?.output_cost_per_token">Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}</span>
+                <span v-if="model.costs?.max_tokens">Max: {{ model.costs.max_tokens.toLocaleString() }} tok</span>
+                <button class="btn-secondary text-xs" @click="toggleCostEditor(model.model_name)">
                   {{ openCostEditors.has(model.model_name) ? 'Hide' : 'Edit' }}
                 </button>
               </div>
@@ -110,69 +94,87 @@
               <div class="flex gap-2 mt-3 mb-4 border-b border-gray-200">
                 <button
                   class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'key'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeCostTab(model.model_name) === 'key' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
                   @click="setCostTab(model.model_name, 'key')"
-                >
-                  Cost Map Key
-                </button>
+                >Cost Map Key</button>
                 <button
                   class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'custom'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeCostTab(model.model_name) === 'custom' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
                   @click="setCostTab(model.model_name, 'custom')"
-                >
-                  Custom Costs
-                </button>
+                >Custom Costs</button>
               </div>
 
-              <!-- Cost map key tab -->
+              <!-- Cost map key tab — autocomplete combobox -->
               <div v-if="activeCostTab(model.model_name) === 'key'" class="space-y-2">
                 <p class="text-xs text-gray-500">
-                  Override which LiteLLM cost map entry is used for this model (e.g. <code class="font-mono">openai/gpt-4</code>).
+                  Select the LiteLLM cost map entry for this model. Type to filter.
                 </p>
-                <div class="flex gap-2">
-                  <input
-                    :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
-                    class="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 font-mono"
-                    placeholder="e.g. openai/gpt-4"
-                    @input="costKeyInputs[model.model_name] = $event.target.value"
-                  />
-                  <button
-                    class="btn-primary text-xs"
-                    :disabled="saving[model.model_name]"
-                    @click="saveCostMapKey(model.model_name)"
-                  >
-                    {{ saving[model.model_name] ? 'Saving…' : 'Save' }}
-                  </button>
+                <div class="relative">
+                  <div class="flex gap-2">
+                    <div class="relative flex-1">
+                      <input
+                        :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
+                        class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 font-mono"
+                        placeholder="e.g. openai/gpt-4"
+                        autocomplete="off"
+                        @input="onCostKeyInput(model.model_name, $event.target.value)"
+                        @focus="openDropdown(model.model_name)"
+                        @blur="scheduleCloseDropdown(model.model_name)"
+                      />
+                      <!-- Autocomplete dropdown -->
+                      <div
+                        v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
+                        class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
+                      >
+                        <button
+                          v-for="entry in filteredCostMapModels(model.model_name)"
+                          :key="entry.name"
+                          type="button"
+                          class="w-full text-left px-3 py-2 hover:bg-indigo-50 border-b border-gray-50 last:border-0"
+                          @mousedown.prevent="selectCostMapKey(model.model_name, entry.name)"
+                        >
+                          <div class="font-mono text-xs text-gray-900 truncate">{{ entry.name }}</div>
+                          <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
+                            <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
+                            <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
+                            <span v-if="entry.max_tokens">{{ entry.max_tokens.toLocaleString() }} tok</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      class="btn-primary text-xs"
+                      :disabled="saving[model.model_name]"
+                      @click="saveCostMapKey(model.model_name)"
+                    >{{ saving[model.model_name] ? 'Saving…' : 'Save' }}</button>
+                  </div>
                 </div>
                 <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600">{{ saveErrors[model.model_name] }}</p>
               </div>
 
-              <!-- Custom costs tab -->
+              <!-- Custom costs tab — inputs in $/MTok -->
               <div v-if="activeCostTab(model.model_name) === 'custom'" class="space-y-3">
                 <p class="text-xs text-gray-500">
-                  Define fully custom cost values for this model, bypassing the cost map.
+                  Define fully custom cost values, bypassing the cost map.
+                  Cost fields are in <strong>$ per million tokens ($/MTok)</strong>.
                 </p>
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <label class="block">
-                    <span class="text-xs text-gray-600">Input cost / token</span>
+                    <span class="text-xs text-gray-600">Input cost ($/MTok)</span>
                     <input
-                      type="number" step="any" min="0"
-                      :value="customCostInputs[model.model_name]?.input_cost_per_token ?? model.costs?.input_cost_per_token ?? ''"
+                      type="number" step="0.0001" min="0"
+                      :value="getCustomMTok(model.model_name, 'input_cost_per_token', model.costs)"
                       class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
-                      @input="setCustomField(model.model_name, 'input_cost_per_token', parseFloat($event.target.value))"
+                      @input="setCustomMTokField(model.model_name, 'input_cost_per_token', $event.target.value)"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Output cost / token</span>
+                    <span class="text-xs text-gray-600">Output cost ($/MTok)</span>
                     <input
-                      type="number" step="any" min="0"
-                      :value="customCostInputs[model.model_name]?.output_cost_per_token ?? model.costs?.output_cost_per_token ?? ''"
+                      type="number" step="0.0001" min="0"
+                      :value="getCustomMTok(model.model_name, 'output_cost_per_token', model.costs)"
                       class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
-                      @input="setCustomField(model.model_name, 'output_cost_per_token', parseFloat($event.target.value))"
+                      @input="setCustomMTokField(model.model_name, 'output_cost_per_token', $event.target.value)"
                     />
                   </label>
                   <label class="block">
@@ -208,9 +210,7 @@
                     class="btn-primary text-xs"
                     :disabled="saving[model.model_name]"
                     @click="saveCustomCosts(model.model_name)"
-                  >
-                    {{ saving[model.model_name] ? 'Saving…' : 'Save custom costs' }}
-                  </button>
+                  >{{ saving[model.model_name] ? 'Saving…' : 'Save custom costs' }}</button>
                 </div>
                 <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600">{{ saveErrors[model.model_name] }}</p>
               </div>
@@ -218,10 +218,7 @@
           </div>
 
           <!-- Inline playground (toggleable) -->
-          <ModelPlayground
-            v-if="openPlaygrounds.has(model.model_name)"
-            :model-name="model.model_name"
-          />
+          <ModelPlayground v-if="openPlaygrounds.has(model.model_name)" :model-name="model.model_name" />
         </div>
 
         <div v-if="!data.models?.length" class="card px-6 py-12 text-center text-sm text-gray-500">
@@ -245,22 +242,35 @@ const loading = ref(false)
 const error = ref('')
 const openPlaygrounds = reactive(new Set())
 const openCostEditors = reactive(new Set())
-const costTabs = reactive({})       // modelName → 'key' | 'custom'
-const costKeyInputs = reactive({})  // modelName → string
-const customCostInputs = reactive({}) // modelName → partial ModelSpec
-const saving = reactive({})         // modelName → bool
-const saveErrors = reactive({})     // modelName → string
+const costTabs = reactive({})
+const costKeyInputs = reactive({})
+const customCostInputs = reactive({})
+const saving = reactive({})
+const saveErrors = reactive({})
+const showDropdowns = reactive({})
+
+// Cost map model list for autocomplete — loaded once on first editor open.
+const costMapModelList = ref([])
+const costMapModelsLoaded = ref(false)
+
+async function loadCostMapModels() {
+  if (costMapModelsLoaded.value) return
+  try {
+    const models = await api.costMapModels()
+    costMapModelList.value = models
+    costMapModelsLoaded.value = true
+  } catch {
+    // Non-fatal: autocomplete simply won't show suggestions.
+  }
+}
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
     const statusData = await api.status()
-    // Fetch cost detail for all models in parallel; ignore individual failures gracefully.
     const details = await Promise.all(
-      statusData.models.map((m) =>
-        api.modelDetail(m.model_name).catch(() => null)
-      )
+      statusData.models.map((m) => api.modelDetail(m.model_name).catch(() => null))
     )
     data.value = {
       ...statusData,
@@ -279,11 +289,8 @@ async function load() {
 onMounted(load)
 
 function togglePlayground(modelName) {
-  if (openPlaygrounds.has(modelName)) {
-    openPlaygrounds.delete(modelName)
-  } else {
-    openPlaygrounds.add(modelName)
-  }
+  if (openPlaygrounds.has(modelName)) openPlaygrounds.delete(modelName)
+  else openPlaygrounds.add(modelName)
 }
 
 function toggleCostEditor(modelName) {
@@ -292,15 +299,63 @@ function toggleCostEditor(modelName) {
   } else {
     openCostEditors.add(modelName)
     if (!costTabs[modelName]) costTabs[modelName] = 'key'
+    loadCostMapModels()
   }
 }
 
-function activeCostTab(modelName) {
-  return costTabs[modelName] || 'key'
+function activeCostTab(modelName) { return costTabs[modelName] || 'key' }
+function setCostTab(modelName, tab) { costTabs[modelName] = tab }
+
+// --- Autocomplete helpers ---
+
+function onCostKeyInput(modelName, value) {
+  costKeyInputs[modelName] = value
+  showDropdowns[modelName] = true
 }
 
-function setCostTab(modelName, tab) {
-  costTabs[modelName] = tab
+function openDropdown(modelName) {
+  showDropdowns[modelName] = true
+}
+
+function scheduleCloseDropdown(modelName) {
+  // Delay allows mousedown on a dropdown item to fire before the dropdown closes.
+  setTimeout(() => { showDropdowns[modelName] = false }, 150)
+}
+
+function selectCostMapKey(modelName, name) {
+  costKeyInputs[modelName] = name
+  showDropdowns[modelName] = false
+}
+
+function filteredCostMapModels(modelName) {
+  const query = (costKeyInputs[modelName] ?? '').toLowerCase()
+  const list = costMapModelList.value
+  if (!query) return list.slice(0, 10)
+  return list.filter((e) => e.name.toLowerCase().includes(query)).slice(0, 10)
+}
+
+// --- Custom costs: per-MTok display helpers ---
+// The API stores costs as per-token (e.g. 0.00003).
+// We display and accept input in $/MTok (e.g. 30).
+
+const PER_MTOK = 1_000_000
+
+function getCustomMTok(modelName, field, costs) {
+  // User-edited value takes precedence over the saved cost data.
+  const edited = customCostInputs[modelName]?.[field]
+  if (edited !== undefined) return edited
+  const saved = costs?.[field]
+  if (!saved) return ''
+  // Convert per-token → per-MTok for display.
+  const mtok = saved * PER_MTOK
+  // Round to 4 decimal places to avoid floating-point noise.
+  return Math.round(mtok * 10000) / 10000
+}
+
+function setCustomMTokField(modelName, field, displayValue) {
+  if (!customCostInputs[modelName]) customCostInputs[modelName] = {}
+  // Store the display value ($/MTok) directly so the input stays stable.
+  customCostInputs[modelName][field] = displayValue === '' ? '' : parseFloat(displayValue)
 }
 
 function setCustomField(modelName, field, value) {
@@ -309,15 +364,15 @@ function setCustomField(modelName, field, value) {
 }
 
 async function saveCostMapKey(modelName) {
-  const key = costKeyInputs[modelName] ?? ''
-  if (!key.trim()) {
+  const key = (costKeyInputs[modelName] ?? '').trim()
+  if (!key) {
     saveErrors[modelName] = 'Cost map key must not be empty'
     return
   }
   saving[modelName] = true
   saveErrors[modelName] = ''
   try {
-    await api.patchModelCostMapKey(modelName, key.trim())
+    await api.patchModelCostMapKey(modelName, key)
     await load()
     openCostEditors.delete(modelName)
   } catch (e) {
@@ -328,7 +383,13 @@ async function saveCostMapKey(modelName) {
 }
 
 async function saveCustomCosts(modelName) {
-  const fields = customCostInputs[modelName] || {}
+  const fields = { ...(customCostInputs[modelName] || {}) }
+  // Convert $/MTok inputs back to per-token before sending.
+  for (const f of ['input_cost_per_token', 'output_cost_per_token']) {
+    if (fields[f] !== undefined && fields[f] !== '') {
+      fields[f] = parseFloat(fields[f]) / PER_MTOK
+    }
+  }
   saving[modelName] = true
   saveErrors[modelName] = ''
   try {
@@ -348,6 +409,6 @@ function formatTime(iso) {
 
 function formatCostPerToken(val) {
   if (!val) return '—'
-  return `$${(val * 1_000_000).toFixed(4)}/MTok`
+  return `$${(val * PER_MTOK).toFixed(4)}/MTok`
 }
 </script>

@@ -147,6 +147,14 @@ export const api = {
   },
 
   /**
+   * GET /admin/costmap/models — returns all cost map model entries sorted by name.
+   * Each entry has name, input_cost_per_token, output_cost_per_token, max_tokens, etc.
+   */
+  costMapModels() {
+    return request('/admin/costmap/models')
+  },
+
+  /**
    * GET /v1/models/{model} — returns model detail with cost information
    * @param {string} modelName
    */
