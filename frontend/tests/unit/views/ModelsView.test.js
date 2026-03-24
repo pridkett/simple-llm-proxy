@@ -158,8 +158,8 @@ describe('ModelsView', () => {
     await input.trigger('input')
     await nextTick()
 
-    // Dropdown should show matching entries
-    expect(wrapper.text()).toContain('openai/gpt-4')
+    // Dropdown is teleported to body — check document.body
+    expect(document.body.textContent).toContain('openai/gpt-4')
   })
 
   it('shows costs in $/MTok in the autocomplete dropdown', async () => {
@@ -182,8 +182,8 @@ describe('ModelsView', () => {
     await input.trigger('input')
     await nextTick()
 
-    // Dropdown items should show formatted $/MTok costs
-    expect(wrapper.text()).toMatch(/\$\d+\.\d+\/MTok/)
+    // Dropdown is teleported to body — check document.body
+    expect(document.body.textContent).toMatch(/\$\d+\.\d+\/MTok/)
   })
 
   it('custom costs tab shows $/MTok input labels', async () => {
