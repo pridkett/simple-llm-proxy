@@ -45,6 +45,10 @@ func TestSpec_HasExpectedPaths(t *testing.T) {
 		"/v1/embeddings",
 		"/v1/models",
 		"/v1/completions",
+		"/admin/status",
+		"/admin/config",
+		"/admin/logs",
+		"/admin/reload",
 	}
 
 	doc := spec.Doc()
@@ -73,6 +77,15 @@ func TestSpec_HasExpectedSchemas(t *testing.T) {
 		"Choice",
 		"Usage",
 		"StreamChunk",
+		"AdminStatusResponse",
+		"AdminConfigResponse",
+		"AdminLogsResponse",
+		"ReloadResponse",
+		"RouterSettings",
+		"ModelStatusInfo",
+		"DeploymentInfo",
+		"ConfigModel",
+		"LogEntry",
 	}
 
 	doc := spec.Doc()
@@ -186,6 +199,45 @@ func TestSpec_ProtectedRoutesHaveSecurity(t *testing.T) {
 
 		if security == nil || len(*security) == 0 {
 			t.Errorf("Path %s has no security requirements", path)
+		}
+	}
+}
+
+func TestSpec_AdminRoutesHaveSecurity(t *testing.T) {
+	spec := New()
+	if err := spec.Build(); err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	doc := spec.Doc()
+	adminPaths := map[string]string{
+		"/admin/status": "GET",
+		"/admin/config": "GET",
+		"/admin/logs":   "GET",
+		"/admin/reload": "POST",
+	}
+
+	for path, method := range adminPaths {
+		pathItem := doc.Paths.Find(path)
+		if pathItem == nil {
+			t.Errorf("Path %s not found", path)
+			continue
+		}
+
+		var security *openapi3.SecurityRequirements
+		switch method {
+		case "GET":
+			if pathItem.Get != nil {
+				security = pathItem.Get.Security
+			}
+		case "POST":
+			if pathItem.Post != nil {
+				security = pathItem.Post.Security
+			}
+		}
+
+		if security == nil || len(*security) == 0 {
+			t.Errorf("Admin path %s %s has no security requirements", method, path)
 		}
 	}
 }

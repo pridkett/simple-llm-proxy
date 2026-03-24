@@ -163,6 +163,47 @@ type DeploymentInfoItem struct {
 	TPM           int        `json:"tpm,omitempty"`
 }
 
+// Reload updates the router with a new configuration.
+// Deployments are rebuilt from the new config and cooldown state is reset.
+func (r *Router) Reload(cfg *config.Config) error {
+	newDeployments := make(map[string][]*provider.Deployment)
+	for _, mc := range cfg.ModelList {
+		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
+		prov, err := provider.Get(parsed.Provider, mc.LiteLLMParams.APIKey, mc.LiteLLMParams.APIBase)
+		if err != nil {
+			return fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
+		}
+		deployment := &provider.Deployment{
+			ModelName:    mc.ModelName,
+			Provider:     prov,
+			ProviderName: parsed.Provider,
+			ActualModel:  parsed.ModelName,
+			APIKey:       mc.LiteLLMParams.APIKey,
+			APIBase:      mc.LiteLLMParams.APIBase,
+			RPM:          mc.RPM,
+			TPM:          mc.TPM,
+		}
+		newDeployments[mc.ModelName] = append(newDeployments[mc.ModelName], deployment)
+	}
+
+	var newStrategy Strategy
+	switch cfg.RouterSettings.RoutingStrategy {
+	case "round-robin":
+		newStrategy = NewRoundRobin()
+	default:
+		newStrategy = NewShuffle()
+	}
+
+	r.mu.Lock()
+	r.deployments = newDeployments
+	r.settings = cfg.RouterSettings
+	r.strategy = newStrategy
+	r.cooldown = NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails)
+	r.mu.Unlock()
+
+	return nil
+}
+
 // GetStatus returns the current status of all model deployments.
 func (r *Router) GetStatus() []ModelStatusInfo {
 	r.mu.RLock()

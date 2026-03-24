@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
@@ -69,8 +70,10 @@ type adminConfigResponse struct {
 
 // AdminConfig handles GET /admin/config.
 // Secrets (API keys, master key) are never returned.
-func AdminConfig(cfg *config.Config) http.HandlerFunc {
+// getCfg is called on each request so the response reflects the latest reloaded config.
+func AdminConfig(getCfg func() *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		cfg := getCfg()
 		models := make([]configModelEntry, 0, len(cfg.ModelList))
 		for _, mc := range cfg.ModelList {
 			parsed := config.ParseModelString(mc.LiteLLMParams.Model)
@@ -101,6 +104,29 @@ func AdminConfig(cfg *config.Config) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+type reloadResponse struct {
+	Status string `json:"status"`
+}
+
+// AdminReload handles POST /admin/reload.
+// It re-reads the config file and updates the router with the new configuration.
+// Note: changes to master_key, port, and database_url require a server restart.
+func AdminReload(reloader *config.Reloader, r *router.Router) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		newCfg, err := reloader.Reload()
+		if err != nil {
+			model.WriteError(w, model.ErrInternalServer("failed to reload config file", err))
+			return
+		}
+		if err := r.Reload(newCfg); err != nil {
+			model.WriteError(w, model.ErrInternalServer("failed to apply reloaded config", err))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(reloadResponse{Status: "ok"})
 	}
 }
 

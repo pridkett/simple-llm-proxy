@@ -56,6 +56,11 @@ export const api = {
     return request('/admin/config')
   },
 
+  /** POST /admin/reload – re-reads config file and updates the router */
+  reload() {
+    return request('/admin/reload', { method: 'POST' })
+  },
+
   /**
    * GET /admin/logs
    * @param {{ limit?: number, offset?: number }} params
@@ -118,5 +123,26 @@ export const api = {
     }
 
     return res.body  // ReadableStream
+  },
+
+  /** GET /admin/costmap — returns cost map status */
+  costMapStatus() {
+    return request('/admin/costmap')
+  },
+
+  /** POST /admin/costmap/reload — triggers a fresh download of the cost map */
+  costMapReload() {
+    return request('/admin/costmap/reload', { method: 'POST' })
+  },
+
+  /**
+   * PUT /admin/costmap/url — updates the source URL for future reloads
+   * @param {string} url
+   */
+  costMapSetURL(url) {
+    return request('/admin/costmap/url', {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    })
   },
 }

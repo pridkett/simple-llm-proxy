@@ -13,6 +13,7 @@ import (
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -30,10 +31,11 @@ func main() {
 	startTime := time.Now()
 
 	// Load configuration
-	cfg, err := config.Load(*configPath)
+	reloader, err := config.NewReloader(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	cfg := reloader.Config()
 
 	// Initialize router
 	r, err := router.New(cfg)
@@ -61,8 +63,18 @@ func main() {
 		log.Fatalf("Failed to build OpenAPI spec: %v", err)
 	}
 
+	// Initialize cost map manager (non-fatal: proxy starts even if CDN is unreachable)
+	cm := costmap.New()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := cm.Load(ctx); err != nil {
+			log.Printf("Warning: failed to load initial cost map: %v", err)
+		}
+	}()
+
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, cfg, startTime, spec)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)

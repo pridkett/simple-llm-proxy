@@ -98,6 +98,22 @@ describe('api client', () => {
     })
   })
 
+  describe('reload()', () => {
+    it('POSTs to /admin/reload', async () => {
+      mockFetch({ status: 'ok' })
+      const result = await api.reload()
+      expect(result).toEqual({ status: 'ok' })
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/reload')
+      expect(opts.method).toBe('POST')
+    })
+
+    it('throws with server error message on failure', async () => {
+      mockFetchError('failed to reload config file', 500)
+      await expect(api.reload()).rejects.toThrow('failed to reload config file')
+    })
+  })
+
   describe('models()', () => {
     it('calls GET /v1/models', async () => {
       const payload = { object: 'list', data: [] }
@@ -167,6 +183,57 @@ describe('api client', () => {
       await api.chatCompletionStream('gpt-4', [], { signal: controller.signal })
       const [, opts] = global.fetch.mock.calls[0]
       expect(opts.signal).toBe(controller.signal)
+    })
+  })
+
+  describe('costMapStatus()', () => {
+    it('calls GET /admin/costmap', async () => {
+      const payload = { loaded: true, model_count: 100, url: 'https://example.com' }
+      mockFetch(payload)
+      const result = await api.costMapStatus()
+      expect(result).toEqual(payload)
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/costmap')
+      expect(opts?.method).toBeUndefined()
+    })
+
+    it('throws on server error', async () => {
+      mockFetchError('Unauthorized', 401)
+      await expect(api.costMapStatus()).rejects.toThrow('Unauthorized')
+    })
+  })
+
+  describe('costMapReload()', () => {
+    it('POSTs to /admin/costmap/reload', async () => {
+      mockFetch({ status: 'ok', model_count: 100 })
+      const result = await api.costMapReload()
+      expect(result).toEqual({ status: 'ok', model_count: 100 })
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/costmap/reload')
+      expect(opts.method).toBe('POST')
+    })
+
+    it('throws on server error', async () => {
+      mockFetchError('failed to reload cost map', 500)
+      await expect(api.costMapReload()).rejects.toThrow('failed to reload cost map')
+    })
+  })
+
+  describe('costMapSetURL()', () => {
+    it('PUTs to /admin/costmap/url with the url in the body', async () => {
+      const newURL = 'https://example.com/models.json'
+      mockFetch({ url: newURL })
+      const result = await api.costMapSetURL(newURL)
+      expect(result).toEqual({ url: newURL })
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/costmap/url')
+      expect(opts.method).toBe('PUT')
+      expect(JSON.parse(opts.body)).toEqual({ url: newURL })
+    })
+
+    it('throws on invalid URL error from server', async () => {
+      mockFetchError('URL scheme must be http or https', 400)
+      await expect(api.costMapSetURL('ftp://bad')).rejects.toThrow('URL scheme must be http or https')
     })
   })
 })

@@ -65,6 +65,10 @@ func (s *Spec) Build() error {
 				Name:        "Completions",
 				Description: "Legacy completion endpoints (deprecated)",
 			},
+			&openapi3.Tag{
+				Name:        "Admin",
+				Description: "Admin endpoints for proxy management (require authentication)",
+			},
 		},
 	}
 

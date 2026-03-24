@@ -8,13 +8,14 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/api/handler"
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
 // NewRouter creates a new HTTP router with all routes configured.
-func NewRouter(r *router.Router, store storage.Storage, cfg *config.Config, startTime time.Time, spec *openapi.Spec) *chi.Mux {
+func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloader, cm *costmap.Manager, startTime time.Time, spec *openapi.Spec) *chi.Mux {
 	mux := chi.NewRouter()
 
 	// Global middleware
@@ -33,7 +34,9 @@ func NewRouter(r *router.Router, store storage.Storage, cfg *config.Config, star
 
 	// Protected routes
 	mux.Group(func(mux chi.Router) {
-		mux.Use(middleware.Auth(cfg.GeneralSettings.MasterKey))
+		// Auth uses the master key from the initial config load.
+		// Changing master_key requires a server restart.
+		mux.Use(middleware.Auth(reloader.Config().GeneralSettings.MasterKey))
 
 		// OpenAI-compatible endpoints
 		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store))
@@ -43,8 +46,14 @@ func NewRouter(r *router.Router, store storage.Storage, cfg *config.Config, star
 
 		// Admin endpoints
 		mux.Get("/admin/status", handler.AdminStatus(r, startTime))
-		mux.Get("/admin/config", handler.AdminConfig(cfg))
+		mux.Get("/admin/config", handler.AdminConfig(reloader.Config))
+		mux.Post("/admin/reload", handler.AdminReload(reloader, r))
 		mux.Get("/admin/logs", handler.AdminLogs(store))
+
+		// Cost map endpoints
+		mux.Get("/admin/costmap", handler.AdminCostMapStatus(cm))
+		mux.Post("/admin/costmap/reload", handler.AdminCostMapReload(cm))
+		mux.Put("/admin/costmap/url", handler.AdminCostMapSetURL(cm))
 	})
 
 	return mux
