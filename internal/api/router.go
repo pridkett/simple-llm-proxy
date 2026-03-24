@@ -55,6 +55,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 
 		// Cost map endpoints
 		mux.Get("/admin/costmap", handler.AdminCostMapStatus(cm))
+		mux.Get("/admin/costmap/models", handler.AdminCostMapModels(cm))
 		mux.Post("/admin/costmap/reload", handler.AdminCostMapReload(cm))
 		mux.Put("/admin/costmap/url", handler.AdminCostMapSetURL(cm))
 	})
