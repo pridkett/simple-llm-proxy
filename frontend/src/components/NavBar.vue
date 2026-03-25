@@ -58,6 +58,7 @@ const links = [
   { to: '/models', label: 'Models' },
   { to: '/logs', label: 'Logs' },
   { to: '/config', label: 'Config' },
+  { to: '/api-docs', label: 'API Docs' },
   { to: '/settings', label: 'Settings' },
 ]
 </script>

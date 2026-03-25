@@ -21,6 +21,8 @@ type ModelSpec struct {
 	MaxOutputTokens              int     `json:"max_output_tokens"`
 	InputCostPerToken            float64 `json:"input_cost_per_token"`
 	OutputCostPerToken           float64 `json:"output_cost_per_token"`
+	CacheReadInputTokenCost      float64 `json:"cache_read_input_token_cost"`
+	CacheCreationInputTokenCost  float64 `json:"cache_creation_input_token_cost"`
 	LiteLLMProvider              string  `json:"litellm_provider"`
 	Mode                         string  `json:"mode"`
 	SupportsFunctionCalling      bool    `json:"supports_function_calling"`
@@ -169,6 +171,8 @@ func parseModelSpec(entry map[string]interface{}) ModelSpec {
 		MaxOutputTokens:              asInt(entry["max_output_tokens"]),
 		InputCostPerToken:            asFloat(entry["input_cost_per_token"]),
 		OutputCostPerToken:           asFloat(entry["output_cost_per_token"]),
+		CacheReadInputTokenCost:      asFloat(entry["cache_read_input_token_cost"]),
+		CacheCreationInputTokenCost:  asFloat(entry["cache_creation_input_token_cost"]),
 		LiteLLMProvider:              asString(entry["litellm_provider"]),
 		Mode:                         asString(entry["mode"]),
 		SupportsFunctionCalling:      asBool(entry["supports_function_calling"]),

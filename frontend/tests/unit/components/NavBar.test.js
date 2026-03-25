@@ -24,6 +24,7 @@ function makeRouter() {
       { path: '/models', component: { template: '<div/>' } },
       { path: '/logs', component: { template: '<div/>' } },
       { path: '/config', component: { template: '<div/>' } },
+      { path: '/api-docs', component: { template: '<div/>' } },
       { path: '/settings', component: { template: '<div/>' } },
     ],
   })
@@ -43,6 +44,7 @@ describe('NavBar', () => {
     expect(text).toContain('Models')
     expect(text).toContain('Logs')
     expect(text).toContain('Config')
+    expect(text).toContain('API Docs')
     expect(text).toContain('Settings')
   })
 

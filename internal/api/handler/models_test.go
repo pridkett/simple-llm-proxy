@@ -48,6 +48,7 @@ func (m *mockStorage) UpsertCustomCostSpec(_ context.Context, modelName, specJSO
 func (m *mockStorage) GetCostOverride(_ context.Context, _ string) (*storage.CostOverride, error) {
 	return nil, nil
 }
+func (m *mockStorage) DeleteCostOverride(_ context.Context, _ string) error { return nil }
 func (m *mockStorage) ListCostOverrides(_ context.Context) ([]*storage.CostOverride, error) {
 	return nil, nil
 }

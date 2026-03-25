@@ -32,6 +32,10 @@ type Storage interface {
 	// Returns (nil, nil) if no override exists.
 	GetCostOverride(ctx context.Context, modelName string) (*CostOverride, error)
 
+	// DeleteCostOverride removes any cost override (key or custom spec) for the given
+	// proxy model name. A no-op if no override exists.
+	DeleteCostOverride(ctx context.Context, modelName string) error
+
 	// ListCostOverrides returns all stored cost overrides ordered by model name.
 	ListCostOverrides(ctx context.Context) ([]*CostOverride, error)
 }

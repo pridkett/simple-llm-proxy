@@ -10,14 +10,16 @@ import (
 
 // costMapModelItem is the per-model shape returned by AdminCostMapModels.
 type costMapModelItem struct {
-	Name               string  `json:"name"`
-	InputCostPerToken  float64 `json:"input_cost_per_token"`
-	OutputCostPerToken float64 `json:"output_cost_per_token"`
-	MaxTokens          int     `json:"max_tokens"`
-	MaxInputTokens     int     `json:"max_input_tokens"`
-	MaxOutputTokens    int     `json:"max_output_tokens"`
-	LiteLLMProvider    string  `json:"litellm_provider,omitempty"`
-	Mode               string  `json:"mode,omitempty"`
+	Name                        string  `json:"name"`
+	InputCostPerToken           float64 `json:"input_cost_per_token"`
+	OutputCostPerToken          float64 `json:"output_cost_per_token"`
+	CacheReadInputTokenCost     float64 `json:"cache_read_input_token_cost"`
+	CacheCreationInputTokenCost float64 `json:"cache_creation_input_token_cost"`
+	MaxTokens                   int     `json:"max_tokens"`
+	MaxInputTokens              int     `json:"max_input_tokens"`
+	MaxOutputTokens             int     `json:"max_output_tokens"`
+	LiteLLMProvider             string  `json:"litellm_provider,omitempty"`
+	Mode                        string  `json:"mode,omitempty"`
 }
 
 // AdminCostMapModels handles GET /admin/costmap/models.
@@ -29,14 +31,16 @@ func AdminCostMapModels(cm *costmap.Manager) http.HandlerFunc {
 		items := make([]costMapModelItem, len(entries))
 		for i, e := range entries {
 			items[i] = costMapModelItem{
-				Name:               e.Name,
-				InputCostPerToken:  e.Spec.InputCostPerToken,
-				OutputCostPerToken: e.Spec.OutputCostPerToken,
-				MaxTokens:          e.Spec.MaxTokens,
-				MaxInputTokens:     e.Spec.MaxInputTokens,
-				MaxOutputTokens:    e.Spec.MaxOutputTokens,
-				LiteLLMProvider:    e.Spec.LiteLLMProvider,
-				Mode:               e.Spec.Mode,
+				Name:                        e.Name,
+				InputCostPerToken:           e.Spec.InputCostPerToken,
+				OutputCostPerToken:          e.Spec.OutputCostPerToken,
+				CacheReadInputTokenCost:     e.Spec.CacheReadInputTokenCost,
+				CacheCreationInputTokenCost: e.Spec.CacheCreationInputTokenCost,
+				MaxTokens:                   e.Spec.MaxTokens,
+				MaxInputTokens:              e.Spec.MaxInputTokens,
+				MaxOutputTokens:             e.Spec.MaxOutputTokens,
+				LiteLLMProvider:             e.Spec.LiteLLMProvider,
+				Mode:                        e.Spec.Mode,
 			}
 		}
 		if items == nil {

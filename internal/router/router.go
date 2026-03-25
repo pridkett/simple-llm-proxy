@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -242,5 +243,8 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 			Deployments:        infos,
 		})
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ModelName < result[j].ModelName
+	})
 	return result
 }
