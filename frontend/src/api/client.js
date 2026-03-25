@@ -95,9 +95,9 @@ export const api = {
     return request(`/admin/logs${query}`)
   },
 
-  /** GET /v1/models */
+  /** GET /admin/models */
   models() {
-    return request('/v1/models')
+    return request('/admin/models')
   },
 
   /**
@@ -109,7 +109,7 @@ export const api = {
   chatCompletion(model, messages, options = {}) {
     const body = { model, messages, stream: false }
     if (options.temperature !== undefined) body.temperature = options.temperature
-    return request('/v1/chat/completions', { method: 'POST', body: JSON.stringify(body) })
+    return request('/admin/chat/completions', { method: 'POST', body: JSON.stringify(body) })
   },
 
   /**
@@ -123,7 +123,7 @@ export const api = {
     const body = { model, messages, stream: true }
     if (options.temperature !== undefined) body.temperature = options.temperature
 
-    const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
+    const res = await fetch(`${BASE_URL}/admin/chat/completions`, {
       method: 'POST',
       credentials: 'include', // HttpOnly session cookie
       headers: {
@@ -182,7 +182,7 @@ export const api = {
    * @param {string} modelName
    */
   modelDetail(modelName) {
-    return request(`/v1/models/${encodeURIComponent(modelName)}`)
+    return request(`/admin/models/${encodeURIComponent(modelName)}`)
   },
 
   /**
