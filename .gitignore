@@ -8,3 +8,4 @@ op.env
 proxy.db
 proxy.db-shm
 proxy.db-wal
+/.claude

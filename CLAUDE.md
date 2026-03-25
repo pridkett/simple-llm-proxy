@@ -189,6 +189,9 @@ issue.
 When closing an issue, always make sure to add a detailed writeup of the work
 that was done to implement that issue in code.
 
+When you create an issue on GitHub - you must add the label `AI Generated` to the 
+issue.
+
 ### Working with Pull Requests
 
 When you are incrementally working on a task and pushing to a branch, create a
@@ -199,12 +202,7 @@ comments about the implementation, including a link to the ADR.
 When you are working on a task and it has a PR, make sure that all of the items
 in the PR are checked off as being complete before marking it for review.
 
-
-## Executing Applications
-
-### Shell Commands
-When passing environment variables to commands, prefer inline syntax rather than export:
-  `GH_TOKEN=xxx gh run view ...`
-instead of:
-  `export GH_TOKEN=xxx && gh run view ...`
+When you create a pull request on GitHub, you must add the label `AI Generated`
+to the pull request. You also should apply labels in use within the project as
+appropriate. For example, `frontend`, `backend`, `adr`, `enhancement`, etc.
 
