@@ -26,6 +26,20 @@
           >
             {{ link.label }}
           </router-link>
+          <!-- Admin-only links -->
+          <template v-if="currentUser?.is_admin">
+            <router-link
+              v-for="link in adminLinks"
+              :key="link.to"
+              :to="link.to"
+              class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              :class="$route.path === link.to
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'"
+            >
+              {{ link.label }}
+            </router-link>
+          </template>
         </div>
 
         <!-- User info + logout (only when authenticated) -->
@@ -59,6 +73,12 @@ const links = [
   { to: '/config', label: 'Config' },
   { to: '/api-docs', label: 'API Docs' },
   { to: '/settings', label: 'Settings' },
+]
+
+const adminLinks = [
+  { to: '/users', label: 'Users' },
+  { to: '/teams', label: 'Teams' },
+  { to: '/applications', label: 'Applications' },
 ]
 
 async function handleLogout() {
