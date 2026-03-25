@@ -5,10 +5,12 @@ import LogsView from '../views/LogsView.vue'
 import ConfigView from '../views/ConfigView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import ApiDocsView from '../views/ApiDocsView.vue'
+import ChatView from '../views/ChatView.vue'
 
 const routes = [
   { path: '/', name: 'dashboard', component: DashboardView },
   { path: '/models', name: 'models', component: ModelsView },
+  { path: '/chat', name: 'chat', component: ChatView },
   { path: '/logs', name: 'logs', component: LogsView },
   { path: '/config', name: 'config', component: ConfigView },
   { path: '/settings', name: 'settings', component: SettingsView },

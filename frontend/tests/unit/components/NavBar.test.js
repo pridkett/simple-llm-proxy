@@ -22,6 +22,7 @@ function makeRouter() {
     routes: [
       { path: '/', component: { template: '<div/>' } },
       { path: '/models', component: { template: '<div/>' } },
+      { path: '/chat', component: { template: '<div/>' } },
       { path: '/logs', component: { template: '<div/>' } },
       { path: '/config', component: { template: '<div/>' } },
       { path: '/api-docs', component: { template: '<div/>' } },
@@ -42,6 +43,7 @@ describe('NavBar', () => {
     const text = wrapper.text()
     expect(text).toContain('Dashboard')
     expect(text).toContain('Models')
+    expect(text).toContain('Chat')
     expect(text).toContain('Logs')
     expect(text).toContain('Config')
     expect(text).toContain('API Docs')
