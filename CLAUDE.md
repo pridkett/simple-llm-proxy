@@ -129,4 +129,67 @@ general_settings:
 1. Create `internal/provider/newprovider/newprovider.go`
 2. Implement `provider.Provider` interface
 3. Add `init()` function to register: `provider.Register("newprovider", New)`
-4. Import in `cmd/proxy/main.go`: `_ "github.com/pwagstro/simple_llm_proxy/internal/provider/newprovider"`
+4. Import in `cmd/proxy/main.go`: `_ "github.com/pwagstro/simple-llm-proxy/internal/provider/newprovider"`
+
+## Architecture Designs
+
+Before embarking on large tasks, create an issue in GitHub for the ADR for that
+task and write a complete ADR (architectural decision record) and commit it to
+the `adr` folder. That ADR, which should be written in Markdown, is considered
+the deliverable for that issue. The implementation of the issue should have its
+own issue. Before embarking on a major task, you MUST draft an ADR and commit it.
+
+## Git and GitHub Usage
+
+All issues and bugs MUST be in pridkett/simple-llm-proxy. Do not file or search for
+bugs on any other project. Even for code that resides in another repository,
+issuses must be placed in pridkett/simple-llm-proxy for all submodules of this project.
+
+### Code Commits
+
+After completing a task, please commit your code using a single commit with a
+commit message in the form of a conventional commit. Make sure to be as
+descripitve as possible and write a multi-line commit message explaining the
+changes.
+
+If you are working on an issue from the issue tracker, you must include a line
+that indicates what issue you are working on. It should look like this:
+
+contributes to pridkett/simple-llm-proxy#123
+
+All subrepositories for this project will use the same issue tracker, so even
+if you're in a sub-project that commits to a different repository, reference
+the issues this way.
+
+### Working on Branches
+
+When starting on a new task - always make sure you being your work off the
+`main` branch of the code. If you do use a branch for code, make a clear note
+that you're working off a branch. Branches should be clearly named in the form of
+    [TYPE]/[NUM]-dashed-word-description
+For example:
+    feat/12-add-in-server-messaging
+    fix/13-correct-missing-headers-in-cicd
+If you are working off a branch and it seems to be directed for a different branch,
+you are probably doing something wrong. If your current git state appears to be
+in a detached state, you are almost certainly doing something wrong.
+
+### Working with Issues
+
+When creating an issue, always make sure to apply the appropriate tags to the
+issue. This helps the humans understand what you're doing.
+
+When starting work on an issue, always make sure to assign yourself to the
+issue.
+
+When closing an issue, always make sure to add a detailed writeup of the work
+that was done to implement that issue in code.
+
+## Executing Applications
+
+### Shell Commands
+When passing environment variables to commands, prefer inline syntax rather than export:
+  `GH_TOKEN=xxx gh run view ...`
+instead of:
+  `export GH_TOKEN=xxx && gh run view ...`
+

@@ -145,6 +145,24 @@ func PatchModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFun
 	}
 }
 
+// DeleteModelCosts handles DELETE /v1/models/{model}/costs.
+// Removes any cost override (key or custom spec) for the given proxy model name,
+// reverting to auto-detection behaviour.
+func DeleteModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		modelName := chi.URLParam(req, "model")
+
+		if err := store.DeleteCostOverride(req.Context(), modelName); err != nil {
+			model.WriteError(w, model.ErrInternalServer("Failed to delete cost override", err))
+			return
+		}
+		cm.ClearOverride(modelName)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"model": modelName, "status": "cleared"}) //nolint:errcheck
+	}
+}
+
 // buildModelDetailResponse constructs a ModelDetailResponse for the given model name,
 // resolving cost data from the cost map using the provided candidate actual model strings.
 func buildModelDetailResponse(modelName string, cm *costmap.Manager, candidates []string) model.ModelDetailResponse {
@@ -158,6 +176,8 @@ func buildModelDetailResponse(modelName string, cm *costmap.Manager, candidates 
 			MaxOutputTokens:                 s.MaxOutputTokens,
 			InputCostPerToken:               s.InputCostPerToken,
 			OutputCostPerToken:              s.OutputCostPerToken,
+			CacheReadInputTokenCost:         s.CacheReadInputTokenCost,
+			CacheCreationInputTokenCost:     s.CacheCreationInputTokenCost,
 			LiteLLMProvider:                 s.LiteLLMProvider,
 			Mode:                            s.Mode,
 			SupportsFunctionCalling:         s.SupportsFunctionCalling,

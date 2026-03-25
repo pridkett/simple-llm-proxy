@@ -185,4 +185,14 @@ export const api = {
       body: JSON.stringify(costs),
     })
   },
+
+  /**
+   * DELETE /v1/models/{model}/costs — clear any cost override, reverting to auto-detection
+   * @param {string} modelName
+   */
+  deleteModelCosts(modelName) {
+    return request(`/v1/models/${encodeURIComponent(modelName)}/costs`, {
+      method: 'DELETE',
+    })
+  },
 }

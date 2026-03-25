@@ -70,6 +70,8 @@ type CostsInfo struct {
 	MaxOutputTokens                 int     `json:"max_output_tokens"`
 	InputCostPerToken               float64 `json:"input_cost_per_token"`
 	OutputCostPerToken              float64 `json:"output_cost_per_token"`
+	CacheReadInputTokenCost         float64 `json:"cache_read_input_token_cost"`
+	CacheCreationInputTokenCost     float64 `json:"cache_creation_input_token_cost"`
 	LiteLLMProvider                 string  `json:"litellm_provider,omitempty"`
 	Mode                            string  `json:"mode,omitempty"`
 	SupportsFunctionCalling         bool    `json:"supports_function_calling"`

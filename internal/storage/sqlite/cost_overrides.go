@@ -68,6 +68,16 @@ func (s *Storage) GetCostOverride(ctx context.Context, modelName string) (*stora
 	return &ov, nil
 }
 
+// DeleteCostOverride removes the cost override row for the given proxy model name.
+// A no-op if no override exists.
+func (s *Storage) DeleteCostOverride(ctx context.Context, modelName string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM cost_overrides WHERE model_name = ?`, modelName)
+	if err != nil {
+		return fmt.Errorf("deleting cost override: %w", err)
+	}
+	return nil
+}
+
 // ListCostOverrides returns all stored cost overrides ordered by model name.
 func (s *Storage) ListCostOverrides(ctx context.Context) ([]*storage.CostOverride, error) {
 	rows, err := s.db.QueryContext(ctx, `
