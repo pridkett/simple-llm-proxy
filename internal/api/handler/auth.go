@@ -164,7 +164,7 @@ func AuthCallback(oidcProvider *auth.OIDCProvider, store storage.Storage, sm *sc
 		sm.Put(ctx, "user_id", claims.Sub)
 
 		// 10. Redirect to frontend dashboard
-		http.Redirect(w, r, "/#/dashboard", http.StatusFound)
+		http.Redirect(w, r, "/#/", http.StatusFound)
 	}
 }
 

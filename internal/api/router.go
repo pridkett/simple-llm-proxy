@@ -79,6 +79,12 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Post("/admin/costmap/reload", handler.AdminCostMapReload(cm))
 		mux.Put("/admin/costmap/url", handler.AdminCostMapSetURL(cm))
 
+		// Model endpoints mirrored for session-auth browser clients
+		mux.Get("/admin/models", handler.Models(r))
+		mux.Get("/admin/models/{model}", handler.ModelDetail(r, cm))
+		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store))
+		mux.Post("/admin/embeddings", handler.Embeddings(r, store))
+
 		// Identity CRUD routes registered by Plan 05 via RegisterAdminRoutes
 		handler.RegisterAdminRoutes(mux, store)
 	})

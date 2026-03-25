@@ -104,6 +104,28 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	// Process oidc_settings
+	if os, ok := raw["oidc_settings"].(map[string]any); ok {
+		if v, ok := os["issuer_url"].(string); ok {
+			cfg.OIDCSettings.IssuerURL = v
+		}
+		if v, ok := os["client_id"].(string); ok {
+			cfg.OIDCSettings.ClientID = expandEnvVar(v)
+		}
+		if v, ok := os["client_secret"].(string); ok {
+			cfg.OIDCSettings.ClientSecret = expandEnvVar(v)
+		}
+		if v, ok := os["redirect_url"].(string); ok {
+			cfg.OIDCSettings.RedirectURL = v
+		}
+		if v, ok := os["admin_group"].(string); ok {
+			cfg.OIDCSettings.AdminGroup = v
+		}
+		if v, ok := os["dev_mode"].(bool); ok {
+			cfg.OIDCSettings.DevMode = v
+		}
+	}
+
 	return cfg, nil
 }
 
