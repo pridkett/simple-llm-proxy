@@ -1,0 +1,10 @@
+AGENTS.md
+CLAUDE.local.md*
+backlog/
+bin/
+config.yaml
+frontend/node_modules/
+op.env
+proxy.db
+proxy.db-shm
+proxy.db-wal
