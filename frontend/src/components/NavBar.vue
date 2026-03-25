@@ -1,5 +1,5 @@
 <template>
-  <nav class="bg-white border-b border-gray-200">
+  <nav v-if="route.name !== 'login'" class="bg-white border-b border-gray-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex h-16 items-center justify-between">
         <!-- Logo / title -->
@@ -13,8 +13,8 @@
           <span class="text-lg font-semibold text-gray-900">LLM Proxy</span>
         </div>
 
-        <!-- Nav links -->
-        <div class="flex items-center gap-1">
+        <!-- Nav links (only when authenticated) -->
+        <div v-if="isAuthenticated" class="flex items-center gap-1">
           <router-link
             v-for="link in links"
             :key="link.to"
@@ -28,18 +28,15 @@
           </router-link>
         </div>
 
-        <!-- API key indicator -->
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-            :class="hasKey ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'"
+        <!-- User info + logout (only when authenticated) -->
+        <div v-if="isAuthenticated" class="flex items-center gap-3">
+          <span class="text-sm text-gray-600">{{ currentUser?.email }}</span>
+          <button
+            @click="handleLogout"
+            class="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors"
           >
-            <span
-              class="w-1.5 h-1.5 rounded-full"
-              :class="hasKey ? 'bg-green-500' : 'bg-yellow-500'"
-            />
-            {{ hasKey ? 'Key set' : 'No key' }}
-          </span>
+            Logout
+          </button>
         </div>
       </div>
     </div>
@@ -47,11 +44,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useAuth } from '../composables/useAuth.js'
+import { useRoute, useRouter } from 'vue-router'
+import { useSession } from '../composables/useSession.js'
+import { api } from '../api/client.js'
 
-const { apiKey } = useAuth()
-const hasKey = computed(() => !!apiKey.value)
+const route = useRoute()
+const router = useRouter()
+const { isAuthenticated, currentUser, clearSession } = useSession()
 
 const links = [
   { to: '/', label: 'Dashboard' },
@@ -61,4 +60,14 @@ const links = [
   { to: '/api-docs', label: 'API Docs' },
   { to: '/settings', label: 'Settings' },
 ]
+
+async function handleLogout() {
+  try {
+    await api.logout()
+  } catch {
+    // Even if the server request fails, clear local session state
+  }
+  clearSession()
+  router.push('/login')
+}
 </script>

@@ -9,12 +9,29 @@ describe('api client', () => {
     vi.resetModules()
     // Stub global fetch
     global.fetch = vi.fn()
+    // Mock useSession so client.js can import it without /admin/me calls
+    vi.doMock('@/composables/useSession.js', () => ({
+      useSession: () => ({
+        isAuthenticated: { value: false },
+        currentUser: { value: null },
+        loading: { value: false },
+        fetchCurrentUser: vi.fn().mockResolvedValue(false),
+        clearSession: vi.fn(),
+      }),
+    }))
+    // Mock router to control currentRoute
+    vi.doMock('@/router/index.js', () => ({
+      default: {
+        currentRoute: { value: { path: '/dashboard' } },
+      },
+    }))
     const mod = await import('@/api/client.js')
     api = mod.api
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
   function mockFetch(data, status = 200) {
@@ -53,21 +70,9 @@ describe('api client', () => {
       expect(opts.method).toBeUndefined() // default GET
     })
 
-    it('includes Authorization header when key is set', async () => {
-      localStorage.setItem('proxy_api_key', 'my-key')
-      vi.resetModules()
-      global.fetch = vi.fn()
-      const mod = await import('@/api/client.js')
-      api = mod.api
-      mockFetch({ status: 'healthy', models: [], uptime_seconds: 0 })
-      await api.status()
-      const [, opts] = global.fetch.mock.calls[0]
-      expect(opts.headers.Authorization).toBe('Bearer my-key')
-    })
-
-    it('throws with the server error message on failure', async () => {
-      mockFetchError('Unauthorized', 401)
-      await expect(api.status()).rejects.toThrow('Unauthorized')
+    it('throws with the server error message on non-401 failure', async () => {
+      mockFetchError('Server Error', 500)
+      await expect(api.status()).rejects.toThrow('Server Error')
     })
   })
 
@@ -170,10 +175,10 @@ describe('api client', () => {
     it('throws with server error message on non-ok response', async () => {
       global.fetch.mockResolvedValue({
         ok: false,
-        status: 401,
-        json: () => Promise.resolve({ error: { message: 'Unauthorized' } }),
+        status: 500,
+        json: () => Promise.resolve({ error: { message: 'Server Error' } }),
       })
-      await expect(api.chatCompletionStream('gpt-4', [])).rejects.toThrow('Unauthorized')
+      await expect(api.chatCompletionStream('gpt-4', [])).rejects.toThrow('Server Error')
     })
 
     it('passes AbortSignal through to fetch', async () => {
@@ -198,8 +203,8 @@ describe('api client', () => {
     })
 
     it('throws on server error', async () => {
-      mockFetchError('Unauthorized', 401)
-      await expect(api.costMapStatus()).rejects.toThrow('Unauthorized')
+      mockFetchError('Server Error', 500)
+      await expect(api.costMapStatus()).rejects.toThrow('Server Error')
     })
   })
 
@@ -234,6 +239,109 @@ describe('api client', () => {
     it('throws on invalid URL error from server', async () => {
       mockFetchError('URL scheme must be http or https', 400)
       await expect(api.costMapSetURL('ftp://bad')).rejects.toThrow('URL scheme must be http or https')
+    })
+  })
+
+  // ── New session-auth tests ─────────────────────────────────────────────────
+
+  describe('Test A: credentials:include on every request, no Authorization header', () => {
+    it('sends credentials:include and no Authorization header', async () => {
+      mockFetch({ status: 'healthy', models: [], uptime_seconds: 0 })
+      await api.status()
+      const [, opts] = global.fetch.mock.calls[0]
+      expect(opts.credentials).toBe('include')
+      expect(opts.headers?.Authorization).toBeUndefined()
+    })
+  })
+
+  describe('Test B: 401 outside /login redirects to /#/login and calls clearSession', () => {
+    it('clears session and redirects on 401 when not on login', async () => {
+      // Capture href assignment
+      let capturedHref = ''
+      const locationMock = { href: '' }
+      Object.defineProperty(locationMock, 'href', {
+        get: () => capturedHref,
+        set: (val) => { capturedHref = val },
+      })
+      vi.stubGlobal('location', locationMock)
+
+      // Reset modules so client picks up new router/session mocks
+      vi.resetModules()
+      global.fetch = vi.fn()
+      global.fetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: { message: 'Unauthorized' } }),
+      })
+
+      const clearSession = vi.fn()
+      vi.doMock('@/composables/useSession.js', () => ({
+        useSession: () => ({
+          isAuthenticated: { value: false },
+          currentUser: { value: null },
+          loading: { value: false },
+          fetchCurrentUser: vi.fn().mockResolvedValue(false),
+          clearSession,
+        }),
+      }))
+      vi.doMock('@/router/index.js', () => ({
+        default: {
+          currentRoute: { value: { path: '/dashboard' } },
+        },
+      }))
+
+      const { api: freshApi } = await import('@/api/client.js')
+      await freshApi.status()
+
+      expect(clearSession).toHaveBeenCalled()
+      expect(capturedHref).toBe('/#/login')
+
+      vi.unstubAllGlobals()
+    })
+  })
+
+  describe('Test C: 401 on /login does NOT redirect (loop prevention)', () => {
+    it('does not redirect when already on /login route', async () => {
+      let capturedHref = ''
+      const locationMock = { href: 'http://localhost/#/login' }
+      Object.defineProperty(locationMock, 'href', {
+        get: () => capturedHref,
+        set: (val) => { capturedHref = val },
+      })
+      vi.stubGlobal('location', locationMock)
+
+      vi.resetModules()
+      global.fetch = vi.fn()
+      global.fetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: { message: 'Unauthorized' } }),
+      })
+
+      const clearSession = vi.fn()
+      vi.doMock('@/composables/useSession.js', () => ({
+        useSession: () => ({
+          isAuthenticated: { value: false },
+          currentUser: { value: null },
+          loading: { value: false },
+          fetchCurrentUser: vi.fn().mockResolvedValue(false),
+          clearSession,
+        }),
+      }))
+      // Router is on /login route
+      vi.doMock('@/router/index.js', () => ({
+        default: {
+          currentRoute: { value: { path: '/login' } },
+        },
+      }))
+
+      const { api: freshApi } = await import('@/api/client.js')
+      await freshApi.status()
+
+      // clearSession should NOT be called and href should NOT be changed to /#/login
+      expect(capturedHref).toBe('')
+
+      vi.unstubAllGlobals()
     })
   })
 })

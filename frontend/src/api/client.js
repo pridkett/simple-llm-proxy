@@ -1,28 +1,37 @@
 /**
  * API client for the LLM Proxy admin endpoints.
- * Reads the API key from localStorage via the useAuth composable.
+ *
+ * Auth model: session cookie (HttpOnly, browser-managed).
+ * The frontend NEVER reads the session token — it uses credentials:'include' on
+ * every fetch so the browser attaches the cookie automatically.
+ * No Authorization header. No localStorage reads for auth.
  */
 
+import { useSession } from '../composables/useSession.js'
+import router from '../router/index.js'
+
 const BASE_URL = import.meta.env.VITE_API_URL || ''
-
-function getApiKey() {
-  return localStorage.getItem('proxy_api_key') || ''
-}
-
-function authHeaders() {
-  const key = getApiKey()
-  return key ? { Authorization: `Bearer ${key}` } : {}
-}
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
+    credentials: 'include', // browser attaches HttpOnly session cookie automatically
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
       ...(options.headers || {}),
+      // NO Authorization header — session is cookie-based
     },
   })
+
+  if (res.status === 401) {
+    // 401 loop prevention: only redirect if we're not already on the login page
+    if (router.currentRoute.value.path !== '/login') {
+      const { clearSession } = useSession()
+      clearSession()
+      window.location.href = '/#/login'
+    }
+    return null // return null (not throw) so callers can detect unauthenticated state
+  }
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`
@@ -37,6 +46,9 @@ async function request(path, options = {}) {
     throw err
   }
 
+  // 204 No Content — return null (no body to parse)
+  if (res.status === 204) return null
+
   return res.json()
 }
 
@@ -44,6 +56,16 @@ export const api = {
   /** GET /health – no auth required */
   health() {
     return fetch(`${BASE_URL}/health`).then((r) => r.json())
+  },
+
+  /** GET /admin/me – returns current authenticated user */
+  me() {
+    return request('/admin/me')
+  },
+
+  /** POST /auth/logout – destroys session */
+  logout() {
+    return request('/auth/logout', { method: 'POST' })
   },
 
   /** GET /admin/status */
@@ -92,7 +114,7 @@ export const api = {
 
   /**
    * POST /v1/chat/completions (streaming)
-   * Returns the raw Response so the caller can read the body as a stream.
+   * Returns the raw Response body so the caller can read it as a stream.
    * @param {string} model
    * @param {Array<{role:string,content:string}>} messages
    * @param {{ temperature?: number, signal?: AbortSignal }} options
@@ -103,9 +125,10 @@ export const api = {
 
     const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
+      credentials: 'include', // HttpOnly session cookie
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders(),
+        // NO Authorization header — session is cookie-based
       },
       body: JSON.stringify(body),
       signal: options.signal,
