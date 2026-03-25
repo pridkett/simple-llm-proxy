@@ -53,6 +53,39 @@ func (m *mockStorage) ListCostOverrides(_ context.Context) ([]*storage.CostOverr
 	return nil, nil
 }
 
+// Identity CRUD stubs — not exercised by handler tests but required by interface.
+func (m *mockStorage) UpsertUser(_ context.Context, _ *storage.User) error { return nil }
+func (m *mockStorage) GetUser(_ context.Context, _ string) (*storage.User, error) {
+	return nil, nil
+}
+func (m *mockStorage) ListUsers(_ context.Context) ([]*storage.User, error) { return nil, nil }
+func (m *mockStorage) CreateTeam(_ context.Context, _ string) (*storage.Team, error) {
+	return nil, nil
+}
+func (m *mockStorage) DeleteTeam(_ context.Context, _ int64) error { return nil }
+func (m *mockStorage) ListTeams(_ context.Context) ([]*storage.Team, error) { return nil, nil }
+func (m *mockStorage) AddTeamMember(_ context.Context, _ int64, _ string, _ string) error {
+	return nil
+}
+func (m *mockStorage) RemoveTeamMember(_ context.Context, _ int64, _ string) error { return nil }
+func (m *mockStorage) UpdateTeamMemberRole(_ context.Context, _ int64, _ string, _ string) error {
+	return nil
+}
+func (m *mockStorage) ListTeamMembers(_ context.Context, _ int64) ([]*storage.TeamMember, error) {
+	return nil, nil
+}
+func (m *mockStorage) ListMyTeams(_ context.Context, _ string) ([]*storage.TeamMember, error) {
+	return nil, nil
+}
+func (m *mockStorage) CreateApplication(_ context.Context, _ int64, _ string) (*storage.Application, error) {
+	return nil, nil
+}
+func (m *mockStorage) DeleteApplication(_ context.Context, _ int64) error { return nil }
+func (m *mockStorage) ListApplications(_ context.Context, _ int64) ([]*storage.Application, error) {
+	return nil, nil
+}
+func (m *mockStorage) CleanExpiredSessions(_ context.Context) error { return nil }
+
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
 	t.Helper()

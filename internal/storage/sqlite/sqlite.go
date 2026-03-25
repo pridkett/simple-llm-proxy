@@ -28,6 +28,12 @@ func New(dbPath string) (*Storage, error) {
 		return nil, fmt.Errorf("setting journal mode: %w", err)
 	}
 
+	// Enable foreign key enforcement — required for ON DELETE CASCADE
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enabling foreign keys: %w", err)
+	}
+
 	return &Storage{db: db}, nil
 }
 
