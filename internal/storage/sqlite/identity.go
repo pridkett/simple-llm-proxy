@@ -56,7 +56,7 @@ func (s *Storage) ListUsers(ctx context.Context) ([]*storage.User, error) {
 	}
 	defer rows.Close()
 
-	var users []*storage.User
+	users := make([]*storage.User, 0)
 	for rows.Next() {
 		u := &storage.User{}
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.IsAdmin, &u.CreatedAt, &u.LastSeen); err != nil {
@@ -104,7 +104,7 @@ func (s *Storage) ListTeams(ctx context.Context) ([]*storage.Team, error) {
 	}
 	defer rows.Close()
 
-	var teams []*storage.Team
+	teams := make([]*storage.Team, 0)
 	for rows.Next() {
 		t := &storage.Team{}
 		if err := rows.Scan(&t.ID, &t.Name, &t.CreatedAt); err != nil {
@@ -162,7 +162,7 @@ func (s *Storage) ListTeamMembers(ctx context.Context, teamID int64) ([]*storage
 	}
 	defer rows.Close()
 
-	var members []*storage.TeamMember
+	members := make([]*storage.TeamMember, 0)
 	for rows.Next() {
 		m := &storage.TeamMember{}
 		if err := rows.Scan(&m.TeamID, &m.UserID, &m.Role, &m.UserEmail, &m.UserName); err != nil {
@@ -189,7 +189,7 @@ func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.Te
 	}
 	defer rows.Close()
 
-	var memberships []*storage.TeamMember
+	memberships := make([]*storage.TeamMember, 0)
 	for rows.Next() {
 		m := &storage.TeamMember{}
 		if err := rows.Scan(&m.TeamID, &m.UserID, &m.Role, &m.TeamName); err != nil {
@@ -239,7 +239,7 @@ func (s *Storage) ListApplications(ctx context.Context, teamID int64) ([]*storag
 	}
 	defer rows.Close()
 
-	var apps []*storage.Application
+	apps := make([]*storage.Application, 0)
 	for rows.Next() {
 		a := &storage.Application{}
 		if err := rows.Scan(&a.ID, &a.TeamID, &a.Name, &a.CreatedAt); err != nil {

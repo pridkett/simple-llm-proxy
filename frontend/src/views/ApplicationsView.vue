@@ -2,120 +2,166 @@
   <div class="p-6">
     <h1 class="text-2xl font-bold text-gray-900 mb-6">Applications</h1>
 
-    <!-- Team selector -->
-    <div class="mb-6">
-      <label for="team-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by Team</label>
-      <select
-        id="team-select"
-        v-model="selectedTeamId"
-        @change="handleTeamChange"
-        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-      >
-        <option value="">Select a team...</option>
-        <option v-for="team in teams" :key="team.id" :value="String(team.id)">
-          {{ team.name }}
-        </option>
-      </select>
-    </div>
+    <div class="flex gap-6">
+      <!-- Left panel: team list -->
+      <div class="w-64 flex-shrink-0">
+        <!-- Filter input -->
+        <div class="mb-4">
+          <input
+            v-model="teamSearch"
+            type="text"
+            placeholder="Filter teams"
+            autocomplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
 
-    <!-- Create application form (shown when team is selected, admin only) -->
-    <form
-      v-if="selectedTeamId && currentUser?.is_admin"
-      @submit.prevent="handleCreateApplication"
-      class="mb-6 flex gap-3 items-end"
-    >
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">Application Name</label>
-        <input
-          v-model="newAppName"
-          type="text"
-          placeholder="Application name"
-          class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        <div v-if="loadingTeams" class="text-gray-500 text-sm">Loading...</div>
+        <div v-else-if="teamsError" class="text-red-600 text-sm">{{ teamsError }}</div>
+        <ul v-else class="space-y-1">
+          <li
+            v-for="team in filteredTeams"
+            :key="team.id"
+            class="flex items-center justify-between px-3 py-2 rounded-md cursor-pointer text-sm"
+            :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'"
+            @click="selectTeam(team)"
+          >
+            <span>{{ team.name }}</span>
+          </li>
+          <li v-if="filteredTeams.length === 0" class="px-3 py-2 text-sm text-gray-400 italic">
+            No teams found
+          </li>
+        </ul>
       </div>
-      <button
-        type="submit"
-        class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
-      >
-        Create
-      </button>
-    </form>
 
-    <!-- Applications list -->
-    <div v-if="loadingApps" class="text-gray-500 text-sm">Loading...</div>
-    <div v-else-if="appsError" class="text-red-600 text-sm">{{ appsError }}</div>
-    <div v-else-if="!selectedTeamId" class="text-gray-400 text-sm">Select a team to view applications.</div>
-    <table v-else class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
-        <tr>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Team</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-        </tr>
-      </thead>
-      <tbody class="bg-white divide-y divide-gray-200">
-        <tr v-for="app in applications" :key="app.id">
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ app.name }}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ teamName(app.team_id) }}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            {{ new Date(app.created_at).toLocaleDateString() }}
-          </td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm">
-            <template v-if="pendingDeleteAppId === app.id">
-              <span class="text-xs text-gray-500 mr-1">Delete {{ app.name }}?</span>
+      <!-- Right panel: applications for selected team -->
+      <div v-if="selectedTeam" class="flex-1">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">{{ selectedTeam.name }} — Applications</h2>
+
+        <div v-if="loadingApps" class="text-gray-500 text-sm">Loading applications...</div>
+        <div v-else>
+          <!-- Applications table -->
+          <table class="min-w-full divide-y divide-gray-200 mb-6">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-if="applications.length === 0">
+                <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-400 italic">
+                  No applications yet — create the first one below
+                </td>
+              </tr>
+              <tr v-for="app in applications" :key="app.id">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ app.name }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                  {{ new Date(app.created_at).toLocaleDateString() }}
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <template v-if="pendingDeleteAppId === app.id">
+                    <span class="text-xs text-gray-500 mr-1">Delete {{ app.name }}?</span>
+                    <button
+                      :data-testid="`confirm-delete-app-${app.id}`"
+                      @click="confirmDeleteApp(app.id)"
+                      class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
+                    >Yes</button>
+                    <button
+                      @click="pendingDeleteAppId = null"
+                      class="text-xs text-gray-500 hover:text-gray-700"
+                    >No</button>
+                  </template>
+                  <button
+                    v-else
+                    :data-testid="`delete-app-${app.id}`"
+                    @click="startDeleteApp(app.id)"
+                    class="text-xs text-red-500 hover:text-red-700"
+                  >Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Inline error banner -->
+          <div v-if="appsError" class="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-600 flex justify-between items-center">
+            <span>{{ appsError }}</span>
+            <button @click="appsError = null" class="ml-3 text-red-400 hover:text-red-600">✕</button>
+          </div>
+
+          <!-- Create application form (admin only) -->
+          <div v-if="currentUser?.is_admin" class="border-t border-gray-200 pt-4">
+            <h3 class="text-sm font-medium text-gray-700 mb-3">New Application</h3>
+            <form @submit.prevent="handleCreateApplication" class="flex items-end gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Name</label>
+                <input
+                  v-model="newAppName"
+                  type="text"
+                  placeholder="Application name"
+                  autocomplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  class="w-64 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
               <button
-                :data-testid="`confirm-delete-app-${app.id}`"
-                @click="confirmDeleteApp(app.id)"
-                class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
-              >Yes</button>
-              <button
-                @click="pendingDeleteAppId = null"
-                class="text-xs text-gray-500 hover:text-gray-700"
-              >No</button>
-            </template>
-            <button
-              v-else
-              :data-testid="`delete-app-${app.id}`"
-              @click="startDeleteApp(app.id)"
-              class="text-xs text-red-500 hover:text-red-700"
-            >Delete</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+                type="submit"
+                :disabled="!newAppName.trim()"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >Create</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="flex-1 flex items-center justify-center text-gray-400 text-sm">
+        Select a team to view applications
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../api/client.js'
 import { useSession } from '../composables/useSession.js'
 
 const { currentUser } = useSession()
 
-const teams = ref([])
-const selectedTeamId = ref('')
+const allTeams = ref([])
+const teamSearch = ref('')
+const loadingTeams = ref(true)
+const teamsError = ref(null)
+
+const selectedTeam = ref(null)
 const applications = ref([])
 const loadingApps = ref(false)
 const appsError = ref(null)
 const newAppName = ref('')
 const pendingDeleteAppId = ref(null)
 
-function teamName(teamId) {
-  const team = teams.value.find(t => t.id === teamId)
-  return team?.name || String(teamId)
+const filteredTeams = computed(() => {
+  const q = teamSearch.value.toLowerCase().trim()
+  if (!q) return allTeams.value
+  return allTeams.value.filter((t) => t.name.toLowerCase().includes(q))
+})
+
+async function selectTeam(team) {
+  selectedTeam.value = team
+  pendingDeleteAppId.value = null
+  appsError.value = null
+  await loadApplications(team.id)
 }
 
 async function loadApplications(teamId) {
-  if (!teamId) {
-    applications.value = []
-    return
-  }
   loadingApps.value = true
   appsError.value = null
   try {
-    applications.value = await api.applications(Number(teamId))
+    applications.value = await api.applications(teamId) ?? []
   } catch (e) {
     appsError.value = e.message
   } finally {
@@ -123,20 +169,16 @@ async function loadApplications(teamId) {
   }
 }
 
-function handleTeamChange() {
-  pendingDeleteAppId.value = null
-  loadApplications(selectedTeamId.value)
-}
-
 async function handleCreateApplication() {
-  if (!newAppName.value.trim() || !selectedTeamId.value) return
+  if (!newAppName.value.trim() || !selectedTeam.value) return
+  appsError.value = null
   try {
     await api.createApplication({
-      team_id: Number(selectedTeamId.value),
+      team_id: selectedTeam.value.id,
       name: newAppName.value.trim(),
     })
     newAppName.value = ''
-    await loadApplications(selectedTeamId.value)
+    await loadApplications(selectedTeam.value.id)
   } catch (e) {
     appsError.value = e.message
   }
@@ -147,20 +189,31 @@ function startDeleteApp(appId) {
 }
 
 async function confirmDeleteApp(appId) {
+  appsError.value = null
   try {
     await api.deleteApplication(appId)
     pendingDeleteAppId.value = null
-    await loadApplications(selectedTeamId.value)
+    await loadApplications(selectedTeam.value.id)
   } catch (e) {
     appsError.value = e.message
   }
 }
 
 onMounted(async () => {
+  loadingTeams.value = true
   try {
-    teams.value = await api.teams()
+    if (currentUser.value?.is_admin) {
+      // Admins see all teams so they can manage apps even if not a member
+      allTeams.value = await api.teams() ?? []
+    } else {
+      // Non-admins see only teams they belong to
+      const memberships = await api.myTeams() ?? []
+      allTeams.value = memberships.map((m) => ({ id: m.team_id, name: m.team_name }))
+    }
   } catch (e) {
-    appsError.value = e.message
+    teamsError.value = e.message
+  } finally {
+    loadingTeams.value = false
   }
 })
 </script>
