@@ -218,4 +218,65 @@ export const api = {
       method: 'DELETE',
     })
   },
+
+  /** GET /admin/users — returns all authenticated users (admin only) */
+  users() {
+    return request('/admin/users')
+  },
+
+  /** GET /admin/teams — returns all teams */
+  teams() {
+    return request('/admin/teams')
+  },
+
+  /** POST /admin/teams — create a team { name } */
+  createTeam(data) {
+    return request('/admin/teams', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  /** DELETE /admin/teams/:id */
+  deleteTeam(id) {
+    return request(`/admin/teams/${id}`, { method: 'DELETE' })
+  },
+
+  /** GET /admin/teams/mine — teams the current user belongs to */
+  myTeams() {
+    return request('/admin/teams/mine')
+  },
+
+  /** GET /admin/teams/:id/members */
+  teamMembers(teamId) {
+    return request(`/admin/teams/${teamId}/members`)
+  },
+
+  /** PUT /admin/teams/:id/members — add member { user_id, role } */
+  addTeamMember(teamId, data) {
+    return request(`/admin/teams/${teamId}/members`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  /** DELETE /admin/teams/:id/members/:userId */
+  removeTeamMember(teamId, userId) {
+    return request(`/admin/teams/${teamId}/members/${userId}`, { method: 'DELETE' })
+  },
+
+  /** PATCH /admin/teams/:id/members/:userId — update role { role } */
+  updateTeamMemberRole(teamId, userId, data) {
+    return request(`/admin/teams/${teamId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+
+  /** GET /admin/applications?team_id=N */
+  applications(teamId) {
+    const qs = teamId ? `?team_id=${teamId}` : ''
+    return request(`/admin/applications${qs}`)
+  },
+
+  /** POST /admin/applications — create { team_id, name } */
+  createApplication(data) {
+    return request('/admin/applications', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  /** DELETE /admin/applications/:id */
+  deleteApplication(id) {
+    return request(`/admin/applications/${id}`, { method: 'DELETE' })
+  },
 }

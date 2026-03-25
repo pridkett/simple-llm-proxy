@@ -6,6 +6,9 @@ import ConfigView from '../views/ConfigView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import ApiDocsView from '../views/ApiDocsView.vue'
 import LoginView from '../views/LoginView.vue'
+import UsersView from '../views/UsersView.vue'
+import TeamsView from '../views/TeamsView.vue'
+import ApplicationsView from '../views/ApplicationsView.vue'
 import { useSession } from '../composables/useSession.js'
 
 const routes = [
@@ -16,7 +19,9 @@ const routes = [
   { path: '/config', name: 'config', component: ConfigView },
   { path: '/settings', name: 'settings', component: SettingsView },
   { path: '/api-docs', name: 'api-docs', component: ApiDocsView },
-  // Plan 07 will add: /users, /teams, /applications
+  { path: '/users', name: 'users', component: UsersView },
+  { path: '/teams', name: 'teams', component: TeamsView },
+  { path: '/applications', name: 'applications', component: ApplicationsView },
 ]
 
 const router = createRouter({

@@ -38,6 +38,9 @@ function makeRouter(currentPath = '/') {
       { path: '/config', name: 'config', component: { template: '<div/>' } },
       { path: '/api-docs', name: 'api-docs', component: { template: '<div/>' } },
       { path: '/settings', name: 'settings', component: { template: '<div/>' } },
+      { path: '/users', name: 'users', component: { template: '<div/>' } },
+      { path: '/teams', name: 'teams', component: { template: '<div/>' } },
+      { path: '/applications', name: 'applications', component: { template: '<div/>' } },
     ],
   })
   return router
