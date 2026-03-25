@@ -79,6 +79,31 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	// Process log_settings
+	if ls, ok := raw["log_settings"].(map[string]any); ok {
+		if v, ok := ls["level"].(string); ok {
+			cfg.LogSettings.Level = v
+		}
+		if v, ok := ls["format"].(string); ok {
+			cfg.LogSettings.Format = v
+		}
+		if v, ok := ls["file_path"].(string); ok {
+			cfg.LogSettings.FilePath = expandEnvVar(v)
+		}
+		if v, ok := ls["max_size_mb"].(int); ok {
+			cfg.LogSettings.MaxSizeMB = v
+		}
+		if v, ok := ls["max_backups"].(int); ok {
+			cfg.LogSettings.MaxBackups = v
+		}
+		if v, ok := ls["max_age_days"].(int); ok {
+			cfg.LogSettings.MaxAgeDays = v
+		}
+		if v, ok := ls["compress"].(bool); ok {
+			cfg.LogSettings.Compress = v
+		}
+	}
+
 	return cfg, nil
 }
 

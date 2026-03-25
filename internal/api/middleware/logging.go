@@ -1,9 +1,11 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // responseWriter wraps http.ResponseWriter to capture status code.
@@ -24,7 +26,8 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
-// Logging returns middleware that logs requests.
+// Logging returns middleware that logs requests with structured fields.
+// HTTP 5xx responses are logged at error level, 4xx at warn, others at info.
 func Logging() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,14 +42,22 @@ func Logging() func(http.Handler) http.Handler {
 
 			duration := time.Since(start)
 
-			log.Printf(
-				"%s %s %d %s %d bytes",
-				r.Method,
-				r.URL.Path,
-				rw.status,
-				duration,
-				rw.size,
-			)
+			var ev *zerolog.Event
+			switch {
+			case rw.status >= 500:
+				ev = log.Error()
+			case rw.status >= 400:
+				ev = log.Warn()
+			default:
+				ev = log.Info()
+			}
+
+			ev.Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Int("status", rw.status).
+				Str("duration", duration.Truncate(time.Microsecond).String()).
+				Int("bytes", rw.size).
+				Msg("request")
 		})
 	}
 }

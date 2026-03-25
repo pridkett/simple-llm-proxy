@@ -5,16 +5,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/pwagstro/simple_llm_proxy/internal/api"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
+	"github.com/pwagstro/simple_llm_proxy/internal/logger"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -31,17 +33,21 @@ func main() {
 
 	startTime := time.Now()
 
-	// Load configuration
+	// Load configuration — use fmt+os.Exit here because the logger isn't initialized yet.
 	reloader, err := config.NewReloader(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 	cfg := reloader.Config()
+
+	// Initialize structured logger before any other operations.
+	logger.Init(cfg.LogSettings)
 
 	// Initialize router
 	r, err := router.New(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize router: %v", err)
+		log.Fatal().Err(err).Msg("failed to initialize router")
 	}
 
 	// Initialize storage
@@ -49,10 +55,10 @@ func main() {
 	if cfg.GeneralSettings.DatabaseURL != "" {
 		sqliteStore, err := sqlite.New(cfg.GeneralSettings.DatabaseURL)
 		if err != nil {
-			log.Fatalf("Failed to initialize storage: %v", err)
+			log.Fatal().Err(err).Msg("failed to initialize storage")
 		}
 		if err := sqliteStore.Initialize(context.Background()); err != nil {
-			log.Fatalf("Failed to run migrations: %v", err)
+			log.Fatal().Err(err).Msg("failed to run migrations")
 		}
 		store = sqliteStore
 		defer store.Close()
@@ -61,7 +67,7 @@ func main() {
 	// Build OpenAPI spec
 	spec := openapi.New()
 	if err := spec.Build(); err != nil {
-		log.Fatalf("Failed to build OpenAPI spec: %v", err)
+		log.Fatal().Err(err).Msg("failed to build OpenAPI spec")
 	}
 
 	// Initialize cost map manager (non-fatal: proxy starts even if CDN is unreachable)
@@ -70,7 +76,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		if err := cm.Load(ctx); err != nil {
-			log.Printf("Warning: failed to load initial cost map: %v", err)
+			log.Warn().Err(err).Msg("failed to load initial cost map")
 		}
 	}()
 
@@ -96,9 +102,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Starting server on %s", addr)
+		log.Info().Str("addr", addr).Msg("starting server")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			log.Fatal().Err(err).Msg("server error")
 		}
 	}()
 
@@ -107,17 +113,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	log.Info().Msg("shutting down server")
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Fatal().Err(err).Msg("server forced to shutdown")
 	}
 
-	log.Println("Server exited")
+	log.Info().Msg("server exited")
 }
 
 // seedCostOverrides reads persisted cost overrides from storage and loads them into the
@@ -125,7 +131,7 @@ func main() {
 func seedCostOverrides(ctx context.Context, store storage.Storage, cm *costmap.Manager) {
 	overrides, err := store.ListCostOverrides(ctx)
 	if err != nil {
-		log.Printf("Warning: failed to load cost overrides from storage: %v", err)
+		log.Warn().Err(err).Msg("failed to load cost overrides from storage")
 		return
 	}
 	for _, ov := range overrides {
@@ -134,13 +140,13 @@ func seedCostOverrides(ctx context.Context, store storage.Storage, cm *costmap.M
 		} else if ov.CustomSpec != nil {
 			var spec costmap.ModelSpec
 			if err := json.Unmarshal([]byte(*ov.CustomSpec), &spec); err != nil {
-				log.Printf("Warning: failed to decode custom cost spec for model %q: %v", ov.ModelName, err)
+				log.Warn().Err(err).Str("model", ov.ModelName).Msg("failed to decode custom cost spec")
 				continue
 			}
 			cm.SetCustomSpec(ov.ModelName, spec)
 		}
 	}
 	if len(overrides) > 0 {
-		log.Printf("Loaded %d cost override(s) from storage", len(overrides))
+		log.Info().Int("count", len(overrides)).Msg("loaded cost overrides from storage")
 	}
 }

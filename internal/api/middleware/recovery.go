@@ -1,9 +1,10 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 )
@@ -14,7 +15,10 @@ func Recovery() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Printf("panic recovered: %v\n%s", err, debug.Stack())
+					log.Error().
+						Interface("panic", err).
+						Str("stack", string(debug.Stack())).
+						Msg("panic recovered")
 					model.WriteError(w, model.ErrInternalServer("internal server error", nil))
 				}
 			}()

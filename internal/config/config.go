@@ -4,9 +4,21 @@ import "time"
 
 // Config represents the complete proxy configuration.
 type Config struct {
-	ModelList       []ModelConfig    `yaml:"model_list"`
-	RouterSettings  RouterSettings   `yaml:"router_settings"`
-	GeneralSettings GeneralSettings  `yaml:"general_settings"`
+	ModelList       []ModelConfig   `yaml:"model_list"`
+	RouterSettings  RouterSettings  `yaml:"router_settings"`
+	GeneralSettings GeneralSettings `yaml:"general_settings"`
+	LogSettings     LogSettings     `yaml:"log_settings"`
+}
+
+// LogSettings controls logging behavior.
+type LogSettings struct {
+	Level      string `yaml:"level"`        // trace, debug, info, warn, error (default: info)
+	Format     string `yaml:"format"`       // console or json (default: console)
+	FilePath   string `yaml:"file_path"`    // optional JSON log file path
+	MaxSizeMB  int    `yaml:"max_size_mb"`  // max MB before rotation (default: 100)
+	MaxBackups int    `yaml:"max_backups"`  // rotated files to keep (default: 3)
+	MaxAgeDays int    `yaml:"max_age_days"` // days before deletion (default: 28)
+	Compress   bool   `yaml:"compress"`     // gzip rotated files (default: false)
 }
 
 // ModelConfig represents a model deployment configuration.
@@ -51,6 +63,13 @@ func Defaults() *Config {
 		GeneralSettings: GeneralSettings{
 			Port:        8080,
 			DatabaseURL: "./proxy.db",
+		},
+		LogSettings: LogSettings{
+			Level:      "info",
+			Format:     "console",
+			MaxSizeMB:  100,
+			MaxBackups: 3,
+			MaxAgeDays: 28,
 		},
 	}
 }
