@@ -47,6 +47,12 @@ func (s *Storage) Close() error {
 	return s.db.Close()
 }
 
+// DB returns the underlying *sql.DB handle.
+// Used by the SCS session store to share the same database connection.
+func (s *Storage) DB() *sql.DB {
+	return s.db
+}
+
 // GetLogs returns paginated request logs ordered by most recent first.
 func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.RequestLog, int, error) {
 	var total int
