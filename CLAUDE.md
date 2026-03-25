@@ -174,6 +174,10 @@ If you are working off a branch and it seems to be directed for a different bran
 you are probably doing something wrong. If your current git state appears to be
 in a detached state, you are almost certainly doing something wrong.
 
+Unless you are explicitly told to do so, NEVER start a new task off any branch
+other than `main`. Doing so is an amateur move and will get most developers
+fired.
+
 ### Working with Issues
 
 When creating an issue, always make sure to apply the appropriate tags to the
@@ -184,6 +188,17 @@ issue.
 
 When closing an issue, always make sure to add a detailed writeup of the work
 that was done to implement that issue in code.
+
+### Working with Pull Requests
+
+When you are incrementally working on a task and pushing to a branch, create a
+pull request for that task. Link it to the original work item using notation
+such as "this PR implements pridkett/simple-llm-proxy#2". Provide detailed
+comments about the implementation, including a link to the ADR.
+
+When you are working on a task and it has a PR, make sure that all of the items
+in the PR are checked off as being complete before marking it for review.
+
 
 ## Executing Applications
 
