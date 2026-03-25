@@ -110,6 +110,26 @@ func ErrInternalServer(message string, err error) *ProxyError {
 	}
 }
 
+// ErrInternal returns a 500 internal server error.
+func ErrInternal(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusInternalServerError,
+		Message:    message,
+		Type:       "server_error",
+		Code:       "internal_error",
+	}
+}
+
+// ErrServiceUnavailable returns a 503 service unavailable error.
+func ErrServiceUnavailable(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    message,
+		Type:       "server_error",
+		Code:       "service_unavailable",
+	}
+}
+
 // WriteError writes an error response to the http.ResponseWriter.
 func WriteError(w http.ResponseWriter, err *ProxyError) {
 	w.Header().Set("Content-Type", "application/json")

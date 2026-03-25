@@ -11,9 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/rs/zerolog/log"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api"
+	"github.com/pwagstro/simple_llm_proxy/internal/auth"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/logger"
@@ -52,8 +54,10 @@ func main() {
 
 	// Initialize storage
 	var store storage.Storage
+	var sqliteStore *sqlite.Storage
 	if cfg.GeneralSettings.DatabaseURL != "" {
-		sqliteStore, err := sqlite.New(cfg.GeneralSettings.DatabaseURL)
+		var err error
+		sqliteStore, err = sqlite.New(cfg.GeneralSettings.DatabaseURL)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to initialize storage")
 		}
@@ -62,6 +66,54 @@ func main() {
 		}
 		store = sqliteStore
 		defer store.Close()
+	}
+
+	// Create SCS session manager backed by the custom SQLite session store.
+	// Cookie attributes are set explicitly per ADR 003 §4.
+	sm := scs.New()
+	if sqliteStore != nil {
+		sm.Store = &sqlite.SessionStore{DB: sqliteStore.DB()}
+	}
+	sm.Lifetime = 24 * time.Hour
+	sm.IdleTimeout = 2 * time.Hour
+	sm.Cookie.Name = "proxy_session"
+	sm.Cookie.HttpOnly = true
+	sm.Cookie.Secure = !cfg.OIDCSettings.DevMode // true in production, false in local HTTP dev
+	sm.Cookie.SameSite = http.SameSiteLaxMode    // SameSite=Lax: CSRF protection for admin mutations
+	sm.Cookie.Path = "/"
+
+	// Initialize OIDC provider (returns nil without error when IssuerURL is empty).
+	oidcProvider, err := auth.NewOIDCProvider(
+		context.Background(),
+		cfg.OIDCSettings.IssuerURL,
+		cfg.OIDCSettings.ClientID,
+		cfg.OIDCSettings.ClientSecret,
+		cfg.OIDCSettings.RedirectURL,
+		cfg.OIDCSettings.AdminGroup,
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize OIDC provider")
+	}
+	if oidcProvider != nil {
+		log.Info().Str("issuer", cfg.OIDCSettings.IssuerURL).Msg("OIDC provider initialized")
+	} else {
+		log.Info().Msg("OIDC not configured — /auth/* endpoints will return 503")
+	}
+
+	// Start background goroutine for expired session cleanup (runs hourly per ADR 003 §11).
+	if store != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := store.CleanExpiredSessions(context.Background()); err != nil {
+						log.Warn().Err(err).Msg("failed to clean expired sessions")
+					}
+				}
+			}
+		}()
 	}
 
 	// Build OpenAPI spec
@@ -88,7 +140,7 @@ func main() {
 	}
 
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)
