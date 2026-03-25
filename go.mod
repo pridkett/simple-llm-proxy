@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/alexedwards/scs/v2 v2.9.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
