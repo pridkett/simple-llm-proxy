@@ -194,6 +194,11 @@ issue.
 
 ### Working with Pull Requests
 
+All code changes MUST be done on a branch, never directly on `main`. Each
+wave of a GSD phase execution must have its own branch and pull request. Do
+not merge wave N's branch until its PR is created (merging is the human's
+responsibility).
+
 When you are incrementally working on a task and pushing to a branch, create a
 pull request for that task. Link it to the original work item using notation
 such as "this PR implements pridkett/simple-llm-proxy#2". Provide detailed
