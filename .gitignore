@@ -9,3 +9,4 @@ proxy.db
 proxy.db-shm
 proxy.db-wal
 /.claude
+.planning/
