@@ -24,6 +24,7 @@ vi.mock('@/api/client.js', () => ({
     addTeamMember: vi.fn(),
     removeTeamMember: vi.fn(),
     updateTeamMemberRole: vi.fn(),
+    users: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -56,6 +57,7 @@ describe('TeamsView', () => {
     vi.mocked(api.addTeamMember).mockReset()
     vi.mocked(api.removeTeamMember).mockReset()
     vi.mocked(api.updateTeamMemberRole).mockReset()
+    vi.mocked(api.users).mockResolvedValue([])
   })
 
   afterEach(() => {

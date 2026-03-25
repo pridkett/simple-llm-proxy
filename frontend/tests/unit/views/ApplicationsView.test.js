@@ -18,6 +18,7 @@ vi.mock('@/composables/useSession.js', () => ({
 vi.mock('@/api/client.js', () => ({
   api: {
     teams: vi.fn(),
+    myTeams: vi.fn(),
     applications: vi.fn(),
     createApplication: vi.fn(),
     deleteApplication: vi.fn(),
@@ -34,9 +35,10 @@ function makeRouter() {
   })
 }
 
-const sampleTeams = [
-  { id: 1, name: 'Alpha Team', created_at: '2024-01-01T00:00:00Z' },
-  { id: 2, name: 'Beta Team', created_at: '2024-02-01T00:00:00Z' },
+// myTeams returns TeamMember-shaped objects with team_id / team_name
+const sampleMemberships = [
+  { team_id: 1, team_name: 'Alpha Team', user_id: 'u1', role: 'admin' },
+  { team_id: 2, team_name: 'Beta Team', user_id: 'u1', role: 'member' },
 ]
 
 const sampleApps = [
@@ -46,7 +48,11 @@ const sampleApps = [
 
 describe('ApplicationsView', () => {
   beforeEach(() => {
-    vi.mocked(api.teams).mockReset()
+    // Test user is admin, so the component calls api.teams() not api.myTeams()
+    vi.mocked(api.teams).mockResolvedValue(
+      sampleMemberships.map((m) => ({ id: m.team_id, name: m.team_name }))
+    )
+    vi.mocked(api.myTeams).mockResolvedValue(sampleMemberships)
     vi.mocked(api.applications).mockReset()
     vi.mocked(api.createApplication).mockReset()
     vi.mocked(api.deleteApplication).mockReset()
@@ -56,8 +62,19 @@ describe('ApplicationsView', () => {
     vi.restoreAllMocks()
   })
 
+  it('TestApplicationsViewTeamList: renders team names in left panel', async () => {
+    const router = makeRouter()
+    await router.push('/applications')
+    const wrapper = mount(ApplicationsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Alpha Team')
+    expect(wrapper.text()).toContain('Beta Team')
+    // Admin user hits api.teams(); non-admins would hit api.myTeams()
+    expect(api.teams).toHaveBeenCalledTimes(1)
+  })
+
   it('TestApplicationsViewLists: renders application names after selecting a team', async () => {
-    vi.mocked(api.teams).mockResolvedValue(sampleTeams)
     vi.mocked(api.applications).mockResolvedValue(sampleApps)
 
     const router = makeRouter()
@@ -65,10 +82,11 @@ describe('ApplicationsView', () => {
     const wrapper = mount(ApplicationsView, { global: { plugins: [router] } })
     await flushPromises()
 
-    // Select team 1 from the dropdown
-    const select = wrapper.find('select')
-    expect(select.exists()).toBe(true)
-    await select.setValue('1')
+    // Click the first team in the left panel
+    const teamItems = wrapper.findAll('li')
+    const alphaItem = teamItems.find((li) => li.text().includes('Alpha Team'))
+    expect(alphaItem).toBeDefined()
+    await alphaItem.trigger('click')
     await flushPromises()
 
     expect(api.applications).toHaveBeenCalledWith(1)
@@ -77,9 +95,8 @@ describe('ApplicationsView', () => {
   })
 
   it('TestApplicationsViewCreate: calls api.createApplication with form data', async () => {
-    vi.mocked(api.teams).mockResolvedValue(sampleTeams)
     vi.mocked(api.applications).mockResolvedValue(sampleApps)
-    vi.mocked(api.createApplication).mockResolvedValue({ id: 3, team_id: 1, name: 'MyApp', created_at: '2024-03-01T00:00:00Z' })
+    vi.mocked(api.createApplication).mockResolvedValue(null)
 
     const router = makeRouter()
     await router.push('/applications')
@@ -87,26 +104,26 @@ describe('ApplicationsView', () => {
     await flushPromises()
 
     // Select a team first
-    const select = wrapper.find('select')
-    await select.setValue('1')
+    const teamItems = wrapper.findAll('li')
+    const alphaItem = teamItems.find((li) => li.text().includes('Alpha Team'))
+    await alphaItem.trigger('click')
     await flushPromises()
 
-    // Find the app name input and fill it
-    const nameInput = wrapper.find('input[type="text"]')
+    // Find the app name input (the second text input — first is the team filter)
+    const inputs = wrapper.findAll('input[type="text"]')
+    const nameInput = inputs[inputs.length - 1]
     expect(nameInput.exists()).toBe(true)
     await nameInput.setValue('MyApp')
 
     // Submit the form
-    const form = wrapper.find('form')
-    expect(form.exists()).toBe(true)
-    await form.trigger('submit')
+    const forms = wrapper.findAll('form')
+    await forms[forms.length - 1].trigger('submit')
     await flushPromises()
 
     expect(api.createApplication).toHaveBeenCalledWith({ team_id: 1, name: 'MyApp' })
   })
 
   it('TestApplicationsViewDelete: calls api.deleteApplication with app id', async () => {
-    vi.mocked(api.teams).mockResolvedValue(sampleTeams)
     vi.mocked(api.applications).mockResolvedValue(sampleApps)
     vi.mocked(api.deleteApplication).mockResolvedValue(null)
 
@@ -116,8 +133,9 @@ describe('ApplicationsView', () => {
     await flushPromises()
 
     // Select a team
-    const select = wrapper.find('select')
-    await select.setValue('1')
+    const teamItems = wrapper.findAll('li')
+    const alphaItem = teamItems.find((li) => li.text().includes('Alpha Team'))
+    await alphaItem.trigger('click')
     await flushPromises()
 
     // Find and click the delete button for app 1

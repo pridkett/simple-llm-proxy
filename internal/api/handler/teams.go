@@ -127,7 +127,7 @@ func AdminAddTeamMember(store storage.Storage) http.HandlerFunc {
 			model.WriteError(w, model.ErrInternal("failed to add team member"))
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -190,7 +190,7 @@ func AdminUpdateTeamMemberRole(store storage.Storage) http.HandlerFunc {
 			model.WriteError(w, model.ErrInternal("failed to update team member role"))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

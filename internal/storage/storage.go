@@ -98,38 +98,38 @@ type Storage interface {
 // ID is the OIDC subject identifier (sub claim) — NOT an internal UUID.
 // Using the sub claim directly avoids fragile account reconciliation.
 type User struct {
-	ID        string    // OIDC sub claim — the stable identity from PocketID
-	Email     string
-	Name      string
-	IsAdmin   bool
-	CreatedAt time.Time
-	LastSeen  time.Time
+	ID        string    `json:"id"`       // OIDC sub claim — the stable identity from PocketID
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	IsAdmin   bool      `json:"is_admin"`
+	CreatedAt time.Time `json:"created_at"`
+	LastSeen  time.Time `json:"last_seen"`
 }
 
 // Team represents a named group that owns applications.
 type Team struct {
-	ID        int64
-	Name      string
-	CreatedAt time.Time
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // TeamMember represents a user's membership in a team with a role.
 type TeamMember struct {
-	TeamID    int64
-	UserID    string // OIDC sub of the user
-	Role      string // "admin", "member", or "viewer"
+	TeamID    int64  `json:"team_id"`
+	UserID    string `json:"user_id"` // OIDC sub of the user
+	Role      string `json:"role"`    // "admin", "member", or "viewer"
 	// Joined fields for convenience:
-	UserEmail string
-	UserName  string
-	TeamName  string
+	UserEmail string `json:"user_email"`
+	UserName  string `json:"user_name"`
+	TeamName  string `json:"team_name"`
 }
 
 // Application represents an app scoped to a team.
 type Application struct {
-	ID        int64
-	TeamID    int64
-	Name      string
-	CreatedAt time.Time
+	ID        int64     `json:"id"`
+	TeamID    int64     `json:"team_id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // CostOverride records a user-supplied mapping or custom spec for a proxy model name.
