@@ -110,7 +110,24 @@ func ErrInternalServer(message string, err error) *ProxyError {
 	}
 }
 
-// ErrInternal returns a 500 internal server error.
+func ErrForbidden(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusForbidden,
+		Message:    message,
+		Type:       "permission_error",
+		Code:       "forbidden",
+	}
+}
+
+func ErrNotFound(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusNotFound,
+		Message:    message,
+		Type:       "invalid_request_error",
+		Code:       "not_found",
+	}
+}
+
 func ErrInternal(message string) *ProxyError {
 	return &ProxyError{
 		StatusCode: http.StatusInternalServerError,
@@ -129,6 +146,7 @@ func ErrServiceUnavailable(message string) *ProxyError {
 		Code:       "service_unavailable",
 	}
 }
+
 
 // WriteError writes an error response to the http.ResponseWriter.
 func WriteError(w http.ResponseWriter, err *ProxyError) {
