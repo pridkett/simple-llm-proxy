@@ -4,6 +4,7 @@ backlog/
 bin/
 config.yaml
 frontend/node_modules/
+frontend/dist/
 op.env
 proxy.db
 proxy.db-shm
