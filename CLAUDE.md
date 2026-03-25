@@ -176,7 +176,8 @@ in a detached state, you are almost certainly doing something wrong.
 
 Unless you are explicitly told to do so, NEVER start a new task off any branch
 other than `main`. Doing so is an amateur move and will get most developers
-fired.
+fired. ALWAYS make sure that `main` is updated against the main GitHub repo before
+creating a new branch.
 
 ### Working with Issues
 

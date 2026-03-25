@@ -11,3 +11,5 @@ proxy.db-shm
 proxy.db-wal
 /.claude
 .planning/
+/node_modules
+/.claire
