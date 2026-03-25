@@ -3,17 +3,20 @@ module github.com/pwagstro/simple_llm_proxy
 go 1.25.4
 
 require (
+	github.com/alexedwards/scs/v2 v2.9.0
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/getkin/kin-openapi v0.128.0
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/rs/zerolog v1.34.0
+	golang.org/x/oauth2 v0.36.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.44.3
 )
 
 require (
-	github.com/alexedwards/scs/v2 v2.9.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
