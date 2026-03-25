@@ -57,6 +57,50 @@ func (s *Storage) migrate(ctx context.Context) error {
 			custom_spec  TEXT,
 			updated_at   DATETIME NOT NULL DEFAULT (datetime('now'))
 		)`,
+
+		// Migration 6: users table — id IS the OIDC sub claim (TEXT PK, not UUID)
+		`CREATE TABLE IF NOT EXISTS users (
+			id         TEXT PRIMARY KEY,
+			email      TEXT NOT NULL,
+			name       TEXT NOT NULL,
+			is_admin   BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+			last_seen  DATETIME NOT NULL DEFAULT (datetime('now'))
+		)`,
+
+		// Migration 7: teams table
+		`CREATE TABLE IF NOT EXISTS teams (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			name       TEXT NOT NULL UNIQUE,
+			created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+		)`,
+
+		// Migration 8: team_members — ON DELETE CASCADE on BOTH FK sides
+		// If a team is deleted, its memberships are removed.
+		// If a user is deleted, their memberships are removed.
+		`CREATE TABLE IF NOT EXISTS team_members (
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			user_id TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			role    TEXT    NOT NULL CHECK(role IN ('admin','member','viewer')),
+			PRIMARY KEY (team_id, user_id)
+		)`,
+
+		// Migration 9: applications — ON DELETE CASCADE (team deleted removes its apps)
+		`CREATE TABLE IF NOT EXISTS applications (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id    INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			name       TEXT    NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(team_id, name)
+		)`,
+
+		// Migration 10: sessions table — backing store for SCS session manager
+		`CREATE TABLE IF NOT EXISTS sessions (
+			token  TEXT PRIMARY KEY,
+			data   BLOB     NOT NULL,
+			expiry DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expiry)`,
 	}
 
 	for i, migration := range migrations {
