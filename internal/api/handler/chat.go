@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
+	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
@@ -17,7 +18,7 @@ import (
 )
 
 // ChatCompletions handles POST /v1/chat/completions requests.
-func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator) http.HandlerFunc {
+func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -84,9 +85,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			providerReq.Model = deployment.ActualModel
 
 			if chatReq.Stream {
-				err = handleStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, apiKeyID, startTime)
+				err = handleStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, cm, apiKeyID, startTime)
 			} else {
-				err = handleNonStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, apiKeyID, startTime)
+				err = handleNonStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, cm, apiKeyID, startTime)
 			}
 
 			if err == nil {
@@ -110,6 +111,7 @@ func handleNonStreamingResponse(
 	r *router.Router,
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
+	cm *costmap.Manager,
 	apiKeyID *int64,
 	startTime time.Time,
 ) error {
@@ -122,7 +124,7 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && resp.Usage != nil {
-		go logRequest(store, sa, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime)
+		go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -137,6 +139,7 @@ func handleStreamingResponse(
 	r *router.Router,
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
+	cm *costmap.Manager,
 	apiKeyID *int64,
 	startTime time.Time,
 ) error {
@@ -169,7 +172,7 @@ func handleStreamingResponse(
 			// Note: streaming chunks may not carry usage data; log with nil usage guard
 			if store != nil {
 				usage := &model.Usage{} // streaming usage not always available; cost = 0 for now
-				go logRequest(store, sa, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime)
+				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime)
 			}
 			return nil
 		}
@@ -190,9 +193,16 @@ func handleStreamingResponse(
 // logRequest writes the request log to storage and credits the spend accumulator.
 // Called asynchronously (via goroutine) after each successful request.
 // apiKeyID is nil when the request was authenticated via master key.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var totalCost float64
+	if cm != nil && usage != nil {
+		spec := cm.GetEffectiveSpec(deployment.ModelName, []string{deployment.ActualModel})
+		totalCost = float64(usage.PromptTokens)*spec.Spec.InputCostPerToken +
+			float64(usage.CompletionTokens)*spec.Spec.OutputCostPerToken
+	}
 
 	log := &storage.RequestLog{
 		RequestID:        fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -202,7 +212,7 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, apiKeyID *
 		Endpoint:         endpoint,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
-		TotalCost:        0, // TODO: calculate cost from token counts + model rates (future plan)
+		TotalCost:        totalCost,
 		StatusCode:       status,
 		LatencyMS:        time.Since(startTime).Milliseconds(),
 		RequestTime:      startTime,
@@ -210,8 +220,7 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, apiKeyID *
 
 	store.LogRequest(ctx, log)
 
-	// Credit the spend accumulator after DB write (D-11: cost recorded after success).
-	// When cost calculation is wired, this will reflect actual spend.
+	// Credit the spend accumulator after DB write.
 	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {
 		sa.Credit(*apiKeyID, log.TotalCost)
 	}
