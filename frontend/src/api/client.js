@@ -305,4 +305,23 @@ export const api = {
       body: JSON.stringify(body),
     })
   },
+
+  /**
+   * GET /admin/spend — returns aggregated spend data with pre-computed alerts.
+   * @param {{ from?: string, to?: string, teamId?: number, appId?: number, keyId?: number }} params
+   *   from/to: YYYY-MM-DD strings (user-facing inclusive dates).
+   *   teamId/appId/keyId: positive integer IDs for filtering.
+   *   Only positive integers (> 0) are sent as query params. Zero, NaN, and negative
+   *   values are treated as "no filter" and omitted from the query string.
+   */
+  spend(params = {}) {
+    const qs = new URLSearchParams()
+    if (params.from) qs.set('from', params.from)
+    if (params.to) qs.set('to', params.to)
+    if (params.teamId && params.teamId > 0) qs.set('team_id', String(params.teamId))
+    if (params.appId && params.appId > 0) qs.set('app_id', String(params.appId))
+    if (params.keyId && params.keyId > 0) qs.set('key_id', String(params.keyId))
+    const query = qs.toString() ? `?${qs}` : ''
+    return request(`/admin/spend${query}`)
+  },
 }
