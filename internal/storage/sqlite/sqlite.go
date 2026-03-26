@@ -22,10 +22,24 @@ func New(dbPath string) (*Storage, error) {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
+	// Serialize all connections through a single connection. WAL mode still
+	// allows readers to run concurrently at the OS level, but constraining the
+	// pool to one open connection ensures write transactions queue up within Go
+	// rather than racing on separate file descriptors and triggering SQLITE_BUSY.
+	db.SetMaxOpenConns(1)
+
 	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("setting journal mode: %w", err)
+	}
+
+	// Wait up to 5 s before returning SQLITE_BUSY. This is a backstop for any
+	// lock contention that slips past the single-connection pool limit (e.g. an
+	// external process or a second server instance sharing the same file).
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("setting busy timeout: %w", err)
 	}
 
 	// Enable foreign key enforcement — required for ON DELETE CASCADE
