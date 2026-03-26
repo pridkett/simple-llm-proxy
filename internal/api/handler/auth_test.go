@@ -98,6 +98,9 @@ func (m *mockAuthStore) GetKeySpendTotals(_ context.Context) (map[int64]float64,
 	return nil, nil
 }
 func (m *mockAuthStore) FlushKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
+func (m *mockAuthStore) GetSpendSummary(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.SpendRow, error) {
+	return nil, nil
+}
 
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
