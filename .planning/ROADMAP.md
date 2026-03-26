@@ -50,10 +50,11 @@ Plans:
   3. Requests that would push a key over its hard budget limit are blocked with 429 and a message indicating the budget was exceeded
   4. Every successfully proxied request records its cost (tokens x model rate) against the originating key in storage
   5. Admin or team member can list all keys for an application, see each key's prefix and configuration, and revoke any key
-**Plans**: 6 plans
+**Plans**: 7 plans
 **UI hint**: yes
 
 Plans:
+- [ ] 02-00-PLAN.md — ADR 004: API Keys enforcement architecture document + GitHub issue
 - [ ] 02-01-PLAN.md — Schema migrations (replace api_keys table, add key_allowed_models), Storage interface + SQLite key CRUD
 - [ ] 02-02-PLAN.md — In-memory enforcement engine: key cache (TTL+invalidation), RPM/RPD counters, spend accumulator
 - [ ] 02-03-PLAN.md — KeyAuth middleware replacing Auth() on /v1/*; ErrRateLimited + ErrBudgetExceeded error types
@@ -77,7 +78,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Auth & Identity | 7/7 | Complete   | 2026-03-25 |
-| 2. API Keys & Enforcement | 0/6 | Not started | - |
+| 2. API Keys & Enforcement | 0/7 | Not started | - |
 | 3. Cost Monitoring & Complete Console | 0/TBD | Not started | - |
 
 ---
