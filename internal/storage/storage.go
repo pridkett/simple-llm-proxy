@@ -115,6 +115,10 @@ type Storage interface {
 	// Returns an empty slice if no allowlist entries exist (all models allowed).
 	GetKeyAllowedModels(ctx context.Context, keyID int64) ([]string, error)
 
+	// UpdateKeyAllowedModels replaces the allowlist for the given key.
+	// An empty slice means all models are allowed (no restriction).
+	UpdateKeyAllowedModels(ctx context.Context, keyID int64, models []string) error
+
 	// RecordKeySpend adds the given cost to usage_logs for the given key.
 	// This is a direct INSERT — the spend accumulator (in-memory) is the hot-path; this is the flush mechanism.
 	RecordKeySpend(ctx context.Context, keyID int64, cost float64) error

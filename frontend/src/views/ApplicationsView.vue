@@ -4,9 +4,9 @@
 
     <div class="flex gap-6">
       <!-- Left panel: team list -->
-      <div class="w-64 flex-shrink-0">
+      <div class="w-56 flex-shrink-0">
         <!-- Filter input -->
-        <div class="mb-4">
+        <div class="mb-3">
           <input
             v-model="teamSearch"
             type="text"
@@ -18,22 +18,27 @@
           />
         </div>
 
-        <div v-if="loadingTeams" class="text-gray-500 text-sm">Loading...</div>
-        <div v-else-if="teamsError" class="text-red-600 text-sm">{{ teamsError }}</div>
-        <ul v-else class="space-y-1">
-          <li
-            v-for="team in filteredTeams"
-            :key="team.id"
-            class="flex items-center justify-between px-3 py-2 rounded-md cursor-pointer text-sm"
-            :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'"
-            @click="selectTeam(team)"
-          >
-            <span>{{ team.name }}</span>
-          </li>
-          <li v-if="filteredTeams.length === 0" class="px-3 py-2 text-sm text-gray-400 italic">
-            No teams found
-          </li>
-        </ul>
+        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div class="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-200 bg-gray-50">
+            Teams
+          </div>
+          <div v-if="loadingTeams" class="px-3 py-3 text-gray-500 text-sm">Loading...</div>
+          <div v-else-if="teamsError" class="px-3 py-3 text-red-600 text-sm">{{ teamsError }}</div>
+          <ul v-else>
+            <li
+              v-for="team in filteredTeams"
+              :key="team.id"
+              class="px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-0"
+              :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'"
+              @click="selectTeam(team)"
+            >
+              {{ team.name }}
+            </li>
+            <li v-if="filteredTeams.length === 0" class="px-3 py-3 text-sm text-gray-400 italic">
+              No teams found
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Right panel: applications for selected team -->

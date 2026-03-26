@@ -297,4 +297,12 @@ export const api = {
   revokeAPIKey(keyId) {
     return request(`/admin/api-keys/${keyId}`, { method: 'DELETE' })
   },
+
+  /** PATCH /admin/api-keys/{id}/models — replace the allowed model list for a key */
+  updateKeyModels(keyId, allowedModels) {
+    return request(`/admin/api-keys/${keyId}/models`, {
+      method: 'PATCH',
+      body: JSON.stringify({ allowed_models: allowedModels }),
+    })
+  },
 }

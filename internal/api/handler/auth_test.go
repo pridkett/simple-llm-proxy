@@ -87,6 +87,9 @@ func (m *mockAuthStore) RevokeAPIKey(_ context.Context, _ int64) error { return 
 func (m *mockAuthStore) GetKeyAllowedModels(_ context.Context, _ int64) ([]string, error) {
 	return nil, nil
 }
+func (m *mockAuthStore) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
+	return nil
+}
 func (m *mockAuthStore) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
 func (m *mockAuthStore) GetKeySpendTotals(_ context.Context) (map[int64]float64, error) {
 	return nil, nil
