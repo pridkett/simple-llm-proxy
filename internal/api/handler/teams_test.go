@@ -163,8 +163,8 @@ func TestTeamMembers(t *testing.T) {
 		w := httptest.NewRecorder()
 		AdminAddTeamMember(store)(w, req)
 
-		if w.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
 		}
 		if store.lastAddMemberTeamID != 1 {
 			t.Errorf("expected AddTeamMember teamID=1, got %d", store.lastAddMemberTeamID)
@@ -203,8 +203,8 @@ func TestTeamMembers(t *testing.T) {
 		w := httptest.NewRecorder()
 		AdminUpdateTeamMemberRole(store)(w, req)
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
 		}
 		if store.lastUpdateRoleTeamID != 1 {
 			t.Errorf("expected UpdateTeamMemberRole teamID=1, got %d", store.lastUpdateRoleTeamID)
