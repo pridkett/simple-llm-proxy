@@ -101,6 +101,41 @@ func (s *Storage) migrate(ctx context.Context) error {
 			expiry DATETIME NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expiry)`,
+
+		// Migration 11: Drop placeholder api_keys table and recreate with full Phase 2 schema.
+		// Safe: no production key data exists. DROP removes the old schema completely.
+		// SQLite FK note (D-04): usage_logs.api_key_id was defined as a FK in the original placeholder
+		// migration. SQLite stores FK constraints as text metadata only — they are not re-validated
+		// after a DROP+CREATE of the referenced table. After this migration, usage_logs.api_key_id
+		// continues to reference the new api_keys(id) without requiring an explicit ALTER TABLE.
+		// This is safe because: (1) SQLite deferred FK enforcement validates at insert time, not schema
+		// creation time; (2) no usage_logs rows with api_key_id values exist yet (Phase 1 had no keys).
+		`DROP TABLE IF EXISTS api_keys`,
+		`CREATE TABLE api_keys (
+			id             INTEGER  PRIMARY KEY AUTOINCREMENT,
+			application_id INTEGER  NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+			name           TEXT     NOT NULL,
+			key_prefix     TEXT     NOT NULL,
+			key_hash       TEXT     NOT NULL UNIQUE,
+			max_rpm        INTEGER,
+			max_rpd        INTEGER,
+			max_budget     REAL,
+			soft_budget    REAL,
+			is_active      BOOLEAN  NOT NULL DEFAULT TRUE,
+			created_at     DATETIME NOT NULL DEFAULT (datetime('now'))
+		)`,
+
+		// Migration 12: Model allowlists — one row per (key, model) pair.
+		// Empty set for a key means all models are allowed.
+		`CREATE TABLE IF NOT EXISTS key_allowed_models (
+			key_id     INTEGER NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+			model_name TEXT    NOT NULL,
+			PRIMARY KEY (key_id, model_name)
+		)`,
+
+		// Migration 13: Indexes for key lookup hot paths.
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_application_id ON api_keys(application_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash)`,
 	}
 
 	for i, migration := range migrations {

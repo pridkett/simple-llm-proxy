@@ -93,6 +93,24 @@ func (m *mockSessionStorage) ListApplications(ctx context.Context, teamID int64)
 }
 func (m *mockSessionStorage) CleanExpiredSessions(ctx context.Context) error { return nil }
 
+// API Key CRUD stubs — required by interface, not exercised by session tests.
+func (m *mockSessionStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) ListAPIKeys(_ context.Context, _ int64) ([]*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) RevokeAPIKey(_ context.Context, _ int64) error { return nil }
+func (m *mockSessionStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]string, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error {
+	return nil
+}
+
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {
 	sm := scs.New()
