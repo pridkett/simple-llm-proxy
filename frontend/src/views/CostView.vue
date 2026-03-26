@@ -93,23 +93,61 @@
         </div>
       </div>
 
-      <!-- 3. Bar Chart -->
+      <!-- 3. Chart — toggleable: Total (bar) / Over Time (area) -->
       <div class="card p-6 mb-6">
-        <h2 class="text-base font-semibold text-gray-900 mb-4">Spend Overview</h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-gray-900">Spend Overview</h2>
+          <div class="flex gap-1">
+            <button
+              v-for="mode in ['total', 'over-time']"
+              :key="mode"
+              @click="chartMode = mode"
+              :class="chartMode === mode
+                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                : 'btn-secondary'"
+              class="rounded-md px-3 py-1.5 text-sm"
+            >
+              {{ mode === 'total' ? 'Total' : 'Over Time' }}
+            </button>
+          </div>
+        </div>
         <apexchart
+          v-if="chartMode === 'total'"
           type="bar"
           height="280"
           :options="chartOptions"
           :series="chartSeries"
         />
+        <apexchart
+          v-else
+          type="area"
+          height="280"
+          :options="overTimeChartOptions"
+          :series="overTimeChartSeries"
+        />
       </div>
 
-      <!-- 4. Breakdown Table — rows come directly from spendData.rows (server response) -->
+      <!-- 4. Breakdown Table — toggleable: By Key / By Model -->
       <div class="card">
-        <div class="px-6 py-4 border-b border-gray-100">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 class="text-base font-semibold text-gray-900">Spend Breakdown</h2>
+          <div class="flex gap-1">
+            <button
+              v-for="mode in ['by-key', 'by-model']"
+              :key="mode"
+              @click="breakdownMode = mode"
+              :class="breakdownMode === mode
+                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                : 'btn-secondary'"
+              class="rounded-md px-3 py-1.5 text-sm"
+            >
+              {{ mode === 'by-key' ? 'By Key' : 'By Model' }}
+            </button>
+          </div>
         </div>
-        <table class="w-full text-sm">
+
+        <!-- By Key table (default) -->
+        <table v-if="breakdownMode === 'by-key'" class="w-full text-sm">
           <thead>
             <tr class="border-b border-gray-100">
               <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
@@ -143,6 +181,35 @@
             </tr>
           </tbody>
         </table>
+
+        <!-- By Model table -->
+        <table v-else class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Model</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Spend</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Requests</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!spendData?.model_rows?.length">
+              <td colspan="3" class="px-6 py-12 text-center text-sm text-gray-500">
+                <div class="font-medium text-gray-700 mb-1">No model data</div>
+                <div v-if="hasNonDefaultFilter">No model data matches the selected filters.</div>
+                <div v-else>No requests were recorded in this date range.</div>
+              </td>
+            </tr>
+            <tr
+              v-for="row in spendData?.model_rows ?? []"
+              :key="row.model"
+              class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+            >
+              <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ row.model }}</td>
+              <td class="px-6 py-3 text-sm text-gray-900">{{ formatSpend(row.total_spend) }}</td>
+              <td class="px-6 py-3 text-sm text-gray-500">{{ row.request_count.toLocaleString() }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
     </template>
@@ -159,7 +226,11 @@ import StatusBadge from '../components/StatusBadge.vue'
 // State — current filtered response
 const loading = ref(false)
 const error = ref('')
-const spendData = ref(null)  // { rows: [], alerts: [], from: '', to: '' }
+const spendData = ref(null)  // { rows: [], model_rows: [], daily_rows: [], alerts: [], from: '', to: '' }
+
+// Chart / breakdown view toggles
+const chartMode = ref('total')       // 'total' | 'over-time'
+const breakdownMode = ref('by-key')  // 'by-key' | 'by-model'
 
 // State — initial unfiltered response for populating dropdown options
 // This is fetched once on mount with no filters and not updated by filter changes.
@@ -284,6 +355,28 @@ const chartOptions = computed(() => ({
   colors: ['#4F46E5'],
   plotOptions: { bar: { borderRadius: 4, horizontal: false } },
   xaxis: { categories: chartLabels.value, labels: { style: { colors: '#6B7280' } } },
+  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
+  grid: { borderColor: '#E5E7EB' },
+  tooltip: { y: { formatter: (v) => `$${v.toFixed(4)}` } },
+  dataLabels: { enabled: false },
+  noData: { text: 'No spend data for this period.' },
+}))
+
+// Over-time chart (area) — driven by daily_rows from the server response
+const overTimeChartSeries = computed(() => [{
+  name: 'Spend',
+  data: (spendData.value?.daily_rows ?? []).map(r => parseFloat(r.total_spend.toFixed(4))),
+}])
+
+const overTimeChartOptions = computed(() => ({
+  chart: { type: 'area', toolbar: { show: false } },
+  colors: ['#4F46E5'],
+  stroke: { curve: 'smooth', width: 2 },
+  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05 } },
+  xaxis: {
+    categories: (spendData.value?.daily_rows ?? []).map(r => r.day),
+    labels: { style: { colors: '#6B7280' }, rotate: -30 },
+  },
   yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
   grid: { borderColor: '#E5E7EB' },
   tooltip: { y: { formatter: (v) => `$${v.toFixed(4)}` } },

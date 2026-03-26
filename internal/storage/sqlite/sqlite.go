@@ -126,7 +126,7 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 		log.TotalCost,
 		log.StatusCode,
 		log.LatencyMS,
-		log.RequestTime,
+		log.RequestTime.UTC().Round(0),
 	)
 	if err != nil {
 		return fmt.Errorf("inserting log: %w", err)
