@@ -149,8 +149,38 @@ issuses must be placed in pridkett/simple-llm-proxy for all submodules of this p
 
 After completing a task, please commit your code using a single commit with a
 commit message in the form of a conventional commit. Make sure to be as
-descripitve as possible and write a multi-line commit message explaining the
+descriptive as possible and write a multi-line commit message explaining the
 changes.
+
+#### Conventional Commit Component Names
+
+The component (scope) in a conventional commit MUST be a meaningful English
+word or short phrase describing what area of the codebase changed. NEVER use
+phase numbers, plan numbers, or sequence identifiers as the component.
+
+Good examples:
+- `feat(storage):` — changes to the storage/database layer
+- `feat(spend-handler):` — changes to the spend API handler
+- `feat(cost-view):` — changes to the CostView frontend component
+- `fix(auth):` — fixes to authentication logic
+- `test(storage):` — tests for the storage layer
+
+Bad examples (NEVER DO THIS):
+- `feat(03-02):` — meaningless phase number
+- `docs(phase-03):` — meaningless phase reference
+- `test(03-00):` — meaningless plan number
+
+#### Co-Authorship — NON-NEGOTIABLE
+
+Every commit MUST end with the following co-authorship trailer so GitHub
+attributes the commit correctly:
+
+```
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+Use the actual model name from the session (Sonnet 4.6, Opus 4.6, Haiku 4.5,
+etc.). This line must be separated from the commit body by a blank line.
 
 If you are working on an issue from the issue tracker, you must include a line
 that indicates what issue you are working on. It should look like this:
