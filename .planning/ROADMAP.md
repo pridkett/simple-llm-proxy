@@ -54,8 +54,8 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 02-00-PLAN.md — ADR 004: API Keys enforcement architecture document + GitHub issue
-- [ ] 02-01-PLAN.md — Schema migrations (replace api_keys table, add key_allowed_models), Storage interface + SQLite key CRUD
+- [x] 02-00-PLAN.md — ADR 004: API Keys enforcement architecture document + GitHub issue
+- [x] 02-01-PLAN.md — Schema migrations (replace api_keys table, add key_allowed_models), Storage interface + SQLite key CRUD
 - [ ] 02-02-PLAN.md — In-memory enforcement engine: key cache (TTL+invalidation), RPM/RPD counters, spend accumulator
 - [ ] 02-03-PLAN.md — KeyAuth middleware replacing Auth() on /v1/*; ErrRateLimited + ErrBudgetExceeded error types
 - [ ] 02-04-PLAN.md — Cost attribution: model allowlist check in handlers, APIKeyID in logRequest, sa.Credit() after success
