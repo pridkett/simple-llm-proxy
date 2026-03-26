@@ -24,6 +24,7 @@ const routes = [
   { path: '/teams', name: 'teams', component: TeamsView },
   { path: '/applications', name: 'applications', component: ApplicationsView },
   { path: '/keys', name: 'keys', component: KeysView },
+  { path: '/cost', name: 'cost', component: () => import('../views/CostView.vue') },
 ]
 
 const router = createRouter({

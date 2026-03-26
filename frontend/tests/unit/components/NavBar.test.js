@@ -22,6 +22,7 @@ vi.mock('@/composables/useSession.js', () => ({
 vi.mock('@/api/client.js', () => ({
   api: {
     logout: vi.fn().mockResolvedValue(null),
+    spend: vi.fn().mockResolvedValue({ rows: [], alerts: [], from: '', to: '' }),
   },
 }))
 
