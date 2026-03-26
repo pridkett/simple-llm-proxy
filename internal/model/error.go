@@ -147,6 +147,28 @@ func ErrServiceUnavailable(message string) *ProxyError {
 	}
 }
 
+// ErrRateLimited returns a 429 rate limit exceeded error.
+// Per D-10: type = "rate_limit_error", message = "rate_limit_exceeded".
+func ErrRateLimited(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusTooManyRequests,
+		Message:    message,
+		Type:       "rate_limit_error",
+		Code:       "rate_limit_exceeded",
+	}
+}
+
+// ErrBudgetExceeded returns a 429 budget exceeded error.
+// Per D-10: type = "budget_limit_error", message = "budget_exceeded".
+func ErrBudgetExceeded(message string) *ProxyError {
+	return &ProxyError{
+		StatusCode: http.StatusTooManyRequests,
+		Message:    message,
+		Type:       "budget_limit_error",
+		Code:       "budget_exceeded",
+	}
+}
+
 
 // WriteError writes an error response to the http.ResponseWriter.
 func WriteError(w http.ResponseWriter, err *ProxyError) {

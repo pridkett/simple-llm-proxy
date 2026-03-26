@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
+	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
@@ -15,7 +17,7 @@ import (
 )
 
 // ChatCompletions handles POST /v1/chat/completions requests.
-func ChatCompletions(r *router.Router, store storage.Storage) http.HandlerFunc {
+func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -34,6 +36,30 @@ func ChatCompletions(r *router.Router, store storage.Storage) http.HandlerFunc {
 		if len(chatReq.Messages) == 0 {
 			model.WriteError(w, model.ErrBadRequest("messages is required"))
 			return
+		}
+
+		// Model allowlist enforcement (per D-10, KEY-02).
+		// Check is done here (not middleware) because it requires the decoded model name.
+		ck := middleware.APIKeyFromContext(ctx)
+		if ck != nil && len(ck.AllowedModels) > 0 {
+			allowed := false
+			for _, m := range ck.AllowedModels {
+				if m == chatReq.Model {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				model.WriteError(w, model.ErrForbidden("model not allowed: "+chatReq.Model))
+				return
+			}
+		}
+
+		// Extract apiKeyID for cost attribution (nil when authenticated via master key).
+		var apiKeyID *int64
+		if ck != nil {
+			id := ck.Key.ID
+			apiKeyID = &id
 		}
 
 		// Try to get a deployment with retries
@@ -58,9 +84,9 @@ func ChatCompletions(r *router.Router, store storage.Storage) http.HandlerFunc {
 			providerReq.Model = deployment.ActualModel
 
 			if chatReq.Stream {
-				err = handleStreamingResponse(ctx, w, deployment, &providerReq, r, store, startTime)
+				err = handleStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, apiKeyID, startTime)
 			} else {
-				err = handleNonStreamingResponse(ctx, w, deployment, &providerReq, r, store, startTime)
+				err = handleNonStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, apiKeyID, startTime)
 			}
 
 			if err == nil {
@@ -83,6 +109,8 @@ func handleNonStreamingResponse(
 	req *model.ChatCompletionRequest,
 	r *router.Router,
 	store storage.Storage,
+	sa *keystore.SpendAccumulator,
+	apiKeyID *int64,
 	startTime time.Time,
 ) error {
 	resp, err := deployment.Provider.ChatCompletion(ctx, req)
@@ -94,7 +122,7 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && resp.Usage != nil {
-		go logRequest(store, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime)
+		go logRequest(store, sa, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -108,6 +136,8 @@ func handleStreamingResponse(
 	req *model.ChatCompletionRequest,
 	r *router.Router,
 	store storage.Storage,
+	sa *keystore.SpendAccumulator,
+	apiKeyID *int64,
 	startTime time.Time,
 ) error {
 	stream, err := deployment.Provider.ChatCompletionStream(ctx, req)
@@ -135,6 +165,12 @@ func handleStreamingResponse(
 			// Send [DONE] marker
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
+			// Log the streaming request at stream completion (D-11)
+			// Note: streaming chunks may not carry usage data; log with nil usage guard
+			if store != nil {
+				usage := &model.Usage{} // streaming usage not always available; cost = 0 for now
+				go logRequest(store, sa, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime)
+			}
 			return nil
 		}
 		if err != nil {
@@ -151,21 +187,32 @@ func handleStreamingResponse(
 	}
 }
 
-func logRequest(store storage.Storage, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
+// logRequest writes the request log to storage and credits the spend accumulator.
+// Called asynchronously (via goroutine) after each successful request.
+// apiKeyID is nil when the request was authenticated via master key.
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	log := &storage.RequestLog{
 		RequestID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+		APIKeyID:         apiKeyID,
 		Model:            deployment.ModelName,
 		Provider:         deployment.ProviderName,
 		Endpoint:         endpoint,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
+		TotalCost:        0, // TODO: calculate cost from token counts + model rates (future plan)
 		StatusCode:       status,
 		LatencyMS:        time.Since(startTime).Milliseconds(),
 		RequestTime:      startTime,
 	}
 
 	store.LogRequest(ctx, log)
+
+	// Credit the spend accumulator after DB write (D-11: cost recorded after success).
+	// When cost calculation is wired, this will reflect actual spend.
+	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {
+		sa.Credit(*apiKeyID, log.TotalCost)
+	}
 }
