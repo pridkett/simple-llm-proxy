@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
+	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
@@ -12,7 +14,7 @@ import (
 )
 
 // Embeddings handles POST /v1/embeddings requests.
-func Embeddings(r *router.Router, store storage.Storage) http.HandlerFunc {
+func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -31,6 +33,30 @@ func Embeddings(r *router.Router, store storage.Storage) http.HandlerFunc {
 		if embReq.Input == nil {
 			model.WriteError(w, model.ErrBadRequest("input is required"))
 			return
+		}
+
+		// Model allowlist enforcement (per D-10, KEY-02).
+		// Check is done here (not middleware) because it requires the decoded model name.
+		ck := middleware.APIKeyFromContext(ctx)
+		if ck != nil && len(ck.AllowedModels) > 0 {
+			allowed := false
+			for _, m := range ck.AllowedModels {
+				if m == embReq.Model {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				model.WriteError(w, model.ErrForbidden("model not allowed: "+embReq.Model))
+				return
+			}
+		}
+
+		// Extract apiKeyID for cost attribution (nil when authenticated via master key).
+		var apiKeyID *int64
+		if ck != nil {
+			id := ck.Key.ID
+			apiKeyID = &id
 		}
 
 		// Try to get a deployment with retries
@@ -69,7 +95,7 @@ func Embeddings(r *router.Router, store storage.Storage) http.HandlerFunc {
 
 			// Log the request if storage is available
 			if store != nil && resp.Usage != nil {
-				go logRequest(store, deployment, "/v1/embeddings", resp.Usage, http.StatusOK, startTime)
+				go logRequest(store, sa, apiKeyID, deployment, "/v1/embeddings", resp.Usage, http.StatusOK, startTime)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
