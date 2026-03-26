@@ -73,6 +73,22 @@ func (m *mockAuthStore) ListCostOverrides(_ context.Context) ([]*storage.CostOve
 func (m *mockAuthStore) DeleteCostOverride(_ context.Context, _ string) error { return nil }
 func (m *mockAuthStore) Close() error { return nil }
 
+// API Key CRUD stubs — required by interface, not exercised by auth tests.
+func (m *mockAuthStore) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) ListAPIKeys(_ context.Context, _ int64) ([]*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) RevokeAPIKey(_ context.Context, _ int64) error { return nil }
+func (m *mockAuthStore) GetKeyAllowedModels(_ context.Context, _ int64) ([]string, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
+
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
 	sm := scs.New()
