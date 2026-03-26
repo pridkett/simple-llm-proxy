@@ -11,6 +11,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/auth"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
+	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -19,7 +20,8 @@ import (
 // NewRouter creates a new HTTP router with all routes configured.
 // sm is the SCS session manager (must not be nil).
 // oidcProvider may be nil when OIDC is not configured — auth routes will return 503.
-func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloader, cm *costmap.Manager, startTime time.Time, spec *openapi.Spec, sm *scs.SessionManager, oidcProvider *auth.OIDCProvider) *chi.Mux {
+// cache, rl, sa are the keystore enforcement objects created at startup.
+func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloader, cm *costmap.Manager, startTime time.Time, spec *openapi.Spec, sm *scs.SessionManager, oidcProvider *auth.OIDCProvider, cache *keystore.Cache, rl *keystore.RateLimiter, sa *keystore.SpendAccumulator) *chi.Mux {
 	mux := chi.NewRouter()
 
 	// Global middleware
@@ -46,17 +48,15 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Get("/admin/me", handler.AdminMe(store, sm))
 	})
 
-	// Group 1: /v1/* — machine clients, master key auth (UNCHANGED)
+	// Group 1: /v1/* — machine clients, KeyAuth replaces old Auth() middleware.
+	// KeyAuth accepts both master key (bypass) and per-app keys (enforcement).
 	mux.Group(func(mux chi.Router) {
-		// Auth uses the master key from the initial config load.
-		// Changing master_key requires a server restart.
-		mux.Use(middleware.Auth(reloader.Config().GeneralSettings.MasterKey))
+		mux.Use(middleware.KeyAuth(reloader.Config().GeneralSettings.MasterKey, store, cache, rl, sa))
 
 		// OpenAI-compatible endpoints
-		// sa is nil here until Plan 05 wires the SpendAccumulator via NewRouter arguments.
-		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, nil))
+		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa))
 		mux.Post("/v1/completions", handler.Completions())
-		mux.Post("/v1/embeddings", handler.Embeddings(r, store, nil))
+		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa))
 		mux.Get("/v1/models", handler.Models(r))
 		mux.Get("/v1/models/{model}", handler.ModelDetail(r, cm))
 		mux.Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
@@ -83,11 +83,11 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Model endpoints mirrored for session-auth browser clients
 		mux.Get("/admin/models", handler.Models(r))
 		mux.Get("/admin/models/{model}", handler.ModelDetail(r, cm))
-		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, nil))
-		mux.Post("/admin/embeddings", handler.Embeddings(r, store, nil))
+		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa))
+		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa))
 
-		// Identity CRUD routes registered by Plan 05 via RegisterAdminRoutes
-		handler.RegisterAdminRoutes(mux, store)
+		// Identity and key management CRUD routes
+		handler.RegisterAdminRoutes(mux, store, cache)
 	})
 
 	return mux

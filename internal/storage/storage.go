@@ -122,6 +122,9 @@ type Storage interface {
 	// GetKeySpendTotals returns the total cost per api_key_id from usage_logs.
 	// Used at startup to initialize the in-memory spend accumulator.
 	GetKeySpendTotals(ctx context.Context) (map[int64]float64, error)
+
+	// FlushKeySpend inserts a synthetic usage_log flush entry for the key's accumulated spend.
+	FlushKeySpend(ctx context.Context, keyID int64, total float64) error
 }
 
 // User represents a proxy user populated from OIDC claims.

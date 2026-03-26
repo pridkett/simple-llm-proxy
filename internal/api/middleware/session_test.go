@@ -113,6 +113,9 @@ func (m *mockSessionStorage) RecordKeySpend(_ context.Context, _ int64, _ float6
 func (m *mockSessionStorage) GetKeySpendTotals(_ context.Context) (map[int64]float64, error) {
 	return nil, nil
 }
+func (m *mockSessionStorage) FlushKeySpend(_ context.Context, _ int64, _ float64) error {
+	return nil
+}
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {

@@ -18,6 +18,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/auth"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
+	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/logger"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
@@ -139,8 +140,23 @@ func main() {
 		seedCostOverrides(context.Background(), store, cm)
 	}
 
+	// Initialize keystore (in-memory enforcement engine for per-app API keys)
+	cache := keystore.New(60 * time.Second) // 60s TTL per D-07
+	rl := keystore.NewRateLimiter()
+	sa := keystore.NewSpendAccumulator()
+
+	// Initialize spend accumulator from historical usage_logs (D-09).
+	// Non-fatal: accumulator starts at 0 if DB query fails.
+	if store != nil {
+		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := sa.InitFromStorage(initCtx, store); err != nil {
+			log.Warn().Err(err).Msg("spend accumulator init failed: starting at 0")
+		}
+		initCancel()
+	}
+
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)
@@ -150,6 +166,37 @@ func main() {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 120 * time.Second, // Long timeout for streaming
 		IdleTimeout:  120 * time.Second,
+	}
+
+	// Spend flush loop — persists in-memory spend totals to usage_logs every 30s (D-09).
+	// On shutdown, a final flush is performed before process exit.
+	flushDone := make(chan struct{})
+	shutdownFlush := make(chan struct{})
+	if store != nil {
+		go func() {
+			defer close(flushDone)
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					if err := sa.FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("spend flush failed")
+					}
+					flushCancel()
+				case <-shutdownFlush:
+					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					if err := sa.FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("spend final flush on shutdown failed")
+					}
+					flushCancel()
+					return
+				}
+			}
+		}()
+	} else {
+		close(flushDone)
 	}
 
 	// Start server in goroutine
@@ -166,6 +213,10 @@ func main() {
 	<-quit
 
 	log.Info().Msg("shutting down server")
+
+	// Signal spend flush loop to perform final flush and stop
+	close(shutdownFlush)
+	<-flushDone
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

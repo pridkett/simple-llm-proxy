@@ -104,6 +104,7 @@ func (m *mockStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) erro
 func (m *mockStorage) GetKeySpendTotals(_ context.Context) (map[int64]float64, error) {
 	return nil, nil
 }
+func (m *mockStorage) FlushKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
 
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
