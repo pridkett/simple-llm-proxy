@@ -54,7 +54,7 @@
         </div>
       </div>
 
-      <!-- Right panel: Keys table + Create form -->
+      <!-- Right panel: Keys table + Create/Edit form -->
       <div class="flex-1 min-w-0">
         <template v-if="selectedApp">
           <!-- Error banner -->
@@ -86,116 +86,93 @@
                     No keys yet — create the first one below
                   </td>
                 </tr>
-                <template v-for="key in keys" :key="key.id">
-                  <tr>
-                    <td class="px-4 py-3 font-mono text-sm text-gray-900">{{ key.key_prefix }}...</td>
-                    <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ key.name }}</td>
-                    <td class="px-4 py-3 text-sm text-gray-500">
-                      <template v-if="editingModelsKeyId !== key.id">
-                        <span v-if="!key.allowed_models || key.allowed_models.length === 0" class="italic">All models</span>
-                        <span v-else>
-                          {{ key.allowed_models.slice(0, 2).join(', ') }}
-                          <span v-if="key.allowed_models.length > 2" class="text-gray-400"> +{{ key.allowed_models.length - 2 }} more</span>
-                        </span>
-                        <button
-                          v-if="key.is_active"
-                          @click="startEditModels(key)"
-                          class="ml-2 text-xs text-indigo-500 hover:text-indigo-700"
-                        >Edit</button>
-                      </template>
-                    </td>
-                    <td class="px-4 py-3 text-sm text-gray-700">
-                      <!-- Phase 3: show "$X.XX / $Y.YY" once spend totals API is available -->
-                      <span v-if="key.max_budget != null">Budget: ${{ key.max_budget.toFixed(2) }}</span>
-                      <span v-else class="text-gray-400">Unlimited</span>
-                    </td>
-                    <td class="px-4 py-3 text-sm">
-                      <span v-if="key.is_active" class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5">active</span>
-                      <span v-else class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5">revoked</span>
-                    </td>
-                    <td class="px-4 py-3 text-sm">
+                <tr
+                  v-for="key in keys"
+                  :key="key.id"
+                  :class="editingKey?.id === key.id ? 'bg-indigo-50' : ''"
+                >
+                  <td class="px-4 py-3 font-mono text-sm text-gray-900">{{ key.key_prefix }}...</td>
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ key.name }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">
+                    <span v-if="!key.allowed_models || key.allowed_models.length === 0" class="italic">All models</span>
+                    <span v-else>
+                      {{ key.allowed_models.slice(0, 2).join(', ') }}
+                      <span v-if="key.allowed_models.length > 2" class="text-gray-400"> +{{ key.allowed_models.length - 2 }} more</span>
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-700">
+                    <!-- Phase 3: show "$X.XX / $Y.YY" once spend totals API is available -->
+                    <span v-if="key.max_budget != null">Budget: ${{ key.max_budget.toFixed(2) }}</span>
+                    <span v-else class="text-gray-400">Unlimited</span>
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    <span v-if="key.is_active" class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5">active</span>
+                    <span v-else class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5">revoked</span>
+                  </td>
+                  <td class="px-4 py-3 text-sm space-x-2">
+                    <template v-if="key.is_active">
+                      <!-- Edit button -->
+                      <button
+                        @click="startEditKey(key)"
+                        class="text-xs text-indigo-500 hover:text-indigo-700"
+                      >Edit</button>
+                      <!-- Revoke inline confirmation -->
                       <template v-if="revokeConfirm === key.id">
-                        <span class="text-xs text-gray-500 mr-1">Revoke {{ key.name }}?</span>
+                        <span class="text-xs text-gray-500">Revoke?</span>
                         <button
                           :data-testid="`confirm-revoke-${key.id}`"
                           @click="confirmRevoke(key.id)"
-                          class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
-                        >Revoke key</button>
-                        <button @click="revokeConfirm = null" class="text-xs text-gray-500 hover:text-gray-700">Keep key</button>
+                          class="text-xs text-red-600 hover:text-red-800 font-medium"
+                        >Yes</button>
+                        <button @click="revokeConfirm = null" class="text-xs text-gray-500 hover:text-gray-700">No</button>
                       </template>
                       <button
-                        v-else-if="key.is_active"
+                        v-else
                         :data-testid="`revoke-key-${key.id}`"
                         @click="revokeConfirm = key.id"
                         class="text-xs text-red-500 hover:text-red-700"
                       >Revoke</button>
-                    </td>
-                  </tr>
-                  <!-- Inline edit models row -->
-                  <tr v-if="editingModelsKeyId === key.id">
-                    <td colspan="6" class="px-4 py-3 bg-indigo-50 border-t border-indigo-100">
-                      <div class="flex items-start gap-3">
-                        <div class="relative flex-1 max-w-md">
-                          <label class="block text-xs text-gray-500 mb-1">Allowed models (leave empty for all)</label>
-                          <input
-                            v-model="editModelsInput"
-                            type="text"
-                            placeholder="e.g. gpt-4, claude-3-opus (comma-separated)"
-                            autocomplete="off"
-                            data-1p-ignore
-                            data-lpignore="true"
-                            class="input w-full"
-                            @input="onEditModelsInput"
-                            @keydown="onEditModelsKeydown"
-                            @blur="hideEditSuggestionsDelayed"
-                            @focus="onEditModelsInput"
-                            ref="editModelsInputRef"
-                          />
-                          <ul
-                            v-if="editModelsShowSuggestions && editModelsFilteredSuggestions.length > 0"
-                            class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
-                          >
-                            <li
-                              v-for="(model, idx) in editModelsFilteredSuggestions"
-                              :key="model"
-                              class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
-                              :class="idx === editModelsSuggestionIndex ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'"
-                              @mousedown.prevent="selectEditModelsSuggestion(model)"
-                            >
-                              {{ model }}
-                            </li>
-                          </ul>
-                          <p v-if="editModelsError" class="mt-1 text-xs text-red-500">{{ editModelsError }}</p>
-                        </div>
-                        <div class="flex items-end gap-2 pt-5">
-                          <button
-                            @click="saveEditModels(key)"
-                            :disabled="editModelsSubmitting"
-                            class="btn btn-primary text-xs py-1 px-3"
-                          >{{ editModelsSubmitting ? 'Saving…' : 'Save' }}</button>
-                          <button
-                            @click="cancelEditModels"
-                            class="btn btn-secondary text-xs py-1 px-3"
-                          >Cancel</button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </template>
+                    </template>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
 
-          <!-- Create Key form -->
-          <div v-if="currentUser?.is_admin || currentUser?.role !== 'viewer'" class="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 class="text-sm font-medium text-gray-700 mb-3">New Key</h3>
+          <!-- Create / Edit Key form -->
+          <div
+            v-if="currentUser?.is_admin || currentUser?.role !== 'viewer'"
+            class="bg-white border border-gray-200 rounded-lg p-4"
+            :class="editingKey ? 'border-indigo-300 ring-1 ring-indigo-200' : ''"
+            ref="formRef"
+          >
+            <!-- Form heading -->
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-sm font-medium text-gray-700">
+                  <template v-if="editingKey">
+                    Edit Key —
+                    <span class="font-mono text-gray-500">{{ editingKey.key_prefix }}...</span>
+                  </template>
+                  <template v-else>New Key</template>
+                </h3>
+                <p v-if="editingKey" class="text-xs text-gray-400 mt-0.5">
+                  Changes apply immediately. The key value is not affected.
+                </p>
+              </div>
+              <button
+                v-if="editingKey"
+                @click="cancelEdit"
+                class="text-xs text-gray-400 hover:text-gray-600"
+              >&#10005; Cancel edit</button>
+            </div>
 
             <div v-if="formError" class="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-600 flex justify-between items-center">
               <span>{{ formError }}</span>
               <button @click="formError = null" class="ml-3 text-red-400 hover:text-red-600">&#10005;</button>
             </div>
 
-            <form @submit.prevent="handleCreateKey" class="space-y-3 max-w-lg">
+            <form @submit.prevent="handleSubmitForm" class="space-y-3 max-w-lg">
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Name</label>
                 <input
@@ -226,7 +203,6 @@
                   @focus="onModelsInput"
                   ref="modelsInputRef"
                 />
-                <!-- Autocomplete dropdown -->
                 <ul
                   v-if="showSuggestions && filteredSuggestions.length > 0"
                   class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
@@ -277,7 +253,19 @@
                 </div>
               </div>
 
-              <button type="submit" class="btn btn-primary" :disabled="!form.name.trim() || submitting">Create Key</button>
+              <div class="flex gap-2">
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  :disabled="!form.name.trim() || submitting"
+                >{{ editingKey ? 'Save Changes' : 'Create Key' }}</button>
+                <button
+                  v-if="editingKey"
+                  type="button"
+                  @click="cancelEdit"
+                  class="btn btn-secondary"
+                >Cancel</button>
+              </div>
             </form>
           </div>
         </template>
@@ -296,7 +284,6 @@
         <div class="bg-yellow-50 border border-yellow-300 text-sm text-yellow-800 rounded px-3 py-2 mb-4">
           This key will not be shown again. Copy it now and store it securely.
         </div>
-        <!-- Key display with inline copy emoji -->
         <div class="relative mb-4">
           <div class="font-mono text-sm bg-gray-100 rounded px-3 py-2 break-all select-all text-gray-900 pr-10">
             {{ newKey }}
@@ -340,24 +327,17 @@ const copied = ref(false)
 const revokeConfirm = ref(null)
 const submitting = ref(false)
 const formError = ref(null)
+const editingKey = ref(null)
+const formRef = ref(null)
 const form = ref({ name: '', allowedModels: '', maxRPM: '', maxRPD: '', maxBudget: '', softBudget: '' })
 
-// Model autocomplete (create form)
+// Model autocomplete
 const availableModels = ref([])
 const showSuggestions = ref(false)
 const suggestionIndex = ref(-1)
 const modelsInputRef = ref(null)
 
-// Edit models inline
-const editingModelsKeyId = ref(null)
-const editModelsInput = ref('')
-const editModelsError = ref(null)
-const editModelsSubmitting = ref(false)
-const editModelsShowSuggestions = ref(false)
-const editModelsSuggestionIndex = ref(-1)
-const editModelsInputRef = ref(null)
-
-// --- Create form autocomplete ---
+// --- Autocomplete ---
 
 const alreadySelected = computed(() => {
   const parts = form.value.allowedModels.split(',')
@@ -411,101 +391,36 @@ function hideSuggestionsDelayed() {
   setTimeout(() => { showSuggestions.value = false }, 150)
 }
 
-// --- Edit models inline autocomplete ---
-
-const editModelsCurrentToken = computed(() => {
-  const parts = editModelsInput.value.split(',')
-  return parts[parts.length - 1].trim().toLowerCase()
-})
-
-const editModelsAlreadySelected = computed(() => {
-  const parts = editModelsInput.value.split(',')
-  return new Set(parts.slice(0, -1).map((m) => m.trim().toLowerCase()).filter((m) => m.length > 0))
-})
-
-const editModelsFilteredSuggestions = computed(() => {
-  const token = editModelsCurrentToken.value
-  const selected = editModelsAlreadySelected.value
-  const candidates = availableModels.value.filter((m) => !selected.has(m.toLowerCase()))
-  if (!token) return candidates.slice(0, 8)
-  return candidates.filter((m) => m.toLowerCase().includes(token)).slice(0, 8)
-})
-
-function onEditModelsInput() {
-  editModelsShowSuggestions.value = true
-  editModelsSuggestionIndex.value = -1
-}
-
-function onEditModelsKeydown(e) {
-  if (!editModelsShowSuggestions.value || editModelsFilteredSuggestions.value.length === 0) return
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    editModelsSuggestionIndex.value = Math.min(editModelsSuggestionIndex.value + 1, editModelsFilteredSuggestions.value.length - 1)
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    editModelsSuggestionIndex.value = Math.max(editModelsSuggestionIndex.value - 1, -1)
-  } else if (e.key === 'Enter' && editModelsSuggestionIndex.value >= 0) {
-    e.preventDefault()
-    selectEditModelsSuggestion(editModelsFilteredSuggestions.value[editModelsSuggestionIndex.value])
-  } else if (e.key === 'Escape') {
-    editModelsShowSuggestions.value = false
-  }
-}
-
-function selectEditModelsSuggestion(model) {
-  const parts = editModelsInput.value.split(',')
-  parts[parts.length - 1] = model
-  editModelsInput.value = parts.join(', ') + ', '
-  editModelsShowSuggestions.value = false
-  editModelsSuggestionIndex.value = -1
-  editModelsInputRef.value?.focus()
-}
-
-function hideEditSuggestionsDelayed() {
-  setTimeout(() => { editModelsShowSuggestions.value = false }, 150)
-}
-
-function startEditModels(key) {
-  editingModelsKeyId.value = key.id
-  editModelsInput.value = (key.allowed_models ?? []).join(', ')
-  editModelsError.value = null
-  editModelsShowSuggestions.value = false
-  nextTick(() => editModelsInputRef.value?.focus())
-}
-
-function cancelEditModels() {
-  editingModelsKeyId.value = null
-  editModelsInput.value = ''
-  editModelsError.value = null
-}
-
-async function saveEditModels(key) {
-  editModelsError.value = null
-  editModelsSubmitting.value = true
-  const models = [...new Set(
-    editModelsInput.value.split(',').map((m) => m.trim()).filter((m) => m.length > 0)
-  )]
-  try {
-    await api.updateKeyModels(key.id, models)
-    // Update the local key object immediately
-    key.allowed_models = models
-    cancelEditModels()
-  } catch (e) {
-    editModelsError.value = e.message || 'Failed to update models.'
-  } finally {
-    editModelsSubmitting.value = false
-  }
-}
-
-// --- Models loader ---
-
 async function loadModels() {
   try {
     const result = await api.models()
     availableModels.value = (result?.data ?? []).map((m) => m.id)
   } catch {
-    // non-fatal — autocomplete just won't show
+    // non-fatal
   }
+}
+
+// --- Edit key ---
+
+function startEditKey(key) {
+  editingKey.value = key
+  form.value = {
+    name: key.name,
+    allowedModels: (key.allowed_models ?? []).join(', '),
+    maxRPM: key.max_rpm ?? '',
+    maxRPD: key.max_rpd ?? '',
+    maxBudget: key.max_budget ?? '',
+    softBudget: key.soft_budget ?? '',
+  }
+  revokeConfirm.value = null
+  formError.value = null
+  nextTick(() => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+}
+
+function cancelEdit() {
+  editingKey.value = null
+  form.value = { name: '', allowedModels: '', maxRPM: '', maxRPD: '', maxBudget: '', softBudget: '' }
+  formError.value = null
 }
 
 // --- Validation ---
@@ -545,9 +460,8 @@ async function selectTeam(team) {
   error.value = null
   appsError.value = null
   revokeConfirm.value = null
-  cancelEditModels()
+  cancelEdit()
   loadingApps.value = true
-  appsError.value = null
   try {
     apps.value = await api.applications(team.id) ?? []
   } catch (e) {
@@ -561,7 +475,7 @@ async function selectApp(app) {
   selectedApp.value = app
   error.value = null
   revokeConfirm.value = null
-  cancelEditModels()
+  cancelEdit()
   await loadKeys(app.id)
 }
 
@@ -589,21 +503,13 @@ function parseOptionalFloat(val) {
   return isNaN(n) ? undefined : n
 }
 
-async function handleCreateKey() {
-  if (!form.value.name.trim() || !selectedApp.value) return
-  if (softBudgetError.value) {
-    formError.value = 'Soft budget alert must be less than the hard budget limit.'
-    return
-  }
-  formError.value = null
-  submitting.value = true
-
+function buildFormBody() {
   const allowedModels = [...new Set(
     form.value.allowedModels.split(',').map((m) => m.trim()).filter((m) => m.length > 0)
   )]
-
   const body = { name: form.value.name.trim() }
   if (allowedModels.length > 0) body.allowed_models = allowedModels
+  else body.allowed_models = []
   const rpm = parseOptionalInt(form.value.maxRPM)
   const rpd = parseOptionalInt(form.value.maxRPD)
   const maxBudget = parseOptionalFloat(form.value.maxBudget)
@@ -612,11 +518,31 @@ async function handleCreateKey() {
   if (rpd !== undefined) body.max_rpd = rpd
   if (maxBudget !== undefined) body.max_budget = maxBudget
   if (softBudget !== undefined) body.soft_budget = softBudget
+  return body
+}
 
+async function handleSubmitForm() {
+  if (!form.value.name.trim()) return
+  if (softBudgetError.value) {
+    formError.value = 'Soft budget alert must be less than the hard budget limit.'
+    return
+  }
+  formError.value = null
+  submitting.value = true
   try {
-    const result = await api.createAPIKey(selectedApp.value.id, body)
-    newKey.value = result.key
-    form.value = { name: '', allowedModels: '', maxRPM: '', maxRPD: '', maxBudget: '', softBudget: '' }
+    if (editingKey.value) {
+      await api.updateAPIKey(editingKey.value.id, buildFormBody())
+      cancelEdit()
+      if (selectedApp.value) await loadKeys(selectedApp.value.id)
+    } else {
+      if (!selectedApp.value) return
+      const body = buildFormBody()
+      // For create, omit empty allowed_models array
+      if (body.allowed_models?.length === 0) delete body.allowed_models
+      const result = await api.createAPIKey(selectedApp.value.id, body)
+      newKey.value = result.key
+      form.value = { name: '', allowedModels: '', maxRPM: '', maxRPD: '', maxBudget: '', softBudget: '' }
+    }
   } catch (e) {
     formError.value = e.message
   } finally {
@@ -645,6 +571,7 @@ async function confirmRevoke(keyId) {
   try {
     await api.revokeAPIKey(keyId)
     revokeConfirm.value = null
+    if (editingKey.value?.id === keyId) cancelEdit()
     if (selectedApp.value) await loadKeys(selectedApp.value.id)
   } catch (e) {
     error.value = e.message || 'Failed to revoke key. Try again.'

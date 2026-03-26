@@ -90,6 +90,9 @@ func (m *mockAuthStore) GetKeyAllowedModels(_ context.Context, _ int64) ([]strin
 func (m *mockAuthStore) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
+func (m *mockAuthStore) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+	return nil
+}
 func (m *mockAuthStore) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
 func (m *mockAuthStore) GetKeySpendTotals(_ context.Context) (map[int64]float64, error) {
 	return nil, nil

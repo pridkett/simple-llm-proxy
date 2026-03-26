@@ -121,10 +121,10 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 	}
 }
 
-// AdminUpdateKeyModels handles PATCH /admin/api-keys/{id}/models
-// Admin only. Replaces the allowed model list for a key. Empty list = all models allowed.
-// Immediately invalidates the cache entry so the new allowlist takes effect.
-func AdminUpdateKeyModels(store storage.Storage, cache *keystore.Cache) http.HandlerFunc {
+// AdminUpdateKey handles PATCH /admin/api-keys/{id}
+// Admin only. Updates the mutable fields of a key (name, limits, budget, allowed models).
+// Immediately invalidates the cache entry so changes take effect on the next request.
+func AdminUpdateKey(store storage.Storage, cache *keystore.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := middleware.UserFromContext(r.Context())
 		if user == nil || !user.IsAdmin {
@@ -137,14 +137,19 @@ func AdminUpdateKeyModels(store storage.Storage, cache *keystore.Cache) http.Han
 			return
 		}
 		var body struct {
+			Name          string   `json:"name"`
 			AllowedModels []string `json:"allowed_models"`
+			MaxRPM        *int     `json:"max_rpm"`
+			MaxRPD        *int     `json:"max_rpd"`
+			MaxBudget     *float64 `json:"max_budget"`
+			SoftBudget    *float64 `json:"soft_budget"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			model.WriteError(w, model.ErrBadRequest("invalid request body"))
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+			model.WriteError(w, model.ErrBadRequest("name is required"))
 			return
 		}
-		if err := store.UpdateKeyAllowedModels(r.Context(), id, body.AllowedModels); err != nil {
-			model.WriteError(w, model.ErrInternal("failed to update key models"))
+		if err := store.UpdateAPIKey(r.Context(), id, body.Name, body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels); err != nil {
+			model.WriteError(w, model.ErrInternal("failed to update key"))
 			return
 		}
 		cache.Invalidate(id)

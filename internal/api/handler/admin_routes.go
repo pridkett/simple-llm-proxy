@@ -27,5 +27,5 @@ func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Ca
 	r.Get("/admin/applications/{id}/keys", AdminListKeys(store))
 	r.Post("/admin/applications/{id}/keys", AdminCreateKey(store))
 	r.Delete("/admin/api-keys/{id}", AdminRevokeKey(store, cache))
-	r.Patch("/admin/api-keys/{id}/models", AdminUpdateKeyModels(store, cache))
+	r.Patch("/admin/api-keys/{id}", AdminUpdateKey(store, cache))
 }
