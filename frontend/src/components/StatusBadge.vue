@@ -15,7 +15,7 @@ const props = defineProps({
   status: {
     type: String,
     required: true,
-    // 'healthy' | 'cooldown' | 'unknown'
+    // 'healthy' | 'cooldown' | 'unknown' | 'ok' | 'warning' | 'over'
   },
 })
 
@@ -23,6 +23,9 @@ const label = computed(() => {
   switch (props.status) {
     case 'healthy': return 'Healthy'
     case 'cooldown': return 'Cooldown'
+    case 'ok': return 'OK'
+    case 'warning': return 'Warning'
+    case 'over': return 'Over Budget'
     default: return 'Unknown'
   }
 })
@@ -31,6 +34,9 @@ const classes = computed(() => {
   switch (props.status) {
     case 'healthy': return 'bg-green-50 text-green-700'
     case 'cooldown': return 'bg-red-50 text-red-700'
+    case 'ok': return 'bg-green-50 text-green-700'
+    case 'warning': return 'bg-amber-50 text-amber-700'
+    case 'over': return 'bg-red-50 text-red-700'
     default: return 'bg-gray-100 text-gray-600'
   }
 })
@@ -39,6 +45,9 @@ const dotClass = computed(() => {
   switch (props.status) {
     case 'healthy': return 'bg-green-500'
     case 'cooldown': return 'bg-red-500'
+    case 'ok': return 'bg-green-500'
+    case 'warning': return 'bg-amber-500'
+    case 'over': return 'bg-red-500'
     default: return 'bg-gray-400'
   }
 })
