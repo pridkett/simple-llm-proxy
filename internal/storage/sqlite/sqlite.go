@@ -111,12 +111,13 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.Re
 func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO usage_logs (
-			request_id, model, provider, endpoint,
+			request_id, api_key_id, model, provider, endpoint,
 			prompt_tokens, completion_tokens, total_cost,
 			status_code, latency_ms, request_time
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		log.RequestID,
+		log.APIKeyID,
 		log.Model,
 		log.Provider,
 		log.Endpoint,
