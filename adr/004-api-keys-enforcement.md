@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-25
-**ADR Issue:** pridkett/simple-llm-proxy#TBD
+**ADR Issue:** pridkett/simple-llm-proxy#23
 
 ---
 
