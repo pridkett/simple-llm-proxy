@@ -14,7 +14,7 @@ Three phases deliver this in dependency order: identity first, enforcement secon
 
 - [x] **Phase 1: Auth & Identity** - SSO login, user model, teams, applications, and RBAC — the identity foundation everything else depends on (completed 2026-03-25)
 - [ ] **Phase 2: API Keys & Enforcement** - Per-app keys with model allowlists, rate limits, hard budget caps, and real-time cost recording enforced on every proxied request
-- [ ] **Phase 3: Cost Monitoring & Complete Console** - Spend dashboards by key/app/team with date filters and soft-budget alert surfacing
+- [x] **Phase 3: Cost Monitoring & Complete Console** - Spend dashboards by key/app/team with date filters and soft-budget alert surfacing (completed 2026-03-26)
 
 ## Phase Details
 
@@ -78,7 +78,7 @@ Plans:
 - [x] 03-01-PLAN.md — Backend storage: SpendRow/SpendFilters types, GetSpendSummary interface + SQLite implementation with JOIN + flush exclusion
 - [x] 03-02-PLAN.md — Backend handler: AdminSpend handler, alert computation, GET /admin/spend route registration
 - [x] 03-PLAN-3-frontend-wiring.md — Frontend wiring: api.spend() client method, StatusBadge ok/warning/over extension, NavBar Cost link + badge, /cost route
-- [ ] 03-PLAN-4-cost-view.md — Frontend Cost view: ApexCharts plugin, CostView.vue (filters+chart+table+alerts), KeysView spend column, human verification
+- [x] 03-PLAN-4-cost-view.md — Frontend Cost view: ApexCharts plugin, CostView.vue (filters+chart+table+alerts), KeysView spend column, human verification
 
 ## Progress
 
@@ -86,7 +86,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Auth & Identity | 7/7 | Complete   | 2026-03-25 |
 | 2. API Keys & Enforcement | 5/7 | In Progress|  |
-| 3. Cost Monitoring & Complete Console | 4/5 | In Progress|  |
+| 3. Cost Monitoring & Complete Console | 5/5 | Complete   | 2026-03-26 |
 
 ---
 
