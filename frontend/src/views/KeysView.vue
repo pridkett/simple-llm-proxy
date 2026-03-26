@@ -151,7 +151,7 @@
               <div>
                 <h3 class="text-sm font-medium text-gray-700">
                   <template v-if="editingKey">
-                    Edit Key —
+                    Edit Key — {{ editingKey.name }} —
                     <span class="font-mono text-gray-500">{{ editingKey.key_prefix }}...</span>
                   </template>
                   <template v-else>New Key</template>
