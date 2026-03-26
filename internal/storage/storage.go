@@ -138,6 +138,15 @@ type Storage interface {
 	// Flush rows (model='_flush') are excluded. Only active keys are returned.
 	// Used by the /admin/spend dashboard endpoint.
 	GetSpendSummary(ctx context.Context, from, to time.Time, filters SpendFilters) ([]SpendRow, error)
+
+	// GetModelSpend returns aggregated spend grouped by model name for the given date range and filters.
+	// Flush rows (model='_flush') are excluded. Only spend attributed to active keys is included.
+	GetModelSpend(ctx context.Context, from, to time.Time, filters SpendFilters) ([]ModelSpendRow, error)
+
+	// GetDailySpend returns aggregated spend grouped by calendar day for the given date range and filters.
+	// Flush rows (model='_flush') are excluded. Only spend attributed to active keys is included.
+	// Days with zero spend are not returned — the caller fills gaps if needed.
+	GetDailySpend(ctx context.Context, from, to time.Time, filters SpendFilters) ([]DailySpendRow, error)
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -233,6 +242,20 @@ type SpendFilters struct {
 	TeamID *int64
 	AppID  *int64
 	KeyID  *int64
+}
+
+// ModelSpendRow is one row from GetModelSpend: spend totals per model name.
+type ModelSpendRow struct {
+	Model        string  `json:"model"`
+	TotalSpend   float64 `json:"total_spend"`
+	RequestCount int64   `json:"request_count"`
+}
+
+// DailySpendRow is one row from GetDailySpend: daily spend totals for time-series charts.
+type DailySpendRow struct {
+	Day          string  `json:"day"`           // YYYY-MM-DD
+	TotalSpend   float64 `json:"total_spend"`
+	RequestCount int64   `json:"request_count"`
 }
 
 // SpendRow is one row from GetSpendSummary: per-key spend with JOIN-resolved names.

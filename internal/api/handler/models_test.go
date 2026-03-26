@@ -114,6 +114,12 @@ func (m *mockStorage) FlushKeySpend(_ context.Context, _ int64, _ float64) error
 func (m *mockStorage) GetSpendSummary(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.SpendRow, error) {
 	return nil, nil
 }
+func (m *mockStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) {
+	return nil, nil
+}
+func (m *mockStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
+	return nil, nil
+}
 
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
