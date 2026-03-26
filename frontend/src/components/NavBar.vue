@@ -79,6 +79,7 @@ const adminLinks = [
   { to: '/users', label: 'Users' },
   { to: '/teams', label: 'Teams' },
   { to: '/applications', label: 'Applications' },
+  { to: '/keys', label: 'Keys' },
 ]
 
 async function handleLogout() {

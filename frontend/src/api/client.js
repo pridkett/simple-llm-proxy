@@ -279,4 +279,22 @@ export const api = {
   deleteApplication(id) {
     return request(`/admin/applications/${id}`, { method: 'DELETE' })
   },
+
+  /** GET /admin/applications/{id}/keys — list keys for an application */
+  apiKeys(appId) {
+    return request(`/admin/applications/${appId}/keys`)
+  },
+
+  /** POST /admin/applications/{id}/keys — create a new key */
+  createAPIKey(appId, body) {
+    return request(`/admin/applications/${appId}/keys`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+
+  /** DELETE /admin/api-keys/{id} — revoke a key */
+  revokeAPIKey(keyId) {
+    return request(`/admin/api-keys/${keyId}`, { method: 'DELETE' })
+  },
 }
