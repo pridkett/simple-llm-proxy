@@ -27,6 +27,8 @@ func (m *mockSpendStorage) GetSpendSummary(_ context.Context, from, to time.Time
 	m.lastFilters = filters
 	return m.spendRows, m.spendErr
 }
+func (m *mockSpendStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
+func (m *mockSpendStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
 
 func TestAdminSpend(t *testing.T) {
 	t.Run("returns 200 with aggregated spend rows for default 7d range", func(t *testing.T) {

@@ -16,6 +16,96 @@ import (
 // do not appear in historical spend views even if they had usage in the queried date range.
 // This is an intentional simplification for the initial Cost view. If historical reporting
 // for deactivated keys is needed in a future iteration, remove or make this filter configurable.
+// GetModelSpend returns spend grouped by model for the given date range and filters.
+// Uses the same JOIN and filter pattern as GetSpendSummary for consistency.
+func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.ModelSpendRow, error) {
+	const q = `
+        SELECT
+            ul.model,
+            COALESCE(SUM(ul.total_cost), 0) AS total_spend,
+            COUNT(*)                         AS request_count
+        FROM usage_logs ul
+        JOIN api_keys k    ON k.id = ul.api_key_id
+        JOIN applications a ON a.id = k.application_id
+        JOIN teams t        ON t.id = a.team_id
+        WHERE ul.model != '_flush'
+          AND ul.request_time >= ?
+          AND ul.request_time < ?
+          AND k.is_active = TRUE
+          AND (? IS NULL OR t.id = ?)
+          AND (? IS NULL OR a.id = ?)
+          AND (? IS NULL OR k.id = ?)
+        GROUP BY ul.model
+        ORDER BY total_spend DESC
+    `
+	args := []any{
+		from, to,
+		filters.TeamID, filters.TeamID,
+		filters.AppID, filters.AppID,
+		filters.KeyID, filters.KeyID,
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get model spend: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]storage.ModelSpendRow, 0)
+	for rows.Next() {
+		var r storage.ModelSpendRow
+		if err := rows.Scan(&r.Model, &r.TotalSpend, &r.RequestCount); err != nil {
+			return nil, fmt.Errorf("get model spend scan: %w", err)
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+// GetDailySpend returns spend grouped by calendar day for the given date range and filters.
+// Days with zero spend are not returned — the frontend fills gaps.
+func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.DailySpendRow, error) {
+	const q = `
+        SELECT
+            DATE(ul.request_time)            AS day,
+            COALESCE(SUM(ul.total_cost), 0) AS total_spend,
+            COUNT(*)                         AS request_count
+        FROM usage_logs ul
+        JOIN api_keys k    ON k.id = ul.api_key_id
+        JOIN applications a ON a.id = k.application_id
+        JOIN teams t        ON t.id = a.team_id
+        WHERE ul.model != '_flush'
+          AND ul.request_time >= ?
+          AND ul.request_time < ?
+          AND k.is_active = TRUE
+          AND (? IS NULL OR t.id = ?)
+          AND (? IS NULL OR a.id = ?)
+          AND (? IS NULL OR k.id = ?)
+        GROUP BY DATE(ul.request_time)
+        ORDER BY day
+    `
+	args := []any{
+		from, to,
+		filters.TeamID, filters.TeamID,
+		filters.AppID, filters.AppID,
+		filters.KeyID, filters.KeyID,
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get daily spend: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]storage.DailySpendRow, 0)
+	for rows.Next() {
+		var r storage.DailySpendRow
+		if err := rows.Scan(&r.Day, &r.TotalSpend, &r.RequestCount); err != nil {
+			return nil, fmt.Errorf("get daily spend scan: %w", err)
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
 func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.SpendRow, error) {
 	// Build the query with optional filter predicates.
 	// Uses the double-bind pattern: (? IS NULL OR col = ?) — binds the pointer value twice.

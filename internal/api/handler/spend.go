@@ -13,10 +13,12 @@ import (
 
 // spendResponse is the JSON envelope for GET /admin/spend.
 type spendResponse struct {
-	Rows   []storage.SpendRow `json:"rows"`
-	Alerts []spendAlert       `json:"alerts"`
-	From   string             `json:"from"`
-	To     string             `json:"to"`
+	Rows       []storage.SpendRow       `json:"rows"`
+	ModelRows  []storage.ModelSpendRow  `json:"model_rows"`
+	DailyRows  []storage.DailySpendRow  `json:"daily_rows"`
+	Alerts     []spendAlert             `json:"alerts"`
+	From       string                   `json:"from"`
+	To         string                   `json:"to"`
 }
 
 // spendAlert describes a key that has exceeded or is approaching its budget.
@@ -98,14 +100,28 @@ func AdminSpend(store storage.Storage) http.HandlerFunc {
 			return
 		}
 
+		modelRows, err := store.GetModelSpend(req.Context(), fromTime, toSQL, filters)
+		if err != nil {
+			model.WriteError(w, model.ErrInternal("failed to load model spend data"))
+			return
+		}
+
+		dailyRows, err := store.GetDailySpend(req.Context(), fromTime, toSQL, filters)
+		if err != nil {
+			model.WriteError(w, model.ErrInternal("failed to load daily spend data"))
+			return
+		}
+
 		// Compute alerts: keys at or above soft threshold or hard budget.
 		alerts := computeAlerts(rows)
 
 		resp := spendResponse{
-			Rows:   rows,
-			Alerts: alerts,
-			From:   fromTime.Format("2006-01-02"),
-			To:     toInclusive.Format("2006-01-02"), // return user-facing inclusive date
+			Rows:      rows,
+			ModelRows: modelRows,
+			DailyRows: dailyRows,
+			Alerts:    alerts,
+			From:      fromTime.Format("2006-01-02"),
+			To:        toInclusive.Format("2006-01-02"),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
