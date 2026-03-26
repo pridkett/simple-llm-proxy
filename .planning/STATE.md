@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Multi-User Proxy
 status: Ready to execute
-stopped_at: "Completed 02-api-keys-enforcement plan 04: model allowlist enforcement and APIKeyID cost attribution in handlers"
-last_updated: "2026-03-26T01:11:59.072Z"
+stopped_at: "Paused at checkpoint: 02-api-keys-enforcement plan 06 Task 3 — human verification of key lifecycle required"
+last_updated: "2026-03-26T02:27:29.242Z"
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 14
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 02 (api-keys-enforcement) — EXECUTING
-Plan: 4 of 7
+Plan: 6 of 7
 
 ## Performance Metrics
 
@@ -57,6 +57,9 @@ Plan: 4 of 7
 | Phase 02-api-keys-enforcement P00 | 10min | 2 tasks | 1 files |
 | Phase 02-api-keys-enforcement P01 | ~4min | 2 tasks | 7 files |
 | Phase 02-api-keys-enforcement P04 | 10min | 2 tasks | 7 files |
+| Phase 02-api-keys-enforcement P03 | 10min | 2 tasks | 6 files |
+| Phase 02-api-keys-enforcement P05 | 30min | 2 tasks | 17 files |
+| Phase 02-api-keys-enforcement P06 | 28min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -93,6 +96,11 @@ Recent decisions affecting current work:
 - [Phase 02-api-keys-enforcement]: empty allowedModels slice means all models allowed (enforced at middleware level in Plan 03)
 - [Phase 02-api-keys-enforcement]: nil SpendAccumulator passed in router.go until Plan 05 wires live sa instance
 - [Phase 02-api-keys-enforcement]: Streaming logRequest at stream completion logs zero cost — cost calculation is a future plan concern
+- [Phase 02-api-keys-enforcement]: KeyAuth middleware: master key bypasses all enforcement with no context injection (D-05); CachedKey injected via unexported contextKeyAPIKey{} struct key; budget check uses CurrentSpend >= MaxBudget before proxying
+- [Phase 02-api-keys-enforcement]: KeyAuth replaces Auth() on /v1/* — both master key bypass and per-app key enforcement
+- [Phase 02-api-keys-enforcement]: Spend flush loop uses shutdown channel pattern for clean drain before process exit
+- [Phase 02-api-keys-enforcement]: FlushKeySpend is append-only in usage_logs; InitFromStorage sums all rows including flush rows
+- [Phase 02-api-keys-enforcement]: Budget column shows 'Budget: $Y.YY' for capped keys and 'Unlimited' for uncapped — avoids misleading '$0.00 / $Y.YY' until spend API is available (Phase 3 will wire spend totals)
 
 ### Pending Todos
 
@@ -105,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T01:11:59.069Z
-Stopped at: Completed 02-api-keys-enforcement plan 04: model allowlist enforcement and APIKeyID cost attribution in handlers
+Last session: 2026-03-26T02:27:29.239Z
+Stopped at: Paused at checkpoint: 02-api-keys-enforcement plan 06 Task 3 — human verification of key lifecycle required
 Resume file: None
