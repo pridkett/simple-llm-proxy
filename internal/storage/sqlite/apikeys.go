@@ -144,3 +144,18 @@ func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, err
 	}
 	return totals, rows.Err()
 }
+
+// FlushKeySpend inserts a synthetic usage_log flush entry for the key.
+// Strategy: append-only flush record. On restart, InitFromStorage sums all rows
+// (including flush rows) to restore the accumulator accurately.
+func (s *Storage) FlushKeySpend(ctx context.Context, keyID int64, total float64) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO usage_logs (api_key_id, total_cost, model, provider, endpoint, request_time, request_id)
+		VALUES (?, ?, '_flush', '_flush', '_flush', datetime('now'),
+		        'flush-' || cast(strftime('%s','now') as text))
+	`, keyID, total)
+	if err != nil {
+		return fmt.Errorf("flush key spend: %w", err)
+	}
+	return nil
+}

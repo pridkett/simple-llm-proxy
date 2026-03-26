@@ -127,6 +127,29 @@ func (m *mockIdentityStorage) ListApplications(_ context.Context, teamID int64) 
 	return m.applications, m.listApplicationsErr
 }
 
+func (m *mockIdentityStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockIdentityStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockIdentityStorage) ListAPIKeys(_ context.Context, _ int64) ([]*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockIdentityStorage) RevokeAPIKey(_ context.Context, _ int64) error { return nil }
+func (m *mockIdentityStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]string, error) {
+	return nil, nil
+}
+func (m *mockIdentityStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error {
+	return nil
+}
+func (m *mockIdentityStorage) GetKeySpendTotals(_ context.Context) (map[int64]float64, error) {
+	return nil, nil
+}
+func (m *mockIdentityStorage) FlushKeySpend(_ context.Context, _ int64, _ float64) error {
+	return nil
+}
+
 // newRequestWithUser builds an *http.Request with the given user injected into context.
 func newRequestWithUser(method, path string, user *storage.User) *http.Request {
 	req := httptest.NewRequest(method, path, nil)

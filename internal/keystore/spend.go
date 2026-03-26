@@ -8,6 +8,29 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
+// FlushToStorage persists each key's in-memory spend total to storage.
+// Called every 30s by the flush loop in main.go, and once on graceful shutdown.
+func (sa *SpendAccumulator) FlushToStorage(ctx context.Context, store storage.Storage) error {
+	var firstErr error
+	sa.totals.Range(func(k, v any) bool {
+		keyID := k.(int64)
+		ks := v.(*keySpend)
+		ks.mu.Lock()
+		total := ks.total
+		ks.mu.Unlock()
+		if total <= 0 {
+			return true
+		}
+		if err := store.FlushKeySpend(ctx, keyID, total); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+		return true
+	})
+	return firstErr
+}
+
 // keySpend holds a per-key spend total protected by a mutex.
 // float64 is not atomically incrementable without unsafe; mutex is the clean solution.
 type keySpend struct {
