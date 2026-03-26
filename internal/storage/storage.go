@@ -92,6 +92,32 @@ type Storage interface {
 	// CleanExpiredSessions deletes all sessions whose expiry time is in the past.
 	// Should be called periodically (e.g., every hour) to prevent unbounded growth.
 	CleanExpiredSessions(ctx context.Context) error
+
+	// --- API Key CRUD ---
+
+	// CreateAPIKey creates a new API key for the given application.
+	// keyPrefix is the first 8 hex chars (display only). keyHash is SHA-256 hex (lookup).
+	// allowedModels is stored in key_allowed_models; empty slice = all models allowed.
+	// Returns the created key record (full plaintext key is NOT stored or returned here).
+	CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) (*APIKey, error)
+
+	// GetAPIKeyByHash looks up a key by its SHA-256 hash. Returns (nil, nil) if not found.
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
+
+	// ListAPIKeys returns all keys for an application, ordered by created_at DESC.
+	ListAPIKeys(ctx context.Context, appID int64) ([]*APIKey, error)
+
+	// RevokeAPIKey marks the key with the given id as inactive (is_active = FALSE).
+	// Does not delete the key record — revoked keys remain visible in ListAPIKeys.
+	RevokeAPIKey(ctx context.Context, id int64) error
+
+	// GetKeyAllowedModels returns the model names in the allowlist for the given key.
+	// Returns an empty slice if no allowlist entries exist (all models allowed).
+	GetKeyAllowedModels(ctx context.Context, keyID int64) ([]string, error)
+
+	// RecordKeySpend adds the given cost to usage_logs for the given key.
+	// This is a direct INSERT — the spend accumulator (in-memory) is the hot-path; this is the flush mechanism.
+	RecordKeySpend(ctx context.Context, keyID int64, cost float64) error
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -132,6 +158,28 @@ type Application struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// APIKey represents a per-application API key with enforcement limits.
+// Full plaintext key is NEVER stored — only the prefix (first 8 hex chars) and SHA-256 hash.
+type APIKey struct {
+	ID            int64    `json:"id"`
+	ApplicationID int64    `json:"application_id"`
+	Name          string   `json:"name"`
+	KeyPrefix     string   `json:"key_prefix"` // first 8 chars after "sk-app-"
+	KeyHash       string   `json:"-"`          // SHA-256 hex — never serialized to JSON
+	MaxRPM        *int     `json:"max_rpm"`    // nil = unlimited
+	MaxRPD        *int     `json:"max_rpd"`    // nil = unlimited
+	MaxBudget     *float64 `json:"max_budget"` // nil = unlimited (hard cap)
+	SoftBudget    *float64 `json:"soft_budget"` // nil = no alert threshold
+	IsActive      bool     `json:"is_active"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// APIKeyAllowedModel represents a single model entry in a key's allowlist.
+type APIKeyAllowedModel struct {
+	KeyID     int64  `json:"key_id"`
+	ModelName string `json:"model_name"`
+}
+
 // CostOverride records a user-supplied mapping or custom spec for a proxy model name.
 // Exactly one of CostMapKey or CustomSpec will be non-nil.
 type CostOverride struct {
@@ -144,6 +192,7 @@ type CostOverride struct {
 // RequestLog represents a logged request.
 type RequestLog struct {
 	RequestID        string
+	APIKeyID         *int64  // nil when authenticated via master key
 	Model            string
 	Provider         string
 	Endpoint         string
