@@ -70,8 +70,15 @@ Plans:
   1. Admin can view a cost dashboard showing spend broken down by key, application, and team with chart and table views
   2. Dashboard supports date range filtering: today, last 7 days, last 30 days, and a custom date range
   3. Console displays an alert banner or badge for any key or application that is approaching or has exceeded its soft budget threshold
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 03-PLAN-0-test-scaffolds.md — Wave 0: Test stubs for all Phase 3 test files (spend_test.go, handler spend_test.go, CostView.test.js, NavBadge.test.js)
+- [ ] 03-PLAN-1-storage-layer.md — Backend storage: SpendRow/SpendFilters types, GetSpendSummary interface + SQLite implementation with JOIN + flush exclusion
+- [ ] 03-PLAN-2-spend-handler.md — Backend handler: AdminSpend handler, alert computation, GET /admin/spend route registration
+- [ ] 03-PLAN-3-frontend-wiring.md — Frontend wiring: api.spend() client method, StatusBadge ok/warning/over extension, NavBar Cost link + badge, /cost route
+- [ ] 03-PLAN-4-cost-view.md — Frontend Cost view: ApexCharts plugin, CostView.vue (filters+chart+table+alerts), KeysView spend column, human verification
 
 ## Progress
 
@@ -79,7 +86,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Auth & Identity | 7/7 | Complete   | 2026-03-25 |
 | 2. API Keys & Enforcement | 5/7 | In Progress|  |
-| 3. Cost Monitoring & Complete Console | 0/TBD | Not started | - |
+| 3. Cost Monitoring & Complete Console | 0/5 | Not started | - |
 
 ---
 
