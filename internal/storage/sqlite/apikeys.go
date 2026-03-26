@@ -132,6 +132,32 @@ func (s *Storage) UpdateKeyAllowedModels(ctx context.Context, keyID int64, model
 	return tx.Commit()
 }
 
+// UpdateAPIKey updates the mutable key fields and replaces the allowed model list
+// in a single transaction. Key hash, prefix, and is_active are unchanged.
+func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("update api key begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE api_keys SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?
+		WHERE id=?
+	`, name, maxRPM, maxRPD, maxBudget, softBudget, keyID); err != nil {
+		return fmt.Errorf("update api key: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM key_allowed_models WHERE key_id=?`, keyID); err != nil {
+		return fmt.Errorf("update api key delete models: %w", err)
+	}
+	for _, model := range allowedModels {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`, keyID, model); err != nil {
+			return fmt.Errorf("update api key insert model: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // RecordKeySpend is a no-op stub — spend recording is handled by the extended
 // logRequest() in internal/api/handler/chat.go (Plan 04). The accumulator
 // flushes via direct usage_logs INSERTs using the existing LogRequest path.

@@ -298,11 +298,11 @@ export const api = {
     return request(`/admin/api-keys/${keyId}`, { method: 'DELETE' })
   },
 
-  /** PATCH /admin/api-keys/{id}/models — replace the allowed model list for a key */
-  updateKeyModels(keyId, allowedModels) {
-    return request(`/admin/api-keys/${keyId}/models`, {
+  /** PATCH /admin/api-keys/{id} — update mutable key fields (name, limits, budget, allowed models) */
+  updateAPIKey(keyId, body) {
+    return request(`/admin/api-keys/${keyId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ allowed_models: allowedModels }),
+      body: JSON.stringify(body),
     })
   },
 }

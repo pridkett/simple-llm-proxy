@@ -110,6 +110,9 @@ func (m *mockSessionStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]
 func (m *mockSessionStorage) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
+func (m *mockSessionStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+	return nil
+}
 func (m *mockSessionStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error {
 	return nil
 }

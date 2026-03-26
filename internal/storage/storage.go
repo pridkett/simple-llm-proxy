@@ -119,6 +119,10 @@ type Storage interface {
 	// An empty slice means all models are allowed (no restriction).
 	UpdateKeyAllowedModels(ctx context.Context, keyID int64, models []string) error
 
+	// UpdateAPIKey updates the mutable fields of a key and replaces its allowed
+	// model list atomically. Key hash, prefix, and is_active are never changed here.
+	UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) error
+
 	// RecordKeySpend adds the given cost to usage_logs for the given key.
 	// This is a direct INSERT — the spend accumulator (in-memory) is the hot-path; this is the flush mechanism.
 	RecordKeySpend(ctx context.Context, keyID int64, cost float64) error
