@@ -86,6 +86,22 @@ func (m *mockStorage) ListApplications(_ context.Context, _ int64) ([]*storage.A
 }
 func (m *mockStorage) CleanExpiredSessions(_ context.Context) error { return nil }
 
+// API Key CRUD stubs — required by interface, not exercised by handler tests.
+func (m *mockStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockStorage) ListAPIKeys(_ context.Context, _ int64) ([]*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockStorage) RevokeAPIKey(_ context.Context, _ int64) error { return nil }
+func (m *mockStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]string, error) {
+	return nil, nil
+}
+func (m *mockStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }
+
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
 	t.Helper()
