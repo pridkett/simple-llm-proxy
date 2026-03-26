@@ -24,13 +24,13 @@ must_haves:
     - "cd frontend && npm test passes before CostView.vue exists (stubs render)"
   artifacts:
     - path: "internal/storage/sqlite/spend_test.go"
-      provides: "Failing test stubs for GetSpendSummary — compile-safe, test names defined"
+      provides: "Failing test stubs for GetSpendSummary — compile-safe, test names defined including boundary conditions"
     - path: "internal/api/handler/spend_test.go"
-      provides: "Failing test stubs for AdminSpend handler and mockSpendStorage"
+      provides: "Failing test stubs for AdminSpend handler including auth rejection tests"
     - path: "frontend/tests/unit/views/CostView.test.js"
       provides: "Vitest stubs for CostView with apexchart stubbed out"
     - path: "frontend/tests/unit/components/NavBadge.test.js"
-      provides: "Vitest stubs for NavBar badge behavior"
+      provides: "Vitest stubs for NavBar Cost badge behavior (no standalone NavBadge component)"
   key_links:
     - from: "internal/storage/sqlite/spend_test.go"
       to: "internal/storage/sqlite/spend.go"
@@ -126,19 +126,11 @@ Create `internal/storage/sqlite/spend_test.go` in package `sqlite`. This file cr
 
 The file must:
 1. Declare package `sqlite` (same package as implementation — direct struct access)
-2. Import: `"context"`, `"testing"`, `"time"`, `"github.com/pwagstro/simple_llm_proxy/internal/storage"`
-3. Contain a helper `setupTestDB(t *testing.T) *Storage` that calls `New(":memory:")` and `s.Initialize(context.Background())` — follow the same in-memory DB pattern used in any existing sqlite tests
-4. Define `TestGetSpendSummary` with subtests:
-   - `"returns empty slice when no usage logs exist"` — creates a key, queries with a 30-day range, asserts `len(rows) == 0` (or no error at minimum)
-   - `"excludes flush rows from aggregation"` — marked with `t.Skip("implement in Plan 1")` for now
-   - `"filters by team_id"` — marked with `t.Skip("implement in Plan 1")` for now
-   - `"filters by app_id"` — marked with `t.Skip("implement in Plan 1")` for now
+2. Import only `"testing"` for the stub phase (no storage import until Plan 1 adds the types)
+3. Define `TestGetSpendSummary` with all subtests marked `t.Skip("implement in Plan 1")`
+4. Include boundary condition stubs that Plan 1 will fill in
 
-The stub tests that ARE runnable (not skipped) may call `storage.GetSpendSummary` if the method exists on `storage.Storage` interface, OR may compile-only-check by calling `var _ storage.Storage = (*Storage)(nil)`. Since GetSpendSummary does not exist yet on the interface, the test file MUST NOT call it directly — instead, use build tags or define a local interface stub.
-
-IMPORTANT: The simplest approach for Wave 0: do NOT call `GetSpendSummary` at all in this file yet. Instead create test skeleton functions with `t.Skip("TODO Plan 1")` that compile correctly. The import of `storage` package is still valid because `SpendRow` and `SpendFilters` types will be added in Plan 1 — so import the package but only reference types that already exist (or use anonymous imports).
-
-SIMPLEST VALID APPROACH: Create the test file with properly structured Go test functions, all using `t.Skip("implement in Plan 1")`. Use only `context`, `testing`, `time` imports (no `storage` import until Plan 1 adds the types). This ensures `go test ./internal/storage/...` passes right now.
+SIMPLEST VALID APPROACH: Create the test file with properly structured Go test functions, all using `t.Skip("implement in Plan 1")`. This ensures `go test ./internal/storage/...` passes right now.
 
 ```go
 package sqlite
@@ -160,6 +152,22 @@ func TestGetSpendSummary(t *testing.T) {
     t.Run("filters by app_id", func(t *testing.T) {
         t.Skip("implement in Plan 1")
     })
+    // Boundary condition stubs — Plan 1 will implement these
+    t.Run("exact soft-budget hit is included in alerts", func(t *testing.T) {
+        t.Skip("implement in Plan 1")
+    })
+    t.Run("exact hard-budget hit is included in alerts", func(t *testing.T) {
+        t.Skip("implement in Plan 1")
+    })
+    t.Run("nil budgets produce no alerts", func(t *testing.T) {
+        t.Skip("implement in Plan 1")
+    })
+    t.Run("zero-spend rows are included with total_spend=0", func(t *testing.T) {
+        t.Skip("implement in Plan 1")
+    })
+    t.Run("flush-only rows produce zero spend not excluded entirely", func(t *testing.T) {
+        t.Skip("implement in Plan 1")
+    })
 }
 ```
   </action>
@@ -178,15 +186,8 @@ Create `internal/api/handler/spend_test.go` in package `handler`. This file crea
 The file must:
 1. Declare package `handler`
 2. Import `"testing"` only for the stub phase
-3. Define `TestAdminSpend` with subtests, all skipped:
-   - `"returns 200 with aggregated spend rows for default 7d range"`
-   - `"returns pre-computed alerts for keys over soft budget"`
-   - `"returns 400 for malformed date params"`
-   - `"filters by team_id query param"`
-
-All subtests: `t.Skip("implement in Plan 2")`
-
-The `mockStorage` struct in `models_test.go` already stubs all Storage methods. When Plan 2 adds `GetSpendSummary` to the interface, `mockStorage` will need a new stub method — that will be added in Plan 2's test work. For now, the file just needs to compile.
+3. Define `TestAdminSpend` with subtests, all skipped
+4. Include explicit auth rejection stubs (HIGH priority from review) — Plan 2 will implement these
 
 ```go
 package handler
@@ -208,8 +209,25 @@ func TestAdminSpend(t *testing.T) {
     t.Run("filters by team_id query param", func(t *testing.T) {
         t.Skip("implement in Plan 2")
     })
+    // Auth rejection tests (HIGH priority — Plan 2 will implement these)
+    // /admin/spend exposes deployment-wide spend; non-admin access must be explicitly rejected
+    t.Run("non-admin session returns 403", func(t *testing.T) {
+        t.Skip("implement in Plan 2")
+    })
+    t.Run("unauthenticated request returns 401", func(t *testing.T) {
+        t.Skip("implement in Plan 2")
+    })
+    // Date boundary semantics (MEDIUM priority — Plan 2 will implement)
+    t.Run("to date is inclusive — row at 23:59 on to date is included", func(t *testing.T) {
+        t.Skip("implement in Plan 2")
+    })
+    t.Run("team_id=0 is treated as no filter (nil)", func(t *testing.T) {
+        t.Skip("implement in Plan 2")
+    })
 }
 ```
+
+The `mockStorage` struct in `models_test.go` already stubs all Storage methods. When Plan 2 adds `GetSpendSummary` to the interface (via Plan 1), `mockStorage` will need a new stub method — that will be added in Plan 1's test work. For now, the file just needs to compile.
   </action>
   <verify>
     <automated>cd /Users/pwagstro/Documents/workspace/simple_llm_proxy && go test ./internal/api/handler/... -v 2>&1 | grep -E "SKIP|PASS|FAIL|TestAdminSpend"</automated>
@@ -245,25 +263,33 @@ describe('CostView', () => {
   it.todo('renders empty state when spend rows array is empty')
   it.todo('filter bar defaults to 7d date range selection')
   it.todo('re-fetches data when date range filter changes')
+  it.todo('re-fetches data with resolved team_id when team dropdown changes')
+  it.todo('re-fetches data with resolved app_id when app dropdown changes')
+  it.todo('re-fetches data with resolved key_id when key dropdown changes')
 })
 ```
 
 **File 2: `frontend/tests/unit/components/NavBadge.test.js`**
 
+Note: There is no standalone `NavBadge` component — this file tests NavBar's Cost badge behavior.
+The description `NavBar Cost badge` makes the intent explicit.
+
 ```javascript
 import { describe, it } from 'vitest'
 
-// NavBar badge behavior will be wired in Plan 3.
+// Tests NavBar's Cost link badge behavior (not a standalone NavBadge component).
+// NavBar badge will be wired in Plan 3.
 // These tests are stubs for Wave 0 — they pass trivially via .todo.
 describe('NavBar Cost badge', () => {
   it.todo('renders numeric badge when alertCount > 0')
   it.todo('hides badge when alertCount is 0')
   it.todo('shows 9+ when alertCount > 9')
   it.todo('fetches alert count on NavBar mount')
+  it.todo('refreshes alert count on route navigation')
 })
 ```
 
-Note: `it.todo` tests compile and pass in Vitest without any assertions. They appear as TODO in output, not as failures.
+Note: `it.todo` tests compile and pass in Vitest without any assertions. They appear as TODO in output, not as failures. The route-navigation refresh stub anticipates the Plan 3 requirement.
   </action>
   <verify>
     <automated>cd /Users/pwagstro/Documents/workspace/simple_llm_proxy/frontend && npm test -- --reporter=verbose 2>&1 | grep -E "todo|PASS|FAIL|CostView|NavBadge" | head -20</automated>
@@ -281,8 +307,8 @@ After all three tasks:
 </verification>
 
 <success_criteria>
-- go test ./internal/storage/... exits 0 with TestGetSpendSummary SKIP subtests visible
-- go test ./internal/api/handler/... exits 0 with TestAdminSpend SKIP subtests visible
+- go test ./internal/storage/... exits 0 with TestGetSpendSummary SKIP subtests visible (including boundary condition stubs)
+- go test ./internal/api/handler/... exits 0 with TestAdminSpend SKIP subtests visible (including auth rejection stubs)
 - cd frontend && npm test exits 0 with CostView.test.js and NavBadge.test.js showing todo items
 - go build ./... exits 0
 </success_criteria>

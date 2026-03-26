@@ -24,13 +24,13 @@ must_haves:
     - "go test ./internal/storage/... passes with all GetSpendSummary tests green (not skipped)"
   artifacts:
     - path: "internal/storage/storage.go"
-      provides: "SpendRow struct, SpendFilters struct, GetSpendSummary method on Storage interface"
+      provides: "SpendRow struct, SpendFilters struct (pointer fields), GetSpendSummary method on Storage interface"
       contains: "GetSpendSummary"
     - path: "internal/storage/sqlite/spend.go"
-      provides: "SQLite implementation of GetSpendSummary with JOIN + flush exclusion"
+      provides: "SQLite implementation of GetSpendSummary with explicit GROUP BY + flush exclusion + inactive key note"
       min_lines: 50
     - path: "internal/storage/sqlite/spend_test.go"
-      provides: "Real tests for GetSpendSummary replacing Wave 0 skips"
+      provides: "Real tests for GetSpendSummary replacing Wave 0 skips, including boundary conditions"
   key_links:
     - from: "internal/storage/storage.go"
       to: "internal/storage/sqlite/spend.go"
@@ -122,7 +122,8 @@ func (m *mockStorage) GetSpendSummary(_ context.Context, _, _ time.Time, _ stora
   </files>
   <behavior>
     - SpendRow has fields: KeyID int64, KeyName string, AppID int64, AppName string, TeamID int64, TeamName string, TotalSpend float64, MaxBudget *float64, SoftBudget *float64
-    - SpendFilters has fields: TeamID *int64, AppID *int64, KeyID *int64
+    - SpendFilters uses pointer types (*int64) for all three optional ID fields: TeamID, AppID, KeyID
+    - IMPORTANT: Pointer types are required — nil means "no filter applied". The double-bind SQL pattern (? IS NULL OR col = ?) works ONLY when Go passes nil (not 0) for absent filters. Zero is a valid-but-invalid ID that should never reach the query; parseOptionalInt64 (Plan 2) handles this conversion at the handler level.
     - GetSpendSummary(ctx, from, to, filters) is a method on the Storage interface
     - mockStorage in models_test.go compiles after adding the stub method
     - go build ./... exits 0 (compilation check before implementation)
@@ -141,7 +142,10 @@ GetSpendSummary(ctx context.Context, from, to time.Time, filters SpendFilters) (
 
 ```go
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.
-// nil fields are ignored (no filter applied for that dimension).
+// All fields are pointer types: nil means "no filter applied for this dimension".
+// The handler must pass nil (not 0) for absent/unspecified IDs — see parseOptionalInt64 in
+// internal/api/handler/spend.go. The SQL double-bind pattern (? IS NULL OR col = ?) is
+// correct only when nil is passed, not zero.
 type SpendFilters struct {
     TeamID *int64
     AppID  *int64
@@ -188,13 +192,18 @@ This requires adding `"time"` to the import if not already present in models_tes
     - Empty table returns empty slice (no error)
     - Real request rows (model != '_flush') are summed into TotalSpend
     - Flush rows (model='_flush') are NOT included in TotalSpend — double-count test
-    - Date range filter: rows before `from` are excluded; rows on/after `to` are excluded
+    - Date range filter: rows before `from` are excluded; rows at or after `to` (exclusive upper bound) are excluded
     - TeamID filter: only rows for keys belonging to that team are returned
     - AppID filter: only rows for keys in that application are returned
     - KeyID filter: only that one key's row is returned
-    - All nil filters: all active keys returned (even with zero spend)
+    - All nil filters: all active keys returned (even with zero spend — LEFT JOIN behavior)
     - Returned rows have correct KeyName, AppName, TeamName from JOINs
     - MaxBudget and SoftBudget are populated from api_keys row (nil when unset)
+    - Exact soft-budget hit (TotalSpend == SoftBudget): row is present with correct TotalSpend
+    - Exact hard-budget hit (TotalSpend == MaxBudget): row is present with correct TotalSpend
+    - Nil budgets: row returned with MaxBudget=nil, SoftBudget=nil
+    - Zero-spend rows: row returned with TotalSpend=0.0 (LEFT JOIN + COALESCE ensures this)
+    - Flush-only rows: same key has only flush-model usage; returned with TotalSpend=0.0 (flush rows excluded, COALESCE gives 0)
   </behavior>
   <action>
 **Create `internal/storage/sqlite/spend.go`:**
@@ -212,11 +221,21 @@ import (
 
 // GetSpendSummary returns aggregated spend per active key for the given date range and filters.
 // Flush rows (model='_flush') are excluded to prevent double-counting.
-// Keys with zero spend in the date range are included (LEFT JOIN returns 0 via COALESCE).
+// Keys with zero spend in the date range are included (LEFT JOIN + COALESCE returns 0).
+//
+// NOTE: Only active keys (k.is_active = TRUE) are included. This means deactivated keys
+// do not appear in historical spend views even if they had usage in the queried date range.
+// This is an intentional simplification for the initial Cost view. If historical reporting
+// for deactivated keys is needed in a future iteration, remove or make this filter configurable.
 func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.SpendRow, error) {
     // Build the query with optional filter predicates.
-    // SQLite does not support named parameters for IS NULL checks, so we use
-    // the double-bind pattern: (? IS NULL OR col = ?) — bind the value twice.
+    // Uses the double-bind pattern: (? IS NULL OR col = ?) — binds the pointer value twice.
+    // This is correct ONLY when Go passes nil for absent filters (not 0).
+    // SpendFilters uses *int64 pointer types to enforce this contract.
+    //
+    // GROUP BY lists all non-aggregated selected columns explicitly to ensure correctness
+    // across all SQL engines (SQLite's relaxed mode would permit omitting them, but doing
+    // so is non-standard and brittle if the schema or query changes).
     const baseQuery = `
         SELECT
             k.id          AS key_id,
@@ -240,7 +259,7 @@ func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filte
           AND (? IS NULL OR t.id = ?)
           AND (? IS NULL OR a.id = ?)
           AND (? IS NULL OR k.id = ?)
-        GROUP BY k.id
+        GROUP BY k.id, k.name, k.max_budget, k.soft_budget, a.id, a.name, t.id, t.name
         ORDER BY total_spend DESC
     `
     // Args: from, to, teamID, teamID, appID, appID, keyID, keyID
@@ -308,9 +327,17 @@ Test structure — write tests for all behavior items listed in the `<behavior>`
 
 For the flush row exclusion test: insert one real request row (`model='gpt-4'`, cost=0.01) and one flush row (`model='_flush'`, cost=99.99) for the same key in the same date range. Assert TotalSpend == 0.01 (not 100.00).
 
-For the date range test: insert three rows at T-10d, T-1d, T+1d. Query with `from=T-7d, to=T`. Assert only the T-1d row is included.
+For the date range test: insert three rows at T-10d, T-1d, T+1d. Query with `from=T-7d, to=T`. Assert only the T-1d row is included. The `to` parameter is an exclusive upper bound (rows at request_time >= to are excluded).
 
 For filter tests: insert two teams with one key each. Filter by team_id of team 1. Assert only team 1's key appears.
+
+For the zero-spend test: insert a key with no usage_log rows in the date range. Assert the key is returned with TotalSpend == 0.0.
+
+For the flush-only test: insert a key with only `model='_flush'` usage rows in the date range. Assert the key is returned with TotalSpend == 0.0 (flush rows excluded by WHERE clause, COALESCE returns 0).
+
+For the exact budget hit tests: insert keys with specific MaxBudget/SoftBudget values and usage rows that exactly equal those thresholds. Assert TotalSpend equals the threshold (boundary condition for alert computation in Plan 2).
+
+For nil budget test: insert a key with NULL max_budget and NULL soft_budget. Assert MaxBudget and SoftBudget are nil in the returned row.
 
 Note: Direct SQL inserts into `teams`, `applications`, `api_keys`, `usage_logs` are acceptable in tests where the storage methods would require too many setup calls. Use `s.db.ExecContext` for test data seeding.
   </action>
@@ -338,6 +365,9 @@ All commands exit 0. No regressions in existing tests.
 - go test ./internal/api/handler/... exits 0 (mockStorage compiles with new GetSpendSummary stub)
 - GetSpendSummary correctly excludes flush rows (verified by dedicated test)
 - Date range filter correctly bounds results (verified by dedicated test)
+- GROUP BY clause explicitly lists all non-aggregated columns (k.id, k.name, k.max_budget, k.soft_budget, a.id, a.name, t.id, t.name)
+- SpendFilters uses *int64 pointer types with comment documenting nil-vs-zero contract
+- Inactive keys comment present in spend.go documenting the limitation
 </success_criteria>
 
 <output>
