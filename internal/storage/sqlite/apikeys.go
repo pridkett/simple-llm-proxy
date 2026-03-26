@@ -118,3 +118,29 @@ func (s *Storage) GetKeyAllowedModels(ctx context.Context, keyID int64) ([]strin
 func (s *Storage) RecordKeySpend(ctx context.Context, keyID int64, cost float64) error {
 	return nil
 }
+
+// GetKeySpendTotals returns the total cost per api_key_id from usage_logs.
+// Used at startup to initialize the in-memory spend accumulator.
+func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT api_key_id, SUM(total_cost)
+		FROM usage_logs
+		WHERE api_key_id IS NOT NULL
+		GROUP BY api_key_id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get key spend totals: %w", err)
+	}
+	defer rows.Close()
+
+	totals := make(map[int64]float64)
+	for rows.Next() {
+		var keyID int64
+		var total float64
+		if err := rows.Scan(&keyID, &total); err != nil {
+			return nil, fmt.Errorf("get key spend totals scan: %w", err)
+		}
+		totals[keyID] = total
+	}
+	return totals, rows.Err()
+}

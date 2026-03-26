@@ -118,6 +118,10 @@ type Storage interface {
 	// RecordKeySpend adds the given cost to usage_logs for the given key.
 	// This is a direct INSERT — the spend accumulator (in-memory) is the hot-path; this is the flush mechanism.
 	RecordKeySpend(ctx context.Context, keyID int64, cost float64) error
+
+	// GetKeySpendTotals returns the total cost per api_key_id from usage_logs.
+	// Used at startup to initialize the in-memory spend accumulator.
+	GetKeySpendTotals(ctx context.Context) (map[int64]float64, error)
 }
 
 // User represents a proxy user populated from OIDC claims.
