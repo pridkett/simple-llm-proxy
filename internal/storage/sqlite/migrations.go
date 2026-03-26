@@ -5,8 +5,17 @@ import (
 	"fmt"
 )
 
-// migrate runs database migrations.
+// migrate runs database migrations that have not yet been applied.
+// The schema_migrations table is bootstrapped first so it can track all versions.
 func (s *Storage) migrate(ctx context.Context) error {
+	const bootstrap = `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INTEGER PRIMARY KEY,
+		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`
+	if _, err := s.db.ExecContext(ctx, bootstrap); err != nil {
+		return fmt.Errorf("bootstrap schema_migrations: %w", err)
+	}
+
 	migrations := []string{
 		// Migration 1: Create api_keys table (future-ready)
 		`CREATE TABLE IF NOT EXISTS api_keys (
@@ -138,9 +147,20 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash)`,
 	}
 
-	for i, migration := range migrations {
-		if _, err := s.db.ExecContext(ctx, migration); err != nil {
-			return fmt.Errorf("migration %d failed: %w", i+1, err)
+	for i, sql := range migrations {
+		version := i + 1
+		var count int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version).Scan(&count); err != nil {
+			return fmt.Errorf("check migration %d: %w", version, err)
+		}
+		if count > 0 {
+			continue // already applied
+		}
+		if _, err := s.db.ExecContext(ctx, sql); err != nil {
+			return fmt.Errorf("migration %d failed: %w", version, err)
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations (version) VALUES (?)`, version); err != nil {
+			return fmt.Errorf("record migration %d: %w", version, err)
 		}
 	}
 
