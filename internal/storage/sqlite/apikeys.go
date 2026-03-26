@@ -112,6 +112,26 @@ func (s *Storage) GetKeyAllowedModels(ctx context.Context, keyID int64) ([]strin
 	return models, rows.Err()
 }
 
+// UpdateKeyAllowedModels replaces the allowlist for the given key in a transaction.
+// Delete-then-insert ensures the allowlist is always consistent.
+func (s *Storage) UpdateKeyAllowedModels(ctx context.Context, keyID int64, models []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("update key allowed models begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM key_allowed_models WHERE key_id = ?`, keyID); err != nil {
+		return fmt.Errorf("update key allowed models delete: %w", err)
+	}
+	for _, model := range models {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`, keyID, model); err != nil {
+			return fmt.Errorf("update key allowed models insert: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // RecordKeySpend is a no-op stub — spend recording is handled by the extended
 // logRequest() in internal/api/handler/chat.go (Plan 04). The accumulator
 // flushes via direct usage_logs INSERTs using the existing LogRequest path.

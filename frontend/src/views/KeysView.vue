@@ -86,40 +86,102 @@
                     No keys yet — create the first one below
                   </td>
                 </tr>
-                <tr v-for="key in keys" :key="key.id">
-                  <td class="px-4 py-3 font-mono text-sm text-gray-900">{{ key.key_prefix }}...</td>
-                  <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ key.name }}</td>
-                  <td class="px-4 py-3 text-sm text-gray-500">
-                    <!-- Phase 3: show allowed model count once API includes it in list response -->
-                    <span class="italic">All models</span>
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-700">
-                    <!-- Phase 3: show "$X.XX / $Y.YY" once spend totals API is available -->
-                    <span v-if="key.max_budget != null">Budget: ${{ key.max_budget.toFixed(2) }}</span>
-                    <span v-else class="text-gray-400">Unlimited</span>
-                  </td>
-                  <td class="px-4 py-3 text-sm">
-                    <span v-if="key.is_active" class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5">active</span>
-                    <span v-else class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5">revoked</span>
-                  </td>
-                  <td class="px-4 py-3 text-sm">
-                    <template v-if="revokeConfirm === key.id">
-                      <span class="text-xs text-gray-500 mr-1">Revoke {{ key.name }}?</span>
+                <template v-for="key in keys" :key="key.id">
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-sm text-gray-900">{{ key.key_prefix }}...</td>
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ key.name }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">
+                      <template v-if="editingModelsKeyId !== key.id">
+                        <span v-if="!key.allowed_models || key.allowed_models.length === 0" class="italic">All models</span>
+                        <span v-else>
+                          {{ key.allowed_models.slice(0, 2).join(', ') }}
+                          <span v-if="key.allowed_models.length > 2" class="text-gray-400"> +{{ key.allowed_models.length - 2 }} more</span>
+                        </span>
+                        <button
+                          v-if="key.is_active"
+                          @click="startEditModels(key)"
+                          class="ml-2 text-xs text-indigo-500 hover:text-indigo-700"
+                        >Edit</button>
+                      </template>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-700">
+                      <!-- Phase 3: show "$X.XX / $Y.YY" once spend totals API is available -->
+                      <span v-if="key.max_budget != null">Budget: ${{ key.max_budget.toFixed(2) }}</span>
+                      <span v-else class="text-gray-400">Unlimited</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <span v-if="key.is_active" class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5">active</span>
+                      <span v-else class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5">revoked</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <template v-if="revokeConfirm === key.id">
+                        <span class="text-xs text-gray-500 mr-1">Revoke {{ key.name }}?</span>
+                        <button
+                          :data-testid="`confirm-revoke-${key.id}`"
+                          @click="confirmRevoke(key.id)"
+                          class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
+                        >Revoke key</button>
+                        <button @click="revokeConfirm = null" class="text-xs text-gray-500 hover:text-gray-700">Keep key</button>
+                      </template>
                       <button
-                        :data-testid="`confirm-revoke-${key.id}`"
-                        @click="confirmRevoke(key.id)"
-                        class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
-                      >Revoke key</button>
-                      <button @click="revokeConfirm = null" class="text-xs text-gray-500 hover:text-gray-700">Keep key</button>
-                    </template>
-                    <button
-                      v-else-if="key.is_active"
-                      :data-testid="`revoke-key-${key.id}`"
-                      @click="revokeConfirm = key.id"
-                      class="text-xs text-red-500 hover:text-red-700"
-                    >Revoke</button>
-                  </td>
-                </tr>
+                        v-else-if="key.is_active"
+                        :data-testid="`revoke-key-${key.id}`"
+                        @click="revokeConfirm = key.id"
+                        class="text-xs text-red-500 hover:text-red-700"
+                      >Revoke</button>
+                    </td>
+                  </tr>
+                  <!-- Inline edit models row -->
+                  <tr v-if="editingModelsKeyId === key.id">
+                    <td colspan="6" class="px-4 py-3 bg-indigo-50 border-t border-indigo-100">
+                      <div class="flex items-start gap-3">
+                        <div class="relative flex-1 max-w-md">
+                          <label class="block text-xs text-gray-500 mb-1">Allowed models (leave empty for all)</label>
+                          <input
+                            v-model="editModelsInput"
+                            type="text"
+                            placeholder="e.g. gpt-4, claude-3-opus (comma-separated)"
+                            autocomplete="off"
+                            data-1p-ignore
+                            data-lpignore="true"
+                            class="input w-full"
+                            @input="onEditModelsInput"
+                            @keydown="onEditModelsKeydown"
+                            @blur="hideEditSuggestionsDelayed"
+                            @focus="onEditModelsInput"
+                            ref="editModelsInputRef"
+                          />
+                          <ul
+                            v-if="editModelsShowSuggestions && editModelsFilteredSuggestions.length > 0"
+                            class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                          >
+                            <li
+                              v-for="(model, idx) in editModelsFilteredSuggestions"
+                              :key="model"
+                              class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
+                              :class="idx === editModelsSuggestionIndex ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'"
+                              @mousedown.prevent="selectEditModelsSuggestion(model)"
+                            >
+                              {{ model }}
+                            </li>
+                          </ul>
+                          <p v-if="editModelsError" class="mt-1 text-xs text-red-500">{{ editModelsError }}</p>
+                        </div>
+                        <div class="flex items-end gap-2 pt-5">
+                          <button
+                            @click="saveEditModels(key)"
+                            :disabled="editModelsSubmitting"
+                            class="btn btn-primary text-xs py-1 px-3"
+                          >{{ editModelsSubmitting ? 'Saving…' : 'Save' }}</button>
+                          <button
+                            @click="cancelEditModels"
+                            class="btn btn-secondary text-xs py-1 px-3"
+                          >Cancel</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -255,7 +317,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { api } from '../api/client.js'
 import { useSession } from '../composables/useSession.js'
 
@@ -280,11 +342,27 @@ const submitting = ref(false)
 const formError = ref(null)
 const form = ref({ name: '', allowedModels: '', maxRPM: '', maxRPD: '', maxBudget: '', softBudget: '' })
 
-// Model autocomplete
+// Model autocomplete (create form)
 const availableModels = ref([])
 const showSuggestions = ref(false)
 const suggestionIndex = ref(-1)
 const modelsInputRef = ref(null)
+
+// Edit models inline
+const editingModelsKeyId = ref(null)
+const editModelsInput = ref('')
+const editModelsError = ref(null)
+const editModelsSubmitting = ref(false)
+const editModelsShowSuggestions = ref(false)
+const editModelsSuggestionIndex = ref(-1)
+const editModelsInputRef = ref(null)
+
+// --- Create form autocomplete ---
+
+const alreadySelected = computed(() => {
+  const parts = form.value.allowedModels.split(',')
+  return new Set(parts.slice(0, -1).map((m) => m.trim().toLowerCase()).filter((m) => m.length > 0))
+})
 
 const currentToken = computed(() => {
   const parts = form.value.allowedModels.split(',')
@@ -293,8 +371,10 @@ const currentToken = computed(() => {
 
 const filteredSuggestions = computed(() => {
   const token = currentToken.value
-  if (!token) return availableModels.value.slice(0, 8)
-  return availableModels.value.filter((m) => m.toLowerCase().includes(token)).slice(0, 8)
+  const selected = alreadySelected.value
+  const candidates = availableModels.value.filter((m) => !selected.has(m.toLowerCase()))
+  if (!token) return candidates.slice(0, 8)
+  return candidates.filter((m) => m.toLowerCase().includes(token)).slice(0, 8)
 })
 
 function onModelsInput() {
@@ -331,6 +411,94 @@ function hideSuggestionsDelayed() {
   setTimeout(() => { showSuggestions.value = false }, 150)
 }
 
+// --- Edit models inline autocomplete ---
+
+const editModelsCurrentToken = computed(() => {
+  const parts = editModelsInput.value.split(',')
+  return parts[parts.length - 1].trim().toLowerCase()
+})
+
+const editModelsAlreadySelected = computed(() => {
+  const parts = editModelsInput.value.split(',')
+  return new Set(parts.slice(0, -1).map((m) => m.trim().toLowerCase()).filter((m) => m.length > 0))
+})
+
+const editModelsFilteredSuggestions = computed(() => {
+  const token = editModelsCurrentToken.value
+  const selected = editModelsAlreadySelected.value
+  const candidates = availableModels.value.filter((m) => !selected.has(m.toLowerCase()))
+  if (!token) return candidates.slice(0, 8)
+  return candidates.filter((m) => m.toLowerCase().includes(token)).slice(0, 8)
+})
+
+function onEditModelsInput() {
+  editModelsShowSuggestions.value = true
+  editModelsSuggestionIndex.value = -1
+}
+
+function onEditModelsKeydown(e) {
+  if (!editModelsShowSuggestions.value || editModelsFilteredSuggestions.value.length === 0) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    editModelsSuggestionIndex.value = Math.min(editModelsSuggestionIndex.value + 1, editModelsFilteredSuggestions.value.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    editModelsSuggestionIndex.value = Math.max(editModelsSuggestionIndex.value - 1, -1)
+  } else if (e.key === 'Enter' && editModelsSuggestionIndex.value >= 0) {
+    e.preventDefault()
+    selectEditModelsSuggestion(editModelsFilteredSuggestions.value[editModelsSuggestionIndex.value])
+  } else if (e.key === 'Escape') {
+    editModelsShowSuggestions.value = false
+  }
+}
+
+function selectEditModelsSuggestion(model) {
+  const parts = editModelsInput.value.split(',')
+  parts[parts.length - 1] = model
+  editModelsInput.value = parts.join(', ') + ', '
+  editModelsShowSuggestions.value = false
+  editModelsSuggestionIndex.value = -1
+  editModelsInputRef.value?.focus()
+}
+
+function hideEditSuggestionsDelayed() {
+  setTimeout(() => { editModelsShowSuggestions.value = false }, 150)
+}
+
+function startEditModels(key) {
+  editingModelsKeyId.value = key.id
+  editModelsInput.value = (key.allowed_models ?? []).join(', ')
+  editModelsError.value = null
+  editModelsShowSuggestions.value = false
+  nextTick(() => editModelsInputRef.value?.focus())
+}
+
+function cancelEditModels() {
+  editingModelsKeyId.value = null
+  editModelsInput.value = ''
+  editModelsError.value = null
+}
+
+async function saveEditModels(key) {
+  editModelsError.value = null
+  editModelsSubmitting.value = true
+  const models = [...new Set(
+    editModelsInput.value.split(',').map((m) => m.trim()).filter((m) => m.length > 0)
+  )]
+  try {
+    await api.updateKeyModels(key.id, models)
+    // Update the local key object immediately
+    key.allowed_models = models
+    cancelEditModels()
+  } catch (e) {
+    editModelsError.value = e.message || 'Failed to update models.'
+  } finally {
+    editModelsSubmitting.value = false
+  }
+}
+
+// --- Models loader ---
+
 async function loadModels() {
   try {
     const result = await api.models()
@@ -340,7 +508,8 @@ async function loadModels() {
   }
 }
 
-// Validation: soft budget must be < hard budget
+// --- Validation ---
+
 const softBudgetError = computed(() => {
   const hard = parseFloat(form.value.maxBudget)
   const soft = parseFloat(form.value.softBudget)
@@ -349,6 +518,8 @@ const softBudgetError = computed(() => {
   }
   return false
 })
+
+// --- Data loading ---
 
 async function loadTeams() {
   loadingTeams.value = true
@@ -374,6 +545,7 @@ async function selectTeam(team) {
   error.value = null
   appsError.value = null
   revokeConfirm.value = null
+  cancelEditModels()
   loadingApps.value = true
   appsError.value = null
   try {
@@ -389,6 +561,7 @@ async function selectApp(app) {
   selectedApp.value = app
   error.value = null
   revokeConfirm.value = null
+  cancelEditModels()
   await loadKeys(app.id)
 }
 

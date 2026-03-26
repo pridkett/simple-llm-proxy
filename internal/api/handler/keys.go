@@ -16,8 +16,14 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
+// keyListItem wraps APIKey with its allowed_models for the list response.
+type keyListItem struct {
+	*storage.APIKey
+	AllowedModels []string `json:"allowed_models"`
+}
+
 // AdminListKeys handles GET /admin/applications/{id}/keys
-// Returns all keys for the application; key_hash is never serialized (json:"-").
+// Returns all keys for the application with their allowed model lists.
 func AdminListKeys(store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		appID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -30,8 +36,17 @@ func AdminListKeys(store storage.Storage) http.HandlerFunc {
 			model.WriteError(w, model.ErrInternal("failed to list keys"))
 			return
 		}
+		items := make([]keyListItem, 0, len(keys))
+		for _, k := range keys {
+			models, err := store.GetKeyAllowedModels(r.Context(), k.ID)
+			if err != nil {
+				model.WriteError(w, model.ErrInternal("failed to get key models"))
+				return
+			}
+			items = append(items, keyListItem{APIKey: k, AllowedModels: models})
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(keys)
+		json.NewEncoder(w).Encode(items)
 	}
 }
 
@@ -103,6 +118,37 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// AdminUpdateKeyModels handles PATCH /admin/api-keys/{id}/models
+// Admin only. Replaces the allowed model list for a key. Empty list = all models allowed.
+// Immediately invalidates the cache entry so the new allowlist takes effect.
+func AdminUpdateKeyModels(store storage.Storage, cache *keystore.Cache) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := middleware.UserFromContext(r.Context())
+		if user == nil || !user.IsAdmin {
+			model.WriteError(w, model.ErrForbidden("admin required"))
+			return
+		}
+		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+		if err != nil {
+			model.WriteError(w, model.ErrBadRequest("invalid key id"))
+			return
+		}
+		var body struct {
+			AllowedModels []string `json:"allowed_models"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			model.WriteError(w, model.ErrBadRequest("invalid request body"))
+			return
+		}
+		if err := store.UpdateKeyAllowedModels(r.Context(), id, body.AllowedModels); err != nil {
+			model.WriteError(w, model.ErrInternal("failed to update key models"))
+			return
+		}
+		cache.Invalidate(id)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

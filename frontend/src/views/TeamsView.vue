@@ -4,9 +4,9 @@
 
     <div class="flex gap-6">
       <!-- Left panel: team list -->
-      <div class="w-64 flex-shrink-0">
+      <div class="w-56 flex-shrink-0">
         <!-- Create team form -->
-        <form @submit.prevent="handleCreateTeam" class="mb-4 flex gap-2">
+        <form @submit.prevent="handleCreateTeam" class="mb-3 flex gap-2">
           <input
             v-model="newTeamName"
             type="text"
@@ -21,41 +21,49 @@
           </button>
         </form>
 
-        <div v-if="loadingTeams" class="text-gray-500 text-sm">Loading...</div>
-        <div v-else-if="teamsError" class="text-red-600 text-sm">{{ teamsError }}</div>
-        <ul v-else class="space-y-1">
-          <li
-            v-for="team in teams"
-            :key="team.id"
-            :data-testid="`team-item-${team.id}`"
-            class="flex items-center justify-between px-3 py-2 rounded-md cursor-pointer text-sm"
-            :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'"
-            @click="selectTeam(team)"
-          >
-            <span>{{ team.name }}</span>
-            <div>
-              <!-- Confirmation inline delete UI -->
-              <template v-if="pendingDeleteTeamId === team.id">
-                <span class="text-xs text-gray-500 mr-1">Delete?</span>
+        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div class="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-200 bg-gray-50">
+            Teams
+          </div>
+          <div v-if="loadingTeams" class="px-3 py-3 text-gray-500 text-sm">Loading...</div>
+          <div v-else-if="teamsError" class="px-3 py-3 text-red-600 text-sm">{{ teamsError }}</div>
+          <ul v-else>
+            <li
+              v-for="team in teams"
+              :key="team.id"
+              :data-testid="`team-item-${team.id}`"
+              class="flex items-center justify-between px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-0"
+              :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'"
+              @click="selectTeam(team)"
+            >
+              <span>{{ team.name }}</span>
+              <div>
+                <!-- Confirmation inline delete UI -->
+                <template v-if="pendingDeleteTeamId === team.id">
+                  <span class="text-xs text-gray-500 mr-1">Delete?</span>
+                  <button
+                    :data-testid="`confirm-delete-${team.id}`"
+                    @click.stop="confirmDeleteTeam(team.id)"
+                    class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
+                  >Yes</button>
+                  <button
+                    @click.stop="cancelDeleteTeam"
+                    class="text-xs text-gray-500 hover:text-gray-700"
+                  >No</button>
+                </template>
                 <button
-                  :data-testid="`confirm-delete-${team.id}`"
-                  @click.stop="confirmDeleteTeam(team.id)"
-                  class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
-                >Yes</button>
-                <button
-                  @click.stop="cancelDeleteTeam"
-                  class="text-xs text-gray-500 hover:text-gray-700"
-                >No</button>
-              </template>
-              <button
-                v-else
-                :data-testid="`delete-team-${team.id}`"
-                @click.stop="startDeleteTeam(team.id)"
-                class="text-xs text-red-500 hover:text-red-700 ml-2"
-              >Delete</button>
-            </div>
-          </li>
-        </ul>
+                  v-else
+                  :data-testid="`delete-team-${team.id}`"
+                  @click.stop="startDeleteTeam(team.id)"
+                  class="text-xs text-red-500 hover:text-red-700 ml-2"
+                >Delete</button>
+              </div>
+            </li>
+            <li v-if="teams.length === 0 && !loadingTeams" class="px-3 py-3 text-sm text-gray-400 italic">
+              No teams yet
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Right panel: member detail -->
