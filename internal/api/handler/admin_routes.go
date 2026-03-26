@@ -28,4 +28,12 @@ func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Ca
 	r.Post("/admin/applications/{id}/keys", AdminCreateKey(store))
 	r.Delete("/admin/api-keys/{id}", AdminRevokeKey(store, cache))
 	r.Patch("/admin/api-keys/{id}", AdminUpdateKey(store, cache))
+
+	// Cost/spend routes (Phase 3)
+	// Authorization: /admin/spend exposes deployment-wide spend data.
+	// Access is restricted to admin users. The route group applies RequireSession middleware
+	// (sm.LoadAndSave + RequireSession) which handles 401 for unauthenticated requests.
+	// Admin-only enforcement (403 for non-admin authenticated users) is done per-handler
+	// via middleware.UserFromContext — the same pattern used by all admin-only handlers.
+	r.Get("/admin/spend", AdminSpend(store))
 }
