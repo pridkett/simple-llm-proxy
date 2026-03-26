@@ -36,10 +36,10 @@
 ### Cost Monitoring
 
 - [x] **COST-01**: Every proxied request records cost (tokens × model rate) against the key
-- [ ] **COST-02**: Dashboard shows spend breakdown by key, application, and team
+- [x] **COST-02**: Dashboard shows spend breakdown by key, application, and team
 - [x] **COST-03**: Hard budget limit blocks requests when exceeded; returns 429 with clear message
-- [ ] **COST-04**: Soft budget threshold triggers an in-UI alert (banner/badge in admin console)
-- [ ] **COST-05**: Cost data is queryable with date range filter (today / 7d / 30d / custom)
+- [x] **COST-04**: Soft budget threshold triggers an in-UI alert (banner/badge in admin console)
+- [x] **COST-05**: Cost data is queryable with date range filter (today / 7d / 30d / custom)
 
 ### Admin Console (Frontend)
 
@@ -47,8 +47,8 @@
 - [x] **UI-02**: Teams view: list teams, create/delete team, manage members and roles
 - [x] **UI-03**: Applications view: list apps per team, create/delete applications
 - [x] **UI-04**: Keys view: list keys per app, create key (with all options), revoke key
-- [ ] **UI-05**: Cost dashboard: charts and tables for spend by key/app/team with date filter
-- [ ] **UI-06**: Alerts panel: show keys/apps approaching or exceeding soft/hard budgets
+- [x] **UI-05**: Cost dashboard: charts and tables for spend by key/app/team with date filter
+- [x] **UI-06**: Alerts panel: show keys/apps approaching or exceeding soft/hard budgets
 - [x] **UI-07**: User management: list all users (from SSO), assign/remove from teams
 
 ## v2 Requirements
@@ -111,16 +111,16 @@
 | KEY-08 | Phase 2 | Complete |
 | KEY-09 | Phase 2 | Complete |
 | COST-01 | Phase 2 | Complete |
-| COST-02 | Phase 3 | Pending |
+| COST-02 | Phase 3 | Complete |
 | COST-03 | Phase 2 | Complete |
-| COST-04 | Phase 3 | Pending |
-| COST-05 | Phase 3 | Pending |
+| COST-04 | Phase 3 | Complete |
+| COST-05 | Phase 3 | Complete |
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 1 | Complete |
 | UI-03 | Phase 1 | Complete |
 | UI-04 | Phase 2 | Complete |
-| UI-05 | Phase 3 | Pending |
-| UI-06 | Phase 3 | Pending |
+| UI-05 | Phase 3 | Complete |
+| UI-06 | Phase 3 | Complete |
 | UI-07 | Phase 1 | Complete |
 
 **Coverage:**
