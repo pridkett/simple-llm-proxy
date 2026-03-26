@@ -66,9 +66,9 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
 func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	const q = `
         SELECT
-            DATE(ul.request_time)            AS day,
-            COALESCE(SUM(ul.total_cost), 0) AS total_spend,
-            COUNT(*)                         AS request_count
+            SUBSTR(ul.request_time, 1, 10)   AS day,
+            COALESCE(SUM(ul.total_cost), 0)  AS total_spend,
+            COUNT(*)                          AS request_count
         FROM usage_logs ul
         JOIN api_keys k    ON k.id = ul.api_key_id
         JOIN applications a ON a.id = k.application_id
@@ -80,7 +80,7 @@ func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters
           AND (? IS NULL OR t.id = ?)
           AND (? IS NULL OR a.id = ?)
           AND (? IS NULL OR k.id = ?)
-        GROUP BY DATE(ul.request_time)
+        GROUP BY SUBSTR(ul.request_time, 1, 10)
         ORDER BY day
     `
 	args := []any{
