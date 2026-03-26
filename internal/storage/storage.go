@@ -133,6 +133,11 @@ type Storage interface {
 
 	// FlushKeySpend inserts a synthetic usage_log flush entry for the key's accumulated spend.
 	FlushKeySpend(ctx context.Context, keyID int64, total float64) error
+
+	// GetSpendSummary returns aggregated spend per key for the given date range and optional filters.
+	// Flush rows (model='_flush') are excluded. Only active keys are returned.
+	// Used by the /admin/spend dashboard endpoint.
+	GetSpendSummary(ctx context.Context, from, to time.Time, filters SpendFilters) ([]SpendRow, error)
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -217,4 +222,28 @@ type RequestLog struct {
 	StatusCode       int
 	LatencyMS        int64
 	RequestTime      time.Time
+}
+
+// SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.
+// All fields are pointer types: nil means "no filter applied for this dimension".
+// The handler must pass nil (not 0) for absent/unspecified IDs — see parseOptionalInt64 in
+// internal/api/handler/spend.go. The SQL double-bind pattern (? IS NULL OR col = ?) is
+// correct only when nil is passed, not zero.
+type SpendFilters struct {
+	TeamID *int64
+	AppID  *int64
+	KeyID  *int64
+}
+
+// SpendRow is one row from GetSpendSummary: per-key spend with JOIN-resolved names.
+type SpendRow struct {
+	KeyID      int64    `json:"key_id"`
+	KeyName    string   `json:"key_name"`
+	AppID      int64    `json:"app_id"`
+	AppName    string   `json:"app_name"`
+	TeamID     int64    `json:"team_id"`
+	TeamName   string   `json:"team_name"`
+	TotalSpend float64  `json:"total_spend"`
+	MaxBudget  *float64 `json:"max_budget"`  // nil = unlimited (hard cap)
+	SoftBudget *float64 `json:"soft_budget"` // nil = no soft alert threshold
 }
