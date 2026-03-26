@@ -9,6 +9,7 @@ import LoginView from '../views/LoginView.vue'
 import UsersView from '../views/UsersView.vue'
 import TeamsView from '../views/TeamsView.vue'
 import ApplicationsView from '../views/ApplicationsView.vue'
+import KeysView from '../views/KeysView.vue'
 import { useSession } from '../composables/useSession.js'
 
 const routes = [
@@ -22,6 +23,7 @@ const routes = [
   { path: '/users', name: 'users', component: UsersView },
   { path: '/teams', name: 'teams', component: TeamsView },
   { path: '/applications', name: 'applications', component: ApplicationsView },
+  { path: '/keys', name: 'keys', component: KeysView },
 ]
 
 const router = createRouter({
