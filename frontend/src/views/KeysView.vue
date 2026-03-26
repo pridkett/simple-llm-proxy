@@ -101,9 +101,12 @@
                     </span>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-700">
-                    <!-- Phase 3: show "$X.XX / $Y.YY" once spend totals API is available -->
-                    <span v-if="key.max_budget != null">Budget: ${{ key.max_budget.toFixed(2) }}</span>
-                    <span v-else class="text-gray-400">Unlimited</span>
+                    <span v-if="key.max_budget != null">
+                      ${{ (keySpend[key.id] ?? 0).toFixed(4) }} / ${{ key.max_budget.toFixed(2) }}
+                    </span>
+                    <span v-else>
+                      ${{ (keySpend[key.id] ?? 0).toFixed(4) }} / &#8734;
+                    </span>
                   </td>
                   <td class="px-4 py-3 text-sm">
                     <span v-if="key.is_active" class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5">active</span>
@@ -316,6 +319,7 @@ const route = useRoute()
 const teams = ref([])
 const apps = ref([])
 const keys = ref([])
+const keySpend = ref({})
 const selectedTeam = ref(null)
 const selectedApp = ref(null)
 const loadingTeams = ref(false)
@@ -475,10 +479,12 @@ async function selectTeam(team) {
 
 async function selectApp(app) {
   selectedApp.value = app
+  keySpend.value = {}
   error.value = null
   revokeConfirm.value = null
   cancelEdit()
   await loadKeys(app.id)
+  loadKeySpend(app.id)
 }
 
 async function loadKeys(appId) {
@@ -490,6 +496,19 @@ async function loadKeys(appId) {
     error.value = e.message
   } finally {
     loadingKeys.value = false
+  }
+}
+
+async function loadKeySpend(appId) {
+  try {
+    const data = await api.spend({ appId })
+    if (data && data.rows) {
+      const map = {}
+      data.rows.forEach(r => { map[r.key_id] = r.total_spend })
+      keySpend.value = map
+    }
+  } catch {
+    // Non-critical — spend column shows $0.00 gracefully on error
   }
 }
 
