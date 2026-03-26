@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -121,6 +122,9 @@ func (m *mockSessionStorage) GetKeySpendTotals(_ context.Context) (map[int64]flo
 }
 func (m *mockSessionStorage) FlushKeySpend(_ context.Context, _ int64, _ float64) error {
 	return nil
+}
+func (m *mockSessionStorage) GetSpendSummary(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.SpendRow, error) {
+	return nil, nil
 }
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
