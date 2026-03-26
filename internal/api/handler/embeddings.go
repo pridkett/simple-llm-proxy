@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
+	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
@@ -14,7 +15,7 @@ import (
 )
 
 // Embeddings handles POST /v1/embeddings requests.
-func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator) http.HandlerFunc {
+func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -95,7 +96,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 
 			// Log the request if storage is available
 			if store != nil && resp.Usage != nil {
-				go logRequest(store, sa, apiKeyID, deployment, "/v1/embeddings", resp.Usage, http.StatusOK, startTime)
+				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/embeddings", resp.Usage, http.StatusOK, startTime)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
