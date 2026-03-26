@@ -322,7 +322,12 @@ const chartLabels = computed(() => {
   if (!spendData.value) return []
   const rows = spendData.value.rows
   if (selectedKeyId.value || selectedAppId.value) return rows.map(r => r.key_name)
-  if (selectedTeamId.value) return rows.map(r => r.app_name)
+  if (selectedTeamId.value) {
+    // Aggregate by app_name — multiple app records with the same name (e.g. deleted + recreated) merge into one bar
+    const appSpend = new Map()
+    for (const r of rows) appSpend.set(r.app_name, (appSpend.get(r.app_name) || 0) + r.total_spend)
+    return [...appSpend.keys()]
+  }
   // No filters: aggregate by team
   const teamSpend = new Map()
   for (const r of rows) {
@@ -338,7 +343,9 @@ const chartValues = computed(() => {
     return rows.map(r => parseFloat(r.total_spend.toFixed(4)))
   }
   if (selectedTeamId.value) {
-    return rows.map(r => parseFloat(r.total_spend.toFixed(4)))
+    const appSpend = new Map()
+    for (const r of rows) appSpend.set(r.app_name, (appSpend.get(r.app_name) || 0) + r.total_spend)
+    return [...appSpend.values()].map(v => parseFloat(v.toFixed(4)))
   }
   // No filters: aggregate by team
   const teamSpend = new Map()

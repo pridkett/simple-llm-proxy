@@ -113,7 +113,13 @@
                     <span v-else class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5">revoked</span>
                   </td>
                   <td class="px-4 py-3 text-sm space-x-2">
-                    <template v-if="key.is_active">
+                    <template v-if="!key.is_active">
+                    <button
+                      @click="viewingKey = key; editingKey = null"
+                      class="text-xs text-gray-500 hover:text-gray-700"
+                    >View</button>
+                  </template>
+                  <template v-else>
                       <!-- Edit button -->
                       <button
                         @click="startEditKey(key)"
@@ -140,6 +146,52 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Read-only view for revoked key -->
+          <div
+            v-if="viewingKey && !editingKey"
+            class="bg-white border border-gray-200 rounded-lg p-4 mb-4"
+          >
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-sm font-medium text-gray-700">
+                  Key Settings — {{ viewingKey.name }} —
+                  <span class="font-mono text-gray-500">{{ viewingKey.key_prefix }}...</span>
+                </h3>
+                <p class="text-xs text-gray-400 mt-0.5">This key has been revoked and cannot be edited.</p>
+              </div>
+              <button @click="viewingKey = null" class="text-xs text-gray-400 hover:text-gray-600">&#10005; Close</button>
+            </div>
+            <dl class="space-y-2 text-sm max-w-lg">
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Name</dt>
+                <dd class="text-gray-900">{{ viewingKey.name }}</dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Allowed models</dt>
+                <dd class="text-gray-900">
+                  <span v-if="!viewingKey.allowed_models?.length" class="italic text-gray-400">All models</span>
+                  <span v-else>{{ viewingKey.allowed_models.join(', ') }}</span>
+                </dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Rate limit (RPM)</dt>
+                <dd class="text-gray-900">{{ viewingKey.max_rpm ?? '—' }}</dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Rate limit (RPD)</dt>
+                <dd class="text-gray-900">{{ viewingKey.max_rpd ?? '—' }}</dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Hard budget</dt>
+                <dd class="text-gray-900">{{ viewingKey.max_budget != null ? `$${viewingKey.max_budget.toFixed(2)}` : '—' }}</dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="w-40 text-xs text-gray-500 shrink-0">Soft budget alert</dt>
+                <dd class="text-gray-900">{{ viewingKey.soft_budget != null ? `$${viewingKey.soft_budget.toFixed(2)}` : '—' }}</dd>
+              </div>
+            </dl>
           </div>
 
           <!-- Create / Edit Key form -->
@@ -331,6 +383,7 @@ const error = ref(null)
 const newKey = ref(null)
 const copied = ref(false)
 const revokeConfirm = ref(null)
+const viewingKey = ref(null)
 const submitting = ref(false)
 const formError = ref(null)
 const editingKey = ref(null)
@@ -466,6 +519,7 @@ async function selectTeam(team) {
   error.value = null
   appsError.value = null
   revokeConfirm.value = null
+  viewingKey.value = null
   cancelEdit()
   loadingApps.value = true
   try {
@@ -482,6 +536,7 @@ async function selectApp(app) {
   keySpend.value = {}
   error.value = null
   revokeConfirm.value = null
+  viewingKey.value = null
   cancelEdit()
   await loadKeys(app.id)
   loadKeySpend(app.id)

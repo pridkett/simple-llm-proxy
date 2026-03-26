@@ -72,7 +72,12 @@
                   <button
                     @click="goToKeys(app)"
                     class="text-indigo-600 hover:text-indigo-800 hover:underline tabular-nums"
-                  >{{ appKeyCounts[app.id] ?? 0 }} {{ (appKeyCounts[app.id] ?? 0) === 1 ? 'key' : 'keys' }}</button>
+                  >
+                    <template v-if="appKeyStats[app.id]">
+                      {{ appKeyStats[app.id].active }} active<template v-if="appKeyStats[app.id].revoked > 0">, {{ appKeyStats[app.id].revoked }} revoked</template>
+                    </template>
+                    <template v-else>—</template>
+                  </button>
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <template v-if="pendingDeleteAppId === app.id">
@@ -147,7 +152,7 @@ const { currentUser } = useSession()
 const router = useRouter()
 
 const allTeams = ref([])
-const appKeyCounts = ref({})
+const appKeyStats = ref({})
 const teamSearch = ref('')
 const loadingTeams = ref(true)
 const teamsError = ref(null)
@@ -180,10 +185,15 @@ async function loadApplications(teamId) {
     // Fetch key counts for all apps in parallel (non-blocking — counts are cosmetic)
     const counts = await Promise.all(
       applications.value.map((app) =>
-        api.apiKeys(app.id).then((keys) => ({ id: app.id, count: (keys ?? []).length })).catch(() => ({ id: app.id, count: 0 }))
+        api.apiKeys(app.id)
+          .then((keys) => {
+            const all = keys ?? []
+            return { id: app.id, active: all.filter(k => k.is_active).length, revoked: all.filter(k => !k.is_active).length }
+          })
+          .catch(() => ({ id: app.id, active: 0, revoked: 0 }))
       )
     )
-    appKeyCounts.value = Object.fromEntries(counts.map(({ id, count }) => [id, count]))
+    appKeyStats.value = Object.fromEntries(counts.map(({ id, active, revoked }) => [id, { active, revoked }]))
   } catch (e) {
     appsError.value = e.message
   } finally {
