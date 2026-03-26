@@ -305,10 +305,12 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../api/client.js'
 import { useSession } from '../composables/useSession.js'
 
 const { currentUser } = useSession()
+const route = useRoute()
 
 // State
 const teams = ref([])
@@ -581,5 +583,19 @@ async function confirmRevoke(keyId) {
 
 onMounted(async () => {
   await Promise.all([loadTeams(), loadModels()])
+
+  // Pre-select team + app from query params (e.g. navigating from Applications view)
+  const preTeamId = route.query.team_id ? parseInt(route.query.team_id, 10) : null
+  const preAppId = route.query.app_id ? parseInt(route.query.app_id, 10) : null
+  if (preTeamId && teams.value.length > 0) {
+    const team = teams.value.find((t) => t.id === preTeamId)
+    if (team) {
+      await selectTeam(team)
+      if (preAppId && apps.value.length > 0) {
+        const app = apps.value.find((a) => a.id === preAppId)
+        if (app) await selectApp(app)
+      }
+    }
+  }
 })
 </script>

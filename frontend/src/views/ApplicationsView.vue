@@ -53,12 +53,13 @@
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keys</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-if="applications.length === 0">
-                <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-400 italic">
+                <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 italic">
                   No applications yet — create the first one below
                 </td>
               </tr>
@@ -66,6 +67,12 @@
                 <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ app.name }}</td>
                 <td class="px-4 py-3 text-sm text-gray-500">
                   {{ new Date(app.created_at).toLocaleDateString() }}
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <button
+                    @click="goToKeys(app)"
+                    class="text-indigo-600 hover:text-indigo-800 hover:underline tabular-nums"
+                  >{{ appKeyCounts[app.id] ?? 0 }} {{ (appKeyCounts[app.id] ?? 0) === 1 ? 'key' : 'keys' }}</button>
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <template v-if="pendingDeleteAppId === app.id">
@@ -132,12 +139,15 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import { useSession } from '../composables/useSession.js'
 
 const { currentUser } = useSession()
+const router = useRouter()
 
 const allTeams = ref([])
+const appKeyCounts = ref({})
 const teamSearch = ref('')
 const loadingTeams = ref(true)
 const teamsError = ref(null)
@@ -167,6 +177,13 @@ async function loadApplications(teamId) {
   appsError.value = null
   try {
     applications.value = await api.applications(teamId) ?? []
+    // Fetch key counts for all apps in parallel (non-blocking — counts are cosmetic)
+    const counts = await Promise.all(
+      applications.value.map((app) =>
+        api.apiKeys(app.id).then((keys) => ({ id: app.id, count: (keys ?? []).length })).catch(() => ({ id: app.id, count: 0 }))
+      )
+    )
+    appKeyCounts.value = Object.fromEntries(counts.map(({ id, count }) => [id, count]))
   } catch (e) {
     appsError.value = e.message
   } finally {
@@ -187,6 +204,10 @@ async function handleCreateApplication() {
   } catch (e) {
     appsError.value = e.message
   }
+}
+
+function goToKeys(app) {
+  router.push({ path: '/keys', query: { team_id: selectedTeam.value?.id, app_id: app.id } })
 }
 
 function startDeleteApp(appId) {
