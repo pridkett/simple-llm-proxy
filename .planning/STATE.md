@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Multi-User Proxy
 status: Ready to execute
-stopped_at: "Completed 02-api-keys-enforcement plan 01: API key storage foundation, 7 new tests pass"
-last_updated: "2026-03-26T00:57:47.594Z"
+stopped_at: "Completed 02-api-keys-enforcement plan 04: model allowlist enforcement and APIKeyID cost attribution in handlers"
+last_updated: "2026-03-26T01:11:59.072Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 11
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 02 (api-keys-enforcement) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Plan: 3 of 7
 | Phase 01-auth-identity P02 | 25 | 1 tasks | 7 files |
 | Phase 02-api-keys-enforcement P00 | 10min | 2 tasks | 1 files |
 | Phase 02-api-keys-enforcement P01 | ~4min | 2 tasks | 7 files |
+| Phase 02-api-keys-enforcement P04 | 10min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase 02-api-keys-enforcement]: Spend flush loop: 30s periodic goroutine with shutdown flush; eventual consistency accepted as tradeoff over per-request DB writes on hot path
 - [Phase 02-api-keys-enforcement]: RecordKeySpend is a no-op stub; Plan 04 wires spend recording via logRequest
 - [Phase 02-api-keys-enforcement]: empty allowedModels slice means all models allowed (enforced at middleware level in Plan 03)
+- [Phase 02-api-keys-enforcement]: nil SpendAccumulator passed in router.go until Plan 05 wires live sa instance
+- [Phase 02-api-keys-enforcement]: Streaming logRequest at stream completion logs zero cost — cost calculation is a future plan concern
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T00:57:47.591Z
-Stopped at: Completed 02-api-keys-enforcement plan 01: API key storage foundation, 7 new tests pass
+Last session: 2026-03-26T01:11:59.069Z
+Stopped at: Completed 02-api-keys-enforcement plan 04: model allowlist enforcement and APIKeyID cost attribution in handlers
 Resume file: None
