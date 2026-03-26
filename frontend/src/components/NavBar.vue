@@ -28,17 +28,23 @@
           </router-link>
           <!-- Admin-only links -->
           <template v-if="currentUser?.is_admin">
-            <router-link
-              v-for="link in adminLinks"
-              :key="link.to"
-              :to="link.to"
-              class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              :class="$route.path === link.to
-                ? 'bg-indigo-50 text-indigo-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'"
-            >
-              {{ link.label }}
-            </router-link>
+            <template v-for="link in adminLinks" :key="link.to">
+              <router-link
+                :to="link.to"
+                class="relative px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                :class="$route.path === link.to
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'"
+              >
+                {{ link.label }}
+                <span
+                  v-if="link.to === '/cost' && alertCount > 0"
+                  class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-semibold"
+                >
+                  {{ alertCount > 9 ? '9+' : alertCount }}
+                </span>
+              </router-link>
+            </template>
           </template>
         </div>
 
@@ -58,6 +64,7 @@
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession.js'
 import { api } from '../api/client.js'
@@ -65,6 +72,8 @@ import { api } from '../api/client.js'
 const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, currentUser, clearSession } = useSession()
+
+const alertCount = ref(0)
 
 const links = [
   { to: '/', label: 'Dashboard' },
@@ -80,7 +89,28 @@ const adminLinks = [
   { to: '/teams', label: 'Teams' },
   { to: '/applications', label: 'Applications' },
   { to: '/keys', label: 'Keys' },
+  { to: '/cost', label: 'Cost' },
 ]
+
+async function fetchAlertCount() {
+  try {
+    const data = await api.spend()
+    if (data && data.alerts) {
+      alertCount.value = data.alerts.length
+    }
+  } catch {
+    // Badge silently stays at 0 on error — non-critical
+  }
+}
+
+onMounted(fetchAlertCount)
+
+// Refresh alert badge whenever the user navigates to a new page.
+// This prevents the badge from going stale when spend changes or the user
+// returns to the console after time has passed.
+router.afterEach(() => {
+  fetchAlertCount()
+})
 
 async function handleLogout() {
   try {
