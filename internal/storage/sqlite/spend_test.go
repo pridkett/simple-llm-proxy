@@ -13,8 +13,8 @@ func insertUsageLog(t *testing.T, s *Storage, keyID int64, model string, cost fl
 	t.Helper()
 	ctx := context.Background()
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO usage_logs (request_id, api_key_id, model, provider, endpoint, prompt_tokens, completion_tokens, total_cost, status_code, latency_ms, request_time)
-		VALUES (?, ?, ?, 'openai', '/v1/chat/completions', 10, 10, ?, 200, 100, ?)
+		INSERT INTO usage_logs (request_id, api_key_id, model, provider, endpoint, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_cost, status_code, latency_ms, request_time)
+		VALUES (?, ?, ?, 'openai', '/v1/chat/completions', 10, 10, 0, 0, ?, 200, 100, ?)
 	`, "req-"+model+"-"+requestTime.String(), keyID, model, cost, requestTime)
 	if err != nil {
 		t.Fatalf("insert usage_log: %v", err)
