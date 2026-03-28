@@ -164,7 +164,7 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 	if resp.StatusCode != http.StatusOK {
 		var apiErr anthropicError
 		if err := json.Unmarshal(respBody, &apiErr); err == nil {
-			return nil, fmt.Errorf("anthropic error: %s", apiErr.Error.Message)
+			return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, apiErr.Error.Message)
 		}
 		return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, string(respBody))
 	}
@@ -217,7 +217,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		respBody, _ := io.ReadAll(resp.Body)
 		var apiErr anthropicError
 		if err := json.Unmarshal(respBody, &apiErr); err == nil {
-			return nil, fmt.Errorf("anthropic error: %s", apiErr.Error.Message)
+			return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, apiErr.Error.Message)
 		}
 		return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, string(respBody))
 	}

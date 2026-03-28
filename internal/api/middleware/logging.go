@@ -26,6 +26,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Logging returns middleware that logs requests with structured fields.
 // HTTP 5xx responses are logged at error level, 4xx at warn, others at info.
 func Logging() func(http.Handler) http.Handler {
