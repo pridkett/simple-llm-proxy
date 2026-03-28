@@ -16,6 +16,7 @@ type Router struct {
 	deployments map[string][]*provider.Deployment // model_name -> deployments
 	strategy    Strategy
 	cooldown    *CooldownManager
+	backoff     *BackoffManager
 	settings    config.RouterSettings
 }
 
@@ -25,6 +26,7 @@ func New(cfg *config.Config) (*Router, error) {
 		deployments: make(map[string][]*provider.Deployment),
 		settings:    cfg.RouterSettings,
 		cooldown:    NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails),
+		backoff:     NewBackoffManager(),
 	}
 
 	// Initialize strategy
@@ -123,10 +125,10 @@ func (r *Router) GetDeploymentWithRetry(modelName string, tried map[*provider.De
 		return nil, fmt.Errorf("model not found: %s", modelName)
 	}
 
-	// Filter out deployments in cooldown or already tried
+	// Filter out deployments in cooldown, backoff, or already tried
 	healthy := make([]*provider.Deployment, 0, len(deployments))
 	for _, d := range deployments {
-		if !r.cooldown.InCooldown(d) && !tried[d] {
+		if !r.cooldown.InCooldown(d) && !r.backoff.InBackoff(d.DeploymentKey()) && !tried[d] {
 			healthy = append(healthy, d)
 		}
 	}
@@ -139,13 +141,21 @@ func (r *Router) GetDeploymentWithRetry(modelName string, tried map[*provider.De
 }
 
 // ReportSuccess reports a successful request.
+// Resets both cooldown and backoff state for the deployment.
 func (r *Router) ReportSuccess(d *provider.Deployment) {
 	r.cooldown.ReportSuccess(d)
+	r.backoff.Reset(d.DeploymentKey())
 }
 
 // ReportFailure reports a failed request.
 func (r *Router) ReportFailure(d *provider.Deployment) {
 	r.cooldown.ReportFailure(d)
+}
+
+// ReportRateLimit records a 429 response for a deployment.
+// Applies full-jitter exponential backoff; does NOT trigger cooldown.
+func (r *Router) ReportRateLimit(d *provider.Deployment, retryAfter time.Duration) {
+	r.backoff.ReportRateLimit(d.DeploymentKey(), retryAfter)
 }
 
 // ListModels returns all available model names.

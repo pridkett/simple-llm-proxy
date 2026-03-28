@@ -96,7 +96,13 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			}
 
 			lastErr = err
-			r.ReportFailure(deployment)
+			var rlErr *provider.RateLimitError
+			if errors.As(err, &rlErr) {
+				// 429: apply backoff, do NOT trigger cooldown
+				r.ReportRateLimit(deployment, rlErr.RetryAfter)
+			} else {
+				r.ReportFailure(deployment)
+			}
 		}
 
 		// All retries exhausted
