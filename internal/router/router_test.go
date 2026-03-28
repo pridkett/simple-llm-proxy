@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,6 +215,119 @@ func TestRouterReload_EmptyModels(t *testing.T) {
 	if _, err := r.GetDeployment("model-a"); err == nil {
 		t.Error("Expected error for model-a after reload with empty config")
 	}
+}
+
+func TestValidatePoolMembers(t *testing.T) {
+	t.Run("valid pool member reference succeeds", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4-primary", "gpt-4-fallback"}, "simple-shuffle")
+		cfg.ProviderPools = []config.ProviderPool{
+			{
+				Name:     "gpt-4",
+				Strategy: "weighted-round-robin",
+				Members: []config.PoolMember{
+					{ModelName: "gpt-4-primary", Weight: 80},
+					{ModelName: "gpt-4-fallback", Weight: 20},
+				},
+			},
+		}
+		_, err := New(cfg)
+		if err != nil {
+			t.Errorf("expected no error for valid pool members, got: %v", err)
+		}
+	})
+
+	t.Run("unknown pool member causes startup failure", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4-primary"}, "simple-shuffle")
+		cfg.ProviderPools = []config.ProviderPool{
+			{
+				Name:     "gpt-4",
+				Strategy: "weighted-round-robin",
+				Members: []config.PoolMember{
+					{ModelName: "gpt-4-primary", Weight: 80},
+					{ModelName: "gpt-4-fallback", Weight: 20}, // not in model_list
+				},
+			},
+		}
+		_, err := New(cfg)
+		if err == nil {
+			t.Fatal("expected error for unknown pool member, got nil")
+		}
+		if !strings.Contains(err.Error(), "not found in model_list") {
+			t.Errorf("expected error to contain 'not found in model_list', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "gpt-4-fallback") {
+			t.Errorf("expected error to name the missing model, got: %v", err)
+		}
+	})
+
+	t.Run("no provider_pools is valid (backward compat)", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
+		// cfg.ProviderPools is nil — must not error
+		_, err := New(cfg)
+		if err != nil {
+			t.Errorf("expected no error when provider_pools absent, got: %v", err)
+		}
+	})
+}
+
+func TestValidateWebhookStartup(t *testing.T) {
+	t.Run("valid webhook config succeeds", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
+		cfg.Webhooks = []config.WebhookConfig{
+			{
+				URL:     "https://example.com/webhook",
+				Events:  []string{"budget_exhausted"},
+				Enabled: true,
+			},
+		}
+		_, err := New(cfg)
+		if err != nil {
+			t.Errorf("expected no error for valid webhook, got: %v", err)
+		}
+	})
+
+	t.Run("empty url is rejected", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
+		cfg.Webhooks = []config.WebhookConfig{
+			{
+				URL:    "", // empty
+				Events: []string{"budget_exhausted"},
+			},
+		}
+		_, err := New(cfg)
+		if err == nil {
+			t.Fatal("expected error for empty webhook url, got nil")
+		}
+		if !strings.Contains(err.Error(), "url is required") {
+			t.Errorf("expected error to contain 'url is required', got: %v", err)
+		}
+	})
+
+	t.Run("empty events slice is rejected", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
+		cfg.Webhooks = []config.WebhookConfig{
+			{
+				URL:    "https://example.com/webhook",
+				Events: []string{}, // empty
+			},
+		}
+		_, err := New(cfg)
+		if err == nil {
+			t.Fatal("expected error for empty webhook events, got nil")
+		}
+		if !strings.Contains(err.Error(), "events is required and must not be empty") {
+			t.Errorf("expected error to contain 'events is required', got: %v", err)
+		}
+	})
+
+	t.Run("no webhooks is valid (backward compat)", func(t *testing.T) {
+		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
+		// cfg.Webhooks is nil — must not error
+		_, err := New(cfg)
+		if err != nil {
+			t.Errorf("expected no error when webhooks absent, got: %v", err)
+		}
+	})
 }
 
 func TestCooldownManager(t *testing.T) {
