@@ -47,6 +47,16 @@ type Deployment struct {
 	TPM          int      // Rate limit (tokens per minute)
 }
 
+// DeploymentKey returns the stable string identity for this deployment.
+// Format: "provider:model:api_base" — stable across config reloads.
+// All downstream phases (BackoffManager, PoolBudgetTracker, sticky sessions) key on this string.
+// When api_base is empty, the trailing colon is still present: "provider:model:".
+// Note: usage_logs.deployment_key column exists in the schema but is populated in Phase 5/6,
+// not in this phase. This method is the contract; wiring to the DB column is deferred.
+func (d *Deployment) DeploymentKey() string {
+	return d.ProviderName + ":" + d.ActualModel + ":" + d.APIBase
+}
+
 // streamAdapter wraps a channel-based stream.
 type streamAdapter struct {
 	chunks <-chan *model.StreamChunk
