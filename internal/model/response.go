@@ -101,5 +101,6 @@ type StreamChunk struct {
 	Created           int64    `json:"created"`
 	Model             string   `json:"model"`
 	Choices           []Choice `json:"choices"`
+	Usage             *Usage   `json:"usage,omitempty"`
 	SystemFingerprint string   `json:"system_fingerprint,omitempty"`
 }
