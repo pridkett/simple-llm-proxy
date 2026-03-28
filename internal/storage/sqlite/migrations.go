@@ -145,6 +145,126 @@ func (s *Storage) migrate(ctx context.Context) error {
 		// Migration 13: Indexes for key lookup hot paths.
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_application_id ON api_keys(application_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash)`,
+
+		// Migrations 14-29: v1.1 schema additions
+
+		// Migration 14: Drop usage_logs to remove old column names (prompt_tokens, completion_tokens).
+		// v1.0 history is intentionally discarded — no production usage data exists yet.
+		`DROP TABLE IF EXISTS usage_logs`,
+
+		// Migration 15: Recreate usage_logs with renamed columns (input_tokens, output_tokens)
+		// and new columns (is_streaming, cache_read_tokens, cache_write_tokens, deployment_key).
+		`CREATE TABLE usage_logs (
+    id                 INTEGER  PRIMARY KEY AUTOINCREMENT,
+    request_id         TEXT     NOT NULL,
+    api_key_id         INTEGER,
+    model              TEXT     NOT NULL,
+    provider           TEXT     NOT NULL,
+    endpoint           TEXT     NOT NULL,
+    input_tokens       INTEGER  NOT NULL DEFAULT 0,
+    output_tokens      INTEGER  NOT NULL DEFAULT 0,
+    total_cost         REAL              DEFAULT 0,
+    status_code        INTEGER  NOT NULL,
+    latency_ms         INTEGER  NOT NULL,
+    request_time       DATETIME NOT NULL,
+    is_streaming       BOOLEAN  NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER  NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER  NOT NULL DEFAULT 0,
+    deployment_key     TEXT,
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+)`,
+
+		// Migration 16: Recreate usage_logs indexes (dropped with the table in migration 14).
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_request_time ON usage_logs(request_time)`,
+
+		// Migration 17
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_model ON usage_logs(model)`,
+
+		// Migration 18
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_api_key_id ON usage_logs(api_key_id)`,
+
+		// Migration 19: provider_pools — named pools with routing strategy and daily budget cap.
+		// Per SCHEMA-01. Rows populated by Phase 7 pool routing; table dormant until then.
+		`CREATE TABLE IF NOT EXISTS provider_pools (
+    id               INTEGER  PRIMARY KEY AUTOINCREMENT,
+    name             TEXT     NOT NULL UNIQUE,
+    strategy         TEXT     NOT NULL DEFAULT 'weighted-round-robin',
+    budget_cap_daily REAL,
+    created_at       DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 20: routing_rules — per-pool, per-model weight overrides.
+		// Per SCHEMA-02. UNIQUE(pool_name, model_name) enforces one weight entry per member.
+		`CREATE TABLE IF NOT EXISTS routing_rules (
+    id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+    pool_name  TEXT     NOT NULL,
+    model_name TEXT     NOT NULL,
+    weight     INTEGER  NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(pool_name, model_name)
+)`,
+
+		// Migration 21: webhook_subscriptions — UI-created webhooks only.
+		// Per SCHEMA-03. YAML-defined webhooks are held in memory and never written here.
+		`CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+    url        TEXT     NOT NULL,
+    events     TEXT     NOT NULL,
+    secret     TEXT,
+    enabled    BOOLEAN  NOT NULL DEFAULT TRUE,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 22: notification_events — routing event log, retained 30 days.
+		// Per SCHEMA-04. payload is a JSON blob (TEXT).
+		`CREATE TABLE IF NOT EXISTS notification_events (
+    id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT     NOT NULL,
+    payload    TEXT     NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 23: Index notification_events(created_at) for TTL cleanup queries.
+		`CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at)`,
+
+		// Migration 24: Index notification_events(event_type) for event-type fan-out queries.
+		`CREATE INDEX IF NOT EXISTS idx_notification_events_event_type ON notification_events(event_type)`,
+
+		// Migration 25: webhook_deliveries — delivery queue with retry tracking.
+		// Per SCHEMA-05. FKs to webhook_subscriptions and notification_events (parent tables created above).
+		`CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER  NOT NULL REFERENCES webhook_subscriptions(id),
+    event_id        INTEGER  NOT NULL REFERENCES notification_events(id),
+    attempt_count   INTEGER  NOT NULL DEFAULT 0,
+    last_attempt_at DATETIME,
+    status          TEXT     NOT NULL DEFAULT 'pending',
+    response_code   INTEGER,
+    created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 26: Index webhook_deliveries(subscription_id) for per-subscription delivery lookup.
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_subscription_id ON webhook_deliveries(subscription_id)`,
+
+		// Migration 27: pool_budget_state — per-pool daily spend accumulator.
+		// Per SCHEMA-07. reset_date is DATE string 'YYYY-MM-DD' (UTC). Reset handled by Phase 8.
+		`CREATE TABLE IF NOT EXISTS pool_budget_state (
+    pool_name   TEXT  PRIMARY KEY,
+    spend_today REAL  NOT NULL DEFAULT 0,
+    reset_date  DATE  NOT NULL
+)`,
+
+		// Migration 28: sticky_routing_sessions — client-to-deployment mapping for session affinity.
+		// Per SCHEMA-08. last_used_at indexed for expiry cleanup (sessions inactive >1 hour expire in Phase 7).
+		`CREATE TABLE IF NOT EXISTS sticky_routing_sessions (
+    session_key    TEXT     PRIMARY KEY,
+    pool_name      TEXT     NOT NULL,
+    deployment_key TEXT     NOT NULL,
+    last_used_at   DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 29: Index sticky_routing_sessions(last_used_at) for expiry cleanup.
+		`CREATE INDEX IF NOT EXISTS idx_sticky_routing_sessions_last_used_at ON sticky_routing_sessions(last_used_at)`,
 	}
 
 	for i, sql := range migrations {
