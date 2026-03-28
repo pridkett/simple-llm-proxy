@@ -155,6 +155,12 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, &provider.RateLimitError{
+			Provider:   p.Name(),
+			RetryAfter: provider.ParseRetryAfter(resp.Header.Get("Retry-After")),
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		var apiErr anthropicError
 		if err := json.Unmarshal(respBody, &apiErr); err == nil {
@@ -198,6 +204,14 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		return nil, fmt.Errorf("making request: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := provider.ParseRetryAfter(resp.Header.Get("Retry-After"))
+		resp.Body.Close()
+		return nil, &provider.RateLimitError{
+			Provider:   p.Name(),
+			RetryAfter: retryAfter,
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
