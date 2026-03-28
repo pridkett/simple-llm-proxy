@@ -9,6 +9,8 @@ type Config struct {
 	GeneralSettings GeneralSettings `yaml:"general_settings"`
 	LogSettings     LogSettings     `yaml:"log_settings"`
 	OIDCSettings    OIDCSettings    `yaml:"oidc_settings"`
+	ProviderPools   []ProviderPool  `yaml:"provider_pools"`
+	Webhooks        []WebhookConfig `yaml:"webhooks"`
 }
 
 // OIDCSettings configures the OIDC provider (PocketID).
@@ -60,6 +62,30 @@ type GeneralSettings struct {
 	MasterKey   string `yaml:"master_key"`
 	DatabaseURL string `yaml:"database_url"`
 	Port        int    `yaml:"port"`
+}
+
+// ProviderPool defines a named group of model deployments with shared routing strategy
+// and optional daily budget cap. Configured via the provider_pools: YAML section.
+type ProviderPool struct {
+	Name           string       `yaml:"name"`
+	Strategy       string       `yaml:"strategy"`         // weighted-round-robin | round-robin | shuffle; default: inherits router_settings
+	BudgetCapDaily float64      `yaml:"budget_cap_daily"` // 0 = unlimited
+	Members        []PoolMember `yaml:"members"`
+}
+
+// PoolMember is a model_list reference within a provider pool with an optional routing weight.
+type PoolMember struct {
+	ModelName string `yaml:"model_name"` // references a model_list entry by model_name
+	Weight    int    `yaml:"weight"`     // default: 1 when not specified
+}
+
+// WebhookConfig defines a YAML-configured outbound webhook.
+// YAML webhooks are held in memory only — never written to the webhook_subscriptions DB table.
+type WebhookConfig struct {
+	URL     string   `yaml:"url"`
+	Events  []string `yaml:"events"`
+	Secret  string   `yaml:"secret"` // supports os.environ/VAR_NAME expansion
+	Enabled bool     `yaml:"enabled"`
 }
 
 // Defaults returns a config with sensible defaults.
