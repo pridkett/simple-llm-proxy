@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -124,7 +125,7 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && resp.Usage != nil {
-		go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime)
+		go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime, false)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -149,7 +150,9 @@ func handleStreamingResponse(
 	}
 	defer stream.Close()
 
-	r.ReportSuccess(deployment)
+	// NOTE: r.ReportSuccess is NOT called here — it fires only after successful
+	// stream completion (in the io.EOF branch below).
+	// See ADR 006 D-01: calling here (at stream open) was the STREAM-01 bug.
 
 	// Set up SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -162,22 +165,40 @@ func handleStreamingResponse(
 		return fmt.Errorf("streaming not supported")
 	}
 
+	var streamUsage *model.Usage // accumulated from chunks that carry Usage (Anthropic message_delta)
+
 	for {
 		chunk, err := stream.Recv()
 		if err == io.EOF {
-			// Send [DONE] marker
+			// Stream completed successfully.
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
-			// Log the streaming request at stream completion (D-11)
-			// Note: streaming chunks may not carry usage data; log with nil usage guard
+
+			// STREAM-01: ReportSuccess fires here, after all chunks received.
+			r.ReportSuccess(deployment)
+
+			// STREAM-02: use token counts from stream; fall back to empty usage if none provided.
+			usage := streamUsage
+			if usage == nil {
+				usage = &model.Usage{}
+			}
 			if store != nil {
-				usage := &model.Usage{} // streaming usage not always available; cost = 0 for now
-				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime)
+				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
 			}
 			return nil
 		}
 		if err != nil {
+			// STREAM-04: client disconnect is not a provider failure.
+			// Return nil so the caller does NOT call ReportFailure.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
 			return err
+		}
+
+		// Accumulate usage from any chunk that carries it (Anthropic sends on message_delta).
+		if chunk != nil && chunk.Usage != nil {
+			streamUsage = chunk.Usage
 		}
 
 		data, err := json.Marshal(chunk)
@@ -193,7 +214,8 @@ func handleStreamingResponse(
 // logRequest writes the request log to storage and credits the spend accumulator.
 // Called asynchronously (via goroutine) after each successful request.
 // apiKeyID is nil when the request was authenticated via master key.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
+// isStreaming indicates whether this was a streaming or non-streaming request.
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -216,6 +238,8 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 		StatusCode:    status,
 		LatencyMS:     time.Since(startTime).Milliseconds(),
 		RequestTime:   startTime,
+		IsStreaming:   isStreaming,
+		DeploymentKey: deployment.DeploymentKey(),
 	}
 
 	store.LogRequest(ctx, log)
