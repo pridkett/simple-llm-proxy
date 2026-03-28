@@ -2,7 +2,11 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 )
@@ -55,6 +59,42 @@ type Deployment struct {
 // not in this phase. This method is the contract; wiring to the DB column is deferred.
 func (d *Deployment) DeploymentKey() string {
 	return d.ProviderName + ":" + d.ActualModel + ":" + d.APIBase
+}
+
+// RateLimitError is returned by providers when the upstream API responds with HTTP 429.
+// RetryAfter is the duration parsed from the Retry-After response header, or 0 if absent.
+// Callers (router, handler) check for this type with errors.As to apply backoff
+// rather than treating the response as a hard failure.
+type RateLimitError struct {
+	Provider   string
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string {
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("%s: rate limited, retry after %s", e.Provider, e.RetryAfter)
+	}
+	return fmt.Sprintf("%s: rate limited", e.Provider)
+}
+
+// ParseRetryAfter parses a Retry-After header value into a duration.
+// It handles both integer seconds (most common) and HTTP-date format.
+// Returns 0 if the header is absent or unparseable.
+func ParseRetryAfter(header string) time.Duration {
+	if header == "" {
+		return 0
+	}
+	// Try integer seconds first (most common)
+	if secs, err := strconv.Atoi(header); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	// Try HTTP-date format
+	if t, err := http.ParseTime(header); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // streamAdapter wraps a channel-based stream.
