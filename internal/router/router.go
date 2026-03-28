@@ -58,6 +58,32 @@ func New(cfg *config.Config) (*Router, error) {
 		r.deployments[mc.ModelName] = append(r.deployments[mc.ModelName], deployment)
 	}
 
+	// Validate provider_pools: all member model_names must exist in model_list.
+	// Per D-10: invalid references cause startup failure with a clear error.
+	knownModels := make(map[string]bool, len(cfg.ModelList))
+	for _, mc := range cfg.ModelList {
+		knownModels[mc.ModelName] = true
+	}
+	for _, pool := range cfg.ProviderPools {
+		for _, member := range pool.Members {
+			if !knownModels[member.ModelName] {
+				return nil, fmt.Errorf("provider_pools[%q].members: model_name %q not found in model_list",
+					pool.Name, member.ModelName)
+			}
+		}
+	}
+
+	// Validate webhook configs: url and events must be non-empty.
+	// Per D-11: invalid webhook configs cause startup failure.
+	for i, wh := range cfg.Webhooks {
+		if wh.URL == "" {
+			return nil, fmt.Errorf("webhooks[%d]: url is required", i)
+		}
+		if len(wh.Events) == 0 {
+			return nil, fmt.Errorf("webhooks[%d]: events is required and must not be empty", i)
+		}
+	}
+
 	return r, nil
 }
 
@@ -185,6 +211,28 @@ func (r *Router) Reload(cfg *config.Config) error {
 			TPM:          mc.TPM,
 		}
 		newDeployments[mc.ModelName] = append(newDeployments[mc.ModelName], deployment)
+	}
+
+	// Validate provider_pools and webhooks on reload (same rules as New()).
+	knownModels := make(map[string]bool, len(cfg.ModelList))
+	for _, mc := range cfg.ModelList {
+		knownModels[mc.ModelName] = true
+	}
+	for _, pool := range cfg.ProviderPools {
+		for _, member := range pool.Members {
+			if !knownModels[member.ModelName] {
+				return fmt.Errorf("provider_pools[%q].members: model_name %q not found in model_list",
+					pool.Name, member.ModelName)
+			}
+		}
+	}
+	for i, wh := range cfg.Webhooks {
+		if wh.URL == "" {
+			return fmt.Errorf("webhooks[%d]: url is required", i)
+		}
+		if len(wh.Events) == 0 {
+			return fmt.Errorf("webhooks[%d]: events is required and must not be empty", i)
+		}
 	}
 
 	var newStrategy Strategy
