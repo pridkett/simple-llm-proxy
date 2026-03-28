@@ -77,8 +77,9 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.Re
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT request_id, model, provider, endpoint,
-		       prompt_tokens, completion_tokens, total_cost,
-		       status_code, latency_ms, request_time
+		       input_tokens, output_tokens, total_cost,
+		       status_code, latency_ms, request_time,
+		       is_streaming, COALESCE(deployment_key, '')
 		FROM usage_logs
 		ORDER BY request_time DESC
 		LIMIT ? OFFSET ?
@@ -93,8 +94,9 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.Re
 		entry := &storage.RequestLog{}
 		if err := rows.Scan(
 			&entry.RequestID, &entry.Model, &entry.Provider, &entry.Endpoint,
-			&entry.PromptTokens, &entry.CompletionTokens, &entry.TotalCost,
+			&entry.InputTokens, &entry.OutputTokens, &entry.TotalCost,
 			&entry.StatusCode, &entry.LatencyMS, &entry.RequestTime,
+			&entry.IsStreaming, &entry.DeploymentKey,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning log: %w", err)
 		}
@@ -112,21 +114,24 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO usage_logs (
 			request_id, api_key_id, model, provider, endpoint,
-			prompt_tokens, completion_tokens, total_cost,
-			status_code, latency_ms, request_time
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			input_tokens, output_tokens, total_cost,
+			status_code, latency_ms, request_time,
+			is_streaming, deployment_key
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		log.RequestID,
 		log.APIKeyID,
 		log.Model,
 		log.Provider,
 		log.Endpoint,
-		log.PromptTokens,
-		log.CompletionTokens,
+		log.InputTokens,
+		log.OutputTokens,
 		log.TotalCost,
 		log.StatusCode,
 		log.LatencyMS,
 		log.RequestTime.UTC().Round(0),
+		log.IsStreaming,
+		log.DeploymentKey,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting log: %w", err)

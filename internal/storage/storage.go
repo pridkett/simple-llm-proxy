@@ -220,17 +220,19 @@ type CostOverride struct {
 
 // RequestLog represents a logged request.
 type RequestLog struct {
-	RequestID        string
-	APIKeyID         *int64  // nil when authenticated via master key
-	Model            string
-	Provider         string
-	Endpoint         string
-	PromptTokens     int
-	CompletionTokens int
-	TotalCost        float64
-	StatusCode       int
-	LatencyMS        int64
-	RequestTime      time.Time
+	RequestID     string
+	APIKeyID      *int64 // nil when authenticated via master key
+	Model         string
+	Provider      string
+	Endpoint      string
+	InputTokens   int
+	OutputTokens  int
+	TotalCost     float64
+	StatusCode    int
+	LatencyMS     int64
+	RequestTime   time.Time
+	IsStreaming   bool
+	DeploymentKey string
 }
 
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.

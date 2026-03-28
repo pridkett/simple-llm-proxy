@@ -131,17 +131,19 @@ func AdminReload(reloader *config.Reloader, r *router.Router) http.HandlerFunc {
 }
 
 type logEntry struct {
-	RequestID        string    `json:"request_id"`
-	Model            string    `json:"model"`
-	Provider         string    `json:"provider"`
-	Endpoint         string    `json:"endpoint"`
-	PromptTokens     int       `json:"prompt_tokens"`
-	CompletionTokens int       `json:"completion_tokens"`
-	TotalTokens      int       `json:"total_tokens"`
-	TotalCost        float64   `json:"total_cost"`
-	StatusCode       int       `json:"status_code"`
-	LatencyMS        int64     `json:"latency_ms"`
-	RequestTime      time.Time `json:"request_time"`
+	RequestID     string    `json:"request_id"`
+	Model         string    `json:"model"`
+	Provider      string    `json:"provider"`
+	Endpoint      string    `json:"endpoint"`
+	InputTokens   int       `json:"prompt_tokens"`    // JSON key kept for frontend compatibility
+	OutputTokens  int       `json:"completion_tokens"` // JSON key kept for frontend compatibility
+	TotalTokens   int       `json:"total_tokens"`
+	TotalCost     float64   `json:"total_cost"`
+	StatusCode    int       `json:"status_code"`
+	LatencyMS     int64     `json:"latency_ms"`
+	RequestTime   time.Time `json:"request_time"`
+	IsStreaming   bool      `json:"is_streaming"`
+	DeploymentKey string    `json:"deployment_key"`
 }
 
 type adminLogsResponse struct {
@@ -182,17 +184,19 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 		entries := make([]logEntry, 0, len(logs))
 		for _, l := range logs {
 			entries = append(entries, logEntry{
-				RequestID:        l.RequestID,
-				Model:            l.Model,
-				Provider:         l.Provider,
-				Endpoint:         l.Endpoint,
-				PromptTokens:     l.PromptTokens,
-				CompletionTokens: l.CompletionTokens,
-				TotalTokens:      l.PromptTokens + l.CompletionTokens,
-				TotalCost:        l.TotalCost,
-				StatusCode:       l.StatusCode,
-				LatencyMS:        l.LatencyMS,
-				RequestTime:      l.RequestTime,
+				RequestID:     l.RequestID,
+				Model:         l.Model,
+				Provider:      l.Provider,
+				Endpoint:      l.Endpoint,
+				InputTokens:   l.InputTokens,
+				OutputTokens:  l.OutputTokens,
+				TotalTokens:   l.InputTokens + l.OutputTokens,
+				TotalCost:     l.TotalCost,
+				StatusCode:    l.StatusCode,
+				LatencyMS:     l.LatencyMS,
+				RequestTime:   l.RequestTime,
+				IsStreaming:   l.IsStreaming,
+				DeploymentKey: l.DeploymentKey,
 			})
 		}
 		if entries == nil {

@@ -205,17 +205,17 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 	}
 
 	log := &storage.RequestLog{
-		RequestID:        fmt.Sprintf("%d", time.Now().UnixNano()),
-		APIKeyID:         apiKeyID,
-		Model:            deployment.ModelName,
-		Provider:         deployment.ProviderName,
-		Endpoint:         endpoint,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		TotalCost:        totalCost,
-		StatusCode:       status,
-		LatencyMS:        time.Since(startTime).Milliseconds(),
-		RequestTime:      startTime,
+		RequestID:     fmt.Sprintf("%d", time.Now().UnixNano()),
+		APIKeyID:      apiKeyID,
+		Model:         deployment.ModelName,
+		Provider:      deployment.ProviderName,
+		Endpoint:      endpoint,
+		InputTokens:   usage.PromptTokens,
+		OutputTokens:  usage.CompletionTokens,
+		TotalCost:     totalCost,
+		StatusCode:    status,
+		LatencyMS:     time.Since(startTime).Milliseconds(),
+		RequestTime:   startTime,
 	}
 
 	store.LogRequest(ctx, log)
