@@ -218,6 +218,8 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		reader := bufio.NewReader(resp.Body)
 		responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 
+		var inputTokens int // accumulated from message_start event
+
 		for {
 			line, err := reader.ReadString('\n')
 			if err != nil {
@@ -246,7 +248,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 				continue // Skip malformed events
 			}
 
-			chunk := p.translateStreamEvent(&event, responseID, req.Model)
+			chunk := p.translateStreamEvent(&event, responseID, req.Model, &inputTokens)
 			if chunk != nil {
 				select {
 				case chunks <- chunk:
@@ -357,7 +359,10 @@ func (p *Provider) translateResponse(resp *anthropicResponse, requestModel strin
 	}
 }
 
-func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string) *model.StreamChunk {
+// translateStreamEvent converts an Anthropic SSE event to an OpenAI StreamChunk.
+// inputTokens is a pointer to the accumulated input token count from message_start;
+// it is updated in-place when processing message_start and read when processing message_delta.
+func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string, inputTokens *int) *model.StreamChunk {
 	switch event.Type {
 	case "content_block_delta":
 		if event.Delta != nil && event.Delta.Text != "" {
@@ -377,6 +382,10 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 			}
 		}
 	case "message_start":
+		// Extract input token count for later use in message_delta.
+		if event.Message != nil && inputTokens != nil {
+			*inputTokens = event.Message.Usage.InputTokens
+		}
 		return &model.StreamChunk{
 			ID:      id,
 			Object:  "chat.completion.chunk",
@@ -393,6 +402,24 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 		}
 	case "message_delta":
 		if event.Delta != nil && event.Delta.StopReason != "" {
+			outputTokens := 0
+			if event.Usage != nil {
+				outputTokens = event.Usage.OutputTokens
+			}
+			// Populate Usage when token counts are available.
+			// input tokens were captured from the preceding message_start event.
+			var usage *model.Usage
+			in := 0
+			if inputTokens != nil {
+				in = *inputTokens
+			}
+			if outputTokens > 0 || in > 0 {
+				usage = &model.Usage{
+					PromptTokens:     in,
+					CompletionTokens: outputTokens,
+					TotalTokens:      in + outputTokens,
+				}
+			}
 			return &model.StreamChunk{
 				ID:      id,
 				Object:  "chat.completion.chunk",
@@ -405,6 +432,7 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 						FinishReason: mapStopReason(event.Delta.StopReason),
 					},
 				},
+				Usage: usage,
 			}
 		}
 	}
