@@ -126,6 +126,30 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	// Process provider_pools
+	if pools, ok := raw["provider_pools"].([]any); ok {
+		cfg.ProviderPools = make([]ProviderPool, 0, len(pools))
+		for i, item := range pools {
+			pool, err := parseProviderPool(item)
+			if err != nil {
+				return nil, fmt.Errorf("parsing provider_pools[%d]: %w", i, err)
+			}
+			cfg.ProviderPools = append(cfg.ProviderPools, pool)
+		}
+	}
+
+	// Process webhooks
+	if webhooks, ok := raw["webhooks"].([]any); ok {
+		cfg.Webhooks = make([]WebhookConfig, 0, len(webhooks))
+		for i, item := range webhooks {
+			wh, err := parseWebhookConfig(item)
+			if err != nil {
+				return nil, fmt.Errorf("parsing webhooks[%d]: %w", i, err)
+			}
+			cfg.Webhooks = append(cfg.Webhooks, wh)
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -163,6 +187,83 @@ func parseModelConfig(item any) (ModelConfig, error) {
 	}
 
 	return mc, nil
+}
+
+func parseProviderPool(item any) (ProviderPool, error) {
+	m, ok := item.(map[string]any)
+	if !ok {
+		return ProviderPool{}, fmt.Errorf("expected map, got %T", item)
+	}
+
+	pool := ProviderPool{}
+
+	if v, ok := m["name"].(string); ok {
+		pool.Name = v
+	} else {
+		return pool, fmt.Errorf("name is required")
+	}
+
+	if v, ok := m["strategy"].(string); ok {
+		pool.Strategy = v
+	}
+
+	if v, ok := m["budget_cap_daily"].(float64); ok {
+		pool.BudgetCapDaily = v
+	}
+
+	if members, ok := m["members"].([]any); ok {
+		pool.Members = make([]PoolMember, 0, len(members))
+		for i, memberItem := range members {
+			mm, ok := memberItem.(map[string]any)
+			if !ok {
+				return pool, fmt.Errorf("members[%d]: expected map, got %T", i, memberItem)
+			}
+			member := PoolMember{Weight: 1} // default weight per D-07 discretion
+			if v, ok := mm["model_name"].(string); ok {
+				member.ModelName = v
+			} else {
+				return pool, fmt.Errorf("members[%d]: model_name is required", i)
+			}
+			if v, ok := mm["weight"].(int); ok {
+				member.Weight = v
+			}
+			pool.Members = append(pool.Members, member)
+		}
+	}
+
+	return pool, nil
+}
+
+func parseWebhookConfig(item any) (WebhookConfig, error) {
+	m, ok := item.(map[string]any)
+	if !ok {
+		return WebhookConfig{}, fmt.Errorf("expected map, got %T", item)
+	}
+
+	wh := WebhookConfig{}
+
+	if v, ok := m["url"].(string); ok {
+		wh.URL = v
+	}
+
+	if events, ok := m["events"].([]any); ok {
+		wh.Events = make([]string, 0, len(events))
+		for _, e := range events {
+			if s, ok := e.(string); ok {
+				wh.Events = append(wh.Events, s)
+			}
+		}
+	}
+
+	if v, ok := m["secret"].(string); ok {
+		wh.Secret = expandEnvVar(v) // D-08: apply os.environ/VAR expansion to secret
+	}
+
+	if v, ok := m["enabled"].(bool); ok {
+		wh.Enabled = v
+	}
+
+	return wh, nil
 }
 
 // expandEnvVar expands os.environ/VAR_NAME patterns to actual values.

@@ -149,3 +149,152 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("Expected default port 8080, got %d", cfg.GeneralSettings.Port)
 	}
 }
+
+func TestParseProviderPools(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gpt-4-primary
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-a
+  - model_name: gpt-4-fallback
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-b
+
+provider_pools:
+  - name: gpt-4
+    strategy: weighted-round-robin
+    budget_cap_daily: 50.00
+    members:
+      - model_name: gpt-4-primary
+        weight: 80
+      - model_name: gpt-4-fallback
+        weight: 20
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(cfg.ProviderPools) != 1 {
+		t.Fatalf("expected 1 pool, got %d", len(cfg.ProviderPools))
+	}
+
+	pool := cfg.ProviderPools[0]
+	if pool.Name != "gpt-4" {
+		t.Errorf("expected pool name 'gpt-4', got %q", pool.Name)
+	}
+	if pool.Strategy != "weighted-round-robin" {
+		t.Errorf("expected strategy 'weighted-round-robin', got %q", pool.Strategy)
+	}
+	if pool.BudgetCapDaily != 50.00 {
+		t.Errorf("expected BudgetCapDaily 50.00, got %f", pool.BudgetCapDaily)
+	}
+	if len(pool.Members) != 2 {
+		t.Fatalf("expected 2 members, got %d", len(pool.Members))
+	}
+	if pool.Members[0].ModelName != "gpt-4-primary" {
+		t.Errorf("expected first member 'gpt-4-primary', got %q", pool.Members[0].ModelName)
+	}
+	if pool.Members[0].Weight != 80 {
+		t.Errorf("expected first member weight 80, got %d", pool.Members[0].Weight)
+	}
+	if pool.Members[1].Weight != 20 {
+		t.Errorf("expected second member weight 20, got %d", pool.Members[1].Weight)
+	}
+}
+
+func TestParseProviderPoolsAbsent(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-a
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if cfg.ProviderPools != nil {
+		t.Errorf("expected nil ProviderPools when section absent, got %v", cfg.ProviderPools)
+	}
+}
+
+func TestParsePoolMemberDefaultWeight(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gpt-4-primary
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-a
+
+provider_pools:
+  - name: gpt-4
+    members:
+      - model_name: gpt-4-primary
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(cfg.ProviderPools) != 1 {
+		t.Fatalf("expected 1 pool, got %d", len(cfg.ProviderPools))
+	}
+	if cfg.ProviderPools[0].Members[0].Weight != 1 {
+		t.Errorf("expected default weight 1, got %d", cfg.ProviderPools[0].Members[0].Weight)
+	}
+}
+
+func TestParseWebhooks(t *testing.T) {
+	os.Setenv("TEST_WEBHOOK_SECRET", "test-secret-value")
+	defer os.Unsetenv("TEST_WEBHOOK_SECRET")
+
+	yaml := `
+webhooks:
+  - url: https://example.com/webhook
+    events: [budget_exhausted, provider_failover]
+    secret: os.environ/TEST_WEBHOOK_SECRET
+    enabled: true
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(cfg.Webhooks) != 1 {
+		t.Fatalf("expected 1 webhook, got %d", len(cfg.Webhooks))
+	}
+
+	wh := cfg.Webhooks[0]
+	if wh.URL != "https://example.com/webhook" {
+		t.Errorf("expected URL 'https://example.com/webhook', got %q", wh.URL)
+	}
+	if len(wh.Events) != 2 {
+		t.Errorf("expected 2 events, got %d", len(wh.Events))
+	}
+	if wh.Secret != "test-secret-value" {
+		t.Errorf("expected secret 'test-secret-value' (expanded), got %q", wh.Secret)
+	}
+	if !wh.Enabled {
+		t.Errorf("expected enabled=true")
+	}
+}
+
+func TestParseWebhooksAbsent(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-a
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if cfg.Webhooks != nil {
+		t.Errorf("expected nil Webhooks when section absent, got %v", cfg.Webhooks)
+	}
+}
