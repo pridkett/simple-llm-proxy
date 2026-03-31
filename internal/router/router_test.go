@@ -27,7 +27,7 @@ func (m *mockProvider) Embeddings(_ context.Context, _ *model.EmbeddingsRequest)
 func (m *mockProvider) SupportsEmbeddings() bool { return false }
 
 func init() {
-	provider.Register("mock", func(apiKey, apiBase string) provider.Provider {
+	provider.Register("mock", func(opts provider.ProviderOptions) provider.Provider {
 		return &mockProvider{name: "mock"}
 	})
 }

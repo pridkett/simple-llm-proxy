@@ -61,6 +61,25 @@ func (d *Deployment) DeploymentKey() string {
 	return d.ProviderName + ":" + d.ActualModel + ":" + d.APIBase
 }
 
+// ProviderOptions configures a provider instance.
+// Passed through Factory to provider constructors.
+type ProviderOptions struct {
+	APIKey       string
+	APIBase      string
+	ExtraHeaders map[string]string
+
+	// Provider-specific options parsed from config extra_params.
+	// Gemini safety settings, MiniMax XML toggle, etc.
+	SafetySettings []SafetySetting // Gemini only
+	XMLToolCalls   *bool           // MiniMax: nil = default (enabled), non-nil = explicit
+}
+
+// SafetySetting configures a Gemini safety threshold.
+type SafetySetting struct {
+	Category  string // e.g., "HARM_CATEGORY_HARASSMENT"
+	Threshold string // e.g., "BLOCK_NONE"
+}
+
 // RateLimitError is returned by providers when the upstream API responds with HTTP 429.
 // RetryAfter is the duration parsed from the Retry-After response header, or 0 if absent.
 // Callers (router, handler) check for this type with errors.As to apply backoff
