@@ -18,6 +18,8 @@ type Router struct {
 	cooldown    *CooldownManager
 	backoff     *BackoffManager
 	settings    config.RouterSettings
+	pools       map[string]*Pool // pool name -> Pool
+	modelToPool map[string]*Pool // model name -> Pool (for Route() lookup)
 }
 
 // New creates a new router from config.
@@ -85,6 +87,9 @@ func New(cfg *config.Config) (*Router, error) {
 			return nil, fmt.Errorf("webhooks[%d]: events is required and must not be empty", i)
 		}
 	}
+
+	// Build pools from provider_pools config.
+	r.pools, r.modelToPool = buildPools(cfg.ProviderPools, r.deployments, r.strategy)
 
 	return r, nil
 }
@@ -253,11 +258,16 @@ func (r *Router) Reload(cfg *config.Config) error {
 		newStrategy = NewShuffle()
 	}
 
+	// Build pools from provider_pools config.
+	newPools, newModelToPool := buildPools(cfg.ProviderPools, newDeployments, newStrategy)
+
 	r.mu.Lock()
 	r.deployments = newDeployments
 	r.settings = cfg.RouterSettings
 	r.strategy = newStrategy
 	r.cooldown = NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails)
+	r.pools = newPools
+	r.modelToPool = newModelToPool
 	r.mu.Unlock()
 
 	return nil
@@ -305,4 +315,105 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 		return result[i].ModelName < result[j].ModelName
 	})
 	return result
+}
+
+// buildPools constructs Pool instances from config ProviderPools and the
+// existing deployments map. Returns the pools map and modelToPool map.
+func buildPools(
+	poolConfigs []config.ProviderPool,
+	deployments map[string][]*provider.Deployment,
+	globalStrategy Strategy,
+) (map[string]*Pool, map[string]*Pool) {
+	pools := make(map[string]*Pool, len(poolConfigs))
+	modelToPool := make(map[string]*Pool)
+
+	for _, pc := range poolConfigs {
+		// Collect member deployments and build weights map.
+		var members []*provider.Deployment
+		weights := make(map[string]int)
+
+		for _, member := range pc.Members {
+			deps, ok := deployments[member.ModelName]
+			if !ok {
+				continue // validated earlier in New()/Reload()
+			}
+			for _, d := range deps {
+				members = append(members, d)
+				w := member.Weight
+				if w <= 0 {
+					w = 1
+				}
+				weights[d.DeploymentKey()] = w
+			}
+		}
+
+		// Build strategy based on pool config.
+		var strat Strategy
+		switch pc.Strategy {
+		case "weighted-round-robin":
+			strat = NewWeightedRoundRobin(weights)
+		case "round-robin":
+			strat = NewRoundRobin()
+		default:
+			// Empty or "shuffle" or any other value: use global default strategy.
+			strat = globalStrategy
+		}
+
+		pool := &Pool{
+			Name:     pc.Name,
+			Strategy: strat,
+			Members:  members,
+			Weights:  weights,
+		}
+
+		// Set ModelName from first member (convention for pool identity).
+		if len(pc.Members) > 0 {
+			pool.ModelName = pc.Members[0].ModelName
+		}
+
+		pools[pc.Name] = pool
+
+		// Map all unique member model names to this pool.
+		for _, member := range pc.Members {
+			modelToPool[member.ModelName] = pool
+		}
+	}
+
+	return pools, modelToPool
+}
+
+// GetPool returns the pool for a given pool name, or nil if not found.
+func (r *Router) GetPool(name string) *Pool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.pools[name]
+}
+
+// GetPoolForModel returns the pool associated with a model name, or nil.
+func (r *Router) GetPoolForModel(modelName string) *Pool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.modelToPool[modelName]
+}
+
+// Pools returns a snapshot of all pools (for testing/introspection).
+func (r *Router) Pools() map[string]*Pool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cp := make(map[string]*Pool, len(r.pools))
+	for k, v := range r.pools {
+		cp[k] = v
+	}
+	return cp
+}
+
+// ModelToPool returns a snapshot of the model-to-pool mapping (for testing/introspection).
+func (r *Router) ModelToPool() map[string]*Pool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cp := make(map[string]*Pool, len(r.modelToPool))
+	for k, v := range r.modelToPool {
+		cp[k] = v
+	}
+	return cp
 }
