@@ -41,7 +41,11 @@ func New(cfg *config.Config) (*Router, error) {
 	for _, mc := range cfg.ModelList {
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
 
-		prov, err := provider.Get(parsed.Provider, mc.LiteLLMParams.APIKey, mc.LiteLLMParams.APIBase)
+		opts := provider.ProviderOptions{
+			APIKey:  mc.LiteLLMParams.APIKey,
+			APIBase: mc.LiteLLMParams.APIBase,
+		}
+		prov, err := provider.Get(parsed.Provider, opts)
 		if err != nil {
 			return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
 		}
@@ -206,7 +210,11 @@ func (r *Router) Reload(cfg *config.Config) error {
 	newDeployments := make(map[string][]*provider.Deployment)
 	for _, mc := range cfg.ModelList {
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
-		prov, err := provider.Get(parsed.Provider, mc.LiteLLMParams.APIKey, mc.LiteLLMParams.APIBase)
+		opts := provider.ProviderOptions{
+			APIKey:  mc.LiteLLMParams.APIKey,
+			APIBase: mc.LiteLLMParams.APIBase,
+		}
+		prov, err := provider.Get(parsed.Provider, opts)
 		if err != nil {
 			return fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
 		}

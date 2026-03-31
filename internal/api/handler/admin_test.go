@@ -35,7 +35,7 @@ func init() {
 	// Register mock providers so handler tests can create routers with real config.
 	for _, name := range []string{"openai", "anthropic"} {
 		n := name
-		provider.Register(n, func(apiKey, apiBase string) provider.Provider {
+		provider.Register(n, func(opts provider.ProviderOptions) provider.Provider {
 			return &testProvider{name: n}
 		})
 	}
