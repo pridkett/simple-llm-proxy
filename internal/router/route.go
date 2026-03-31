@@ -29,6 +29,7 @@ type RouteResult struct {
 	DeploymentsTried []*provider.Deployment
 	FailoverReasons  []FailoverReason
 	Error            error
+	PoolName         string // The pool that served the request; empty for legacy path
 }
 
 // RouteCallback is invoked by Route() for each deployment attempt.
@@ -58,7 +59,50 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 	r.mu.RUnlock()
 
 	if hasPool {
-		return r.routePool(ctx, pool, stickyKey, cb, result)
+		result = r.routePool(ctx, pool, stickyKey, cb, result)
+		if result.Error == nil {
+			return result
+		}
+
+		// If budget exhausted, try other pools that serve this model (BUDGET-03).
+		if r.budget != nil && !r.budget.HasBudget(pool.Name) {
+			r.mu.RLock()
+			altPools := make([]*Pool, 0)
+			for _, p := range r.pools {
+				if p == pool {
+					continue
+				}
+				for _, m := range p.Members {
+					if m.ModelName == modelName {
+						altPools = append(altPools, p)
+						break
+					}
+				}
+			}
+			r.mu.RUnlock()
+
+			for _, altPool := range altPools {
+				altResult := &RouteResult{
+					FailoverReasons: result.FailoverReasons, // carry forward
+				}
+				altResult = r.routePool(ctx, altPool, stickyKey, cb, altResult)
+				if altResult.Error == nil {
+					return altResult
+				}
+				// Merge failover reasons from failed attempt.
+				result.FailoverReasons = altResult.FailoverReasons
+				result.Error = altResult.Error
+			}
+		}
+
+		// All pools exhausted — check if budget was the reason.
+		for _, reason := range result.FailoverReasons {
+			if reason == FailoverBudgetExhausted {
+				result.Error = fmt.Errorf("budget exhausted for all available pools serving model %q", modelName)
+				return result
+			}
+		}
+		return result
 	}
 	return r.routeLegacy(ctx, modelName, cb, result)
 }
@@ -68,6 +112,17 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 // If stickyKey is non-empty and a cached mapping exists, the sticky deployment
 // is tried first. On success, the sticky mapping is updated (or created).
 func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb RouteCallback, result *RouteResult) *RouteResult {
+	// Set pool name on result for handler budget crediting.
+	result.PoolName = pool.Name
+
+	// Budget check: if pool is exhausted, report and return immediately.
+	// The caller (Route()) may try other pools for the same model.
+	if r.budget != nil && !r.budget.HasBudget(pool.Name) {
+		result.FailoverReasons = append(result.FailoverReasons, FailoverBudgetExhausted)
+		result.Error = fmt.Errorf("pool %q daily budget exhausted", pool.Name)
+		return result
+	}
+
 	// Build healthy member list: filter members not in cooldown and not in backoff.
 	healthy := make([]*provider.Deployment, 0, len(pool.Members))
 	for _, d := range pool.Members {

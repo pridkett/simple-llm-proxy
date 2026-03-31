@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func makeRouterWithPool(poolName string, deployments []*provider.Deployment) *Ro
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(nil),
+		budget:      NewPoolBudgetManager(),
 	}
 
 	pool := &Pool{
@@ -347,5 +349,222 @@ func TestRoute_StickySessionNoKeySkips(t *testing.T) {
 	got := r.sticky.Get("", "gpt-4-pool")
 	if got != "" {
 		t.Errorf("expected empty sticky cache for empty key, got %q", got)
+	}
+}
+
+// makeRouterWithPoolAndBudget creates a Router with a pool and a PoolBudgetManager
+// that has the given cap set. Used by budget-related route tests.
+func makeRouterWithPoolAndBudget(poolName string, deployments []*provider.Deployment, budgetCap float64) *Router {
+	r := makeRouterWithPool(poolName, deployments)
+	r.budget = NewPoolBudgetManager()
+	r.budget.SetCaps([]config.ProviderPool{
+		{Name: poolName, BudgetCapDaily: budgetCap},
+	})
+	return r
+}
+
+func TestRoute_PoolBudgetExhausted(t *testing.T) {
+	d1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	d2 := makeDeployment("gpt-4", "anthropic", "claude-3")
+	r := makeRouterWithPoolAndBudget("gpt-4-pool", []*provider.Deployment{d1, d2}, 10.0)
+
+	// Credit beyond the cap to exhaust the budget.
+	r.budget.Credit("gpt-4-pool", 15.0)
+
+	callCount := 0
+	cb := func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+		callCount++
+		return &model.ChatCompletionResponse{ID: "resp"}, nil, nil
+	}
+
+	result := r.Route(context.Background(), "gpt-4", "", cb)
+
+	if result.Error == nil {
+		t.Fatal("expected error for budget-exhausted pool")
+	}
+	if callCount != 0 {
+		t.Errorf("expected callback NOT called (budget check is pre-request), got %d calls", callCount)
+	}
+
+	foundBudgetReason := false
+	for _, reason := range result.FailoverReasons {
+		if reason == FailoverBudgetExhausted {
+			foundBudgetReason = true
+			break
+		}
+	}
+	if !foundBudgetReason {
+		t.Error("expected FailoverBudgetExhausted in FailoverReasons")
+	}
+}
+
+func TestRoute_PoolBudgetFailover(t *testing.T) {
+	// Two pools, each with one deployment, both serving the same model name.
+	d1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	d2 := makeDeployment("gpt-4", "anthropic", "claude-3")
+
+	r := &Router{
+		deployments: make(map[string][]*provider.Deployment),
+		settings: config.RouterSettings{
+			RoutingStrategy: "simple-shuffle",
+			NumRetries:      2,
+			AllowedFails:    3,
+			CooldownTime:    30 * time.Second,
+		},
+		strategy:    NewRoundRobin(),
+		cooldown:    NewCooldownManager(30*time.Second, 3),
+		backoff:     NewBackoffManager(),
+		pools:       make(map[string]*Pool),
+		modelToPool: make(map[string]*Pool),
+		sticky:      NewStickySessionManager(nil),
+		budget:      NewPoolBudgetManager(),
+	}
+
+	pool1 := &Pool{
+		Name:     "pool-primary",
+		Strategy: NewRoundRobin(),
+		Members:  []*provider.Deployment{d1},
+	}
+	pool2 := &Pool{
+		Name:     "pool-fallback",
+		Strategy: NewRoundRobin(),
+		Members:  []*provider.Deployment{d2},
+	}
+
+	r.pools["pool-primary"] = pool1
+	r.pools["pool-fallback"] = pool2
+	// Map model name to the primary pool (Route() looks up primary first).
+	r.modelToPool["gpt-4"] = pool1
+	r.deployments["gpt-4"] = []*provider.Deployment{d1, d2}
+
+	// Set budgets: primary exhausted, fallback has budget.
+	r.budget.SetCaps([]config.ProviderPool{
+		{Name: "pool-primary", BudgetCapDaily: 10.0},
+		{Name: "pool-fallback", BudgetCapDaily: 100.0},
+	})
+	r.budget.Credit("pool-primary", 15.0) // exceed cap
+
+	cb := func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+		return &model.ChatCompletionResponse{ID: "resp-fallback"}, nil, nil
+	}
+
+	result := r.Route(context.Background(), "gpt-4", "", cb)
+
+	if result.Error != nil {
+		t.Fatalf("expected no error (failover to pool-fallback), got: %v", result.Error)
+	}
+	if result.DeploymentUsed != d2 {
+		t.Errorf("expected deployment from pool-fallback, got %s", result.DeploymentUsed.ProviderName)
+	}
+	if result.PoolName != "pool-fallback" {
+		t.Errorf("expected PoolName=pool-fallback, got %q", result.PoolName)
+	}
+
+	// Verify budget_exhausted reason was recorded for the primary pool.
+	foundBudgetReason := false
+	for _, reason := range result.FailoverReasons {
+		if reason == FailoverBudgetExhausted {
+			foundBudgetReason = true
+			break
+		}
+	}
+	if !foundBudgetReason {
+		t.Error("expected FailoverBudgetExhausted in FailoverReasons from primary pool")
+	}
+}
+
+func TestRoute_AllPoolsBudgetExhausted(t *testing.T) {
+	d1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	d2 := makeDeployment("gpt-4", "anthropic", "claude-3")
+
+	r := &Router{
+		deployments: make(map[string][]*provider.Deployment),
+		settings: config.RouterSettings{
+			RoutingStrategy: "simple-shuffle",
+			NumRetries:      2,
+			AllowedFails:    3,
+			CooldownTime:    30 * time.Second,
+		},
+		strategy:    NewRoundRobin(),
+		cooldown:    NewCooldownManager(30*time.Second, 3),
+		backoff:     NewBackoffManager(),
+		pools:       make(map[string]*Pool),
+		modelToPool: make(map[string]*Pool),
+		sticky:      NewStickySessionManager(nil),
+		budget:      NewPoolBudgetManager(),
+	}
+
+	pool1 := &Pool{Name: "pool-a", Strategy: NewRoundRobin(), Members: []*provider.Deployment{d1}}
+	pool2 := &Pool{Name: "pool-b", Strategy: NewRoundRobin(), Members: []*provider.Deployment{d2}}
+
+	r.pools["pool-a"] = pool1
+	r.pools["pool-b"] = pool2
+	r.modelToPool["gpt-4"] = pool1
+	r.deployments["gpt-4"] = []*provider.Deployment{d1, d2}
+
+	// Exhaust both pools.
+	r.budget.SetCaps([]config.ProviderPool{
+		{Name: "pool-a", BudgetCapDaily: 10.0},
+		{Name: "pool-b", BudgetCapDaily: 10.0},
+	})
+	r.budget.Credit("pool-a", 15.0)
+	r.budget.Credit("pool-b", 15.0)
+
+	callCount := 0
+	cb := func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+		callCount++
+		return &model.ChatCompletionResponse{ID: "should-not-reach"}, nil, nil
+	}
+
+	result := r.Route(context.Background(), "gpt-4", "", cb)
+
+	if result.Error == nil {
+		t.Fatal("expected error when all pools budget-exhausted")
+	}
+	if callCount != 0 {
+		t.Errorf("expected callback NOT called, got %d calls", callCount)
+	}
+	if !strings.Contains(result.Error.Error(), "budget exhausted") {
+		t.Errorf("expected error message to contain 'budget exhausted', got: %v", result.Error)
+	}
+}
+
+func TestRoute_BudgetUnlimitedWhenNoCap(t *testing.T) {
+	d1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	// Cap = 0 means unlimited.
+	r := makeRouterWithPoolAndBudget("gpt-4-pool", []*provider.Deployment{d1}, 0)
+
+	// Credit a large amount — should still have budget.
+	r.budget.Credit("gpt-4-pool", 999999.0)
+
+	cb := func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+		return &model.ChatCompletionResponse{ID: "unlimited"}, nil, nil
+	}
+
+	result := r.Route(context.Background(), "gpt-4", "", cb)
+
+	if result.Error != nil {
+		t.Fatalf("expected no error with unlimited budget, got: %v", result.Error)
+	}
+	if result.Response == nil || result.Response.ID != "unlimited" {
+		t.Error("expected successful response")
+	}
+}
+
+func TestRoute_PoolNameOnRouteResult(t *testing.T) {
+	d1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	r := makeRouterWithPoolAndBudget("my-pool", []*provider.Deployment{d1}, 100.0)
+
+	cb := func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+		return &model.ChatCompletionResponse{ID: "resp"}, nil, nil
+	}
+
+	result := r.Route(context.Background(), "gpt-4", "", cb)
+
+	if result.Error != nil {
+		t.Fatalf("unexpected error: %v", result.Error)
+	}
+	if result.PoolName != "my-pool" {
+		t.Errorf("expected PoolName='my-pool', got %q", result.PoolName)
 	}
 }

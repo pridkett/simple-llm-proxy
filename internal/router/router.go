@@ -23,6 +23,7 @@ type Router struct {
 	pools       map[string]*Pool // pool name -> Pool
 	modelToPool map[string]*Pool // model name -> Pool (for Route() lookup)
 	sticky      *StickySessionManager
+	budget      *PoolBudgetManager
 }
 
 // New creates a new router from config. If store is non-nil, sticky session
@@ -36,6 +37,7 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(store),
+		budget:      NewPoolBudgetManager(),
 	}
 
 	// Initialize strategy
@@ -98,6 +100,9 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 
 	// Build pools from provider_pools config.
 	r.pools, r.modelToPool = buildPools(cfg.ProviderPools, r.deployments, r.strategy)
+
+	// Load budget caps from provider_pools config (0 = unlimited).
+	r.budget.SetCaps(cfg.ProviderPools)
 
 	return r, nil
 }
@@ -279,6 +284,10 @@ func (r *Router) Reload(cfg *config.Config) error {
 	r.modelToPool = newModelToPool
 	r.mu.Unlock()
 
+	// Update budget caps from new config. Do NOT create a new PoolBudgetManager —
+	// the existing one must persist accumulated spend across reloads.
+	r.budget.SetCaps(cfg.ProviderPools)
+
 	return nil
 }
 
@@ -296,6 +305,11 @@ func (r *Router) Close() {
 	if r.sticky != nil {
 		r.sticky.Stop()
 	}
+}
+
+// BudgetManager returns the pool budget manager for handler-level spend crediting.
+func (r *Router) BudgetManager() *PoolBudgetManager {
+	return r.budget
 }
 
 // GetStatus returns the current status of all model deployments.
