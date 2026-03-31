@@ -147,6 +147,15 @@ type Storage interface {
 	// Flush rows (model='_flush') are excluded. Only spend attributed to active keys is included.
 	// Days with zero spend are not returned — the caller fills gaps if needed.
 	GetDailySpend(ctx context.Context, from, to time.Time, filters SpendFilters) ([]DailySpendRow, error)
+
+	// --- Pool Budget State ---
+
+	// GetPoolBudgetState returns all pool budget rows. Used at startup to initialize PoolBudgetManager.
+	GetPoolBudgetState(ctx context.Context) ([]PoolBudgetRow, error)
+
+	// UpsertPoolBudgetState creates or updates the budget state for a pool.
+	// Uses INSERT OR REPLACE on pool_name primary key.
+	UpsertPoolBudgetState(ctx context.Context, poolName string, spendToday float64, resetDate string) error
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -271,4 +280,12 @@ type SpendRow struct {
 	TotalSpend float64  `json:"total_spend"`
 	MaxBudget  *float64 `json:"max_budget"`  // nil = unlimited (hard cap)
 	SoftBudget *float64 `json:"soft_budget"` // nil = no soft alert threshold
+}
+
+// PoolBudgetRow represents a row from the pool_budget_state table.
+// Used to persist and restore per-pool daily spend accumulators.
+type PoolBudgetRow struct {
+	PoolName   string  `json:"pool_name"`
+	SpendToday float64 `json:"spend_today"`
+	ResetDate  string  `json:"reset_date"` // "2006-01-02" UTC
 }
