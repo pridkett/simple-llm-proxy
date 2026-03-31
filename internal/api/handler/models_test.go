@@ -120,6 +120,12 @@ func (m *mockStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage
 func (m *mockStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (m *mockStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (m *mockStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // Sticky session stubs — required by interface, not exercised by handler tests.
 func (m *mockStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {

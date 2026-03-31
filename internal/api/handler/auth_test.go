@@ -103,6 +103,12 @@ func (m *mockAuthStore) GetSpendSummary(_ context.Context, _, _ time.Time, _ sto
 }
 func (m *mockAuthStore) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockAuthStore) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
+func (m *mockAuthStore) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // Sticky session stubs — required by interface, not exercised by auth tests.
 func (m *mockAuthStore) GetStickySession(_ context.Context, _, _ string) (string, error) {

@@ -189,6 +189,12 @@ func (s *captureStorage) DeleteExpiredStickySessions(_ context.Context, _ time.T
 func (s *captureStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
 	return nil
 }
+func (s *captureStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function
