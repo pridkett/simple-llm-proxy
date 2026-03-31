@@ -179,6 +179,16 @@ func (s *captureStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ stor
 func (s *captureStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (s *captureStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (s *captureStorage) UpsertStickySession(_ context.Context, _, _, _ string) error { return nil }
+func (s *captureStorage) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function

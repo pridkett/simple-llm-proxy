@@ -121,6 +121,18 @@ func (m *mockStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage
 	return nil, nil
 }
 
+// Sticky session stubs — required by interface, not exercised by handler tests.
+func (m *mockStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockStorage) UpsertStickySession(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockStorage) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
+
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
 	t.Helper()

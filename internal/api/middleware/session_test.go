@@ -129,6 +129,20 @@ func (m *mockSessionStorage) GetSpendSummary(_ context.Context, _, _ time.Time, 
 func (m *mockSessionStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockSessionStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
 
+// Sticky session stubs — required by interface, not exercised by session tests.
+func (m *mockSessionStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockSessionStorage) UpsertStickySession(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (m *mockSessionStorage) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockSessionStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
+
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {
 	sm := scs.New()

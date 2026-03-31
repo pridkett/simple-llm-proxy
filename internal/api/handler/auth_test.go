@@ -104,6 +104,18 @@ func (m *mockAuthStore) GetSpendSummary(_ context.Context, _, _ time.Time, _ sto
 func (m *mockAuthStore) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockAuthStore) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
 
+// Sticky session stubs — required by interface, not exercised by auth tests.
+func (m *mockAuthStore) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockAuthStore) UpsertStickySession(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockAuthStore) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockAuthStore) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
+
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
 	sm := scs.New()
