@@ -631,7 +631,7 @@ func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
 		usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5}
 
 		// Call logRequest with isStreaming=false (simulating non-streaming path)
-		logRequest(store, nil, nil, nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false)
+		logRequest(store, nil, nil, nil, "", nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false)
 
 		// Wait for the log to be written (logRequest may run in goroutine in production,
 		// but here we call it synchronously for test determinism).

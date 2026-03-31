@@ -84,6 +84,13 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		})
 
 		if result.Error != nil {
+			// Check for budget exhaustion specifically (BUDGET-04).
+			for _, reason := range result.FailoverReasons {
+				if reason == router.FailoverBudgetExhausted {
+					model.WriteError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
+					return
+				}
+			}
 			if result.DeploymentUsed == nil && len(result.DeploymentsTried) == 0 {
 				model.WriteError(w, model.ErrModelNotFound(chatReq.Model))
 			} else {
@@ -92,10 +99,12 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			return
 		}
 
+		budget := r.BudgetManager()
+
 		if chatReq.Stream {
-			handleStreamingResponse(ctx, w, result, r, store, sa, cm, apiKeyID, startTime)
+			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime)
 		} else {
-			handleNonStreamingResponse(w, result, r, store, sa, cm, apiKeyID, startTime)
+			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime)
 		}
 	}
 }
@@ -107,6 +116,8 @@ func handleNonStreamingResponse(
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
 	cm *costmap.Manager,
+	budget *router.PoolBudgetManager,
+	poolName string,
 	apiKeyID *int64,
 	startTime time.Time,
 ) {
@@ -114,7 +125,7 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && result.Response != nil && result.Response.Usage != nil {
-		go logRequest(store, sa, cm, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false)
+		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false)
 	}
 
 	router.SetRouteHeaders(w, result)
@@ -130,6 +141,8 @@ func handleStreamingResponse(
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
 	cm *costmap.Manager,
+	budget *router.PoolBudgetManager,
+	poolName string,
 	apiKeyID *int64,
 	startTime time.Time,
 ) {
@@ -172,7 +185,7 @@ func handleStreamingResponse(
 				usage = &model.Usage{}
 			}
 			if store != nil {
-				go logRequest(store, sa, cm, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
+				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
 			}
 			return
 		}
@@ -202,11 +215,13 @@ func handleStreamingResponse(
 	}
 }
 
-// logRequest writes the request log to storage and credits the spend accumulator.
+// logRequest writes the request log to storage, credits the spend accumulator,
+// and credits the pool budget manager.
 // Called asynchronously (via goroutine) after each successful request.
 // apiKeyID is nil when the request was authenticated via master key.
+// budget/poolName may be nil/empty for non-pool models.
 // isStreaming indicates whether this was a streaming or non-streaming request.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool) {
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -238,5 +253,10 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 	// Credit the spend accumulator after DB write.
 	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {
 		sa.Credit(*apiKeyID, log.TotalCost)
+	}
+
+	// Credit the pool budget accumulator after DB write (BUDGET-02).
+	if budget != nil && poolName != "" && totalCost > 0 {
+		budget.Credit(poolName, totalCost)
 	}
 }

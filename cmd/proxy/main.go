@@ -162,6 +162,16 @@ func main() {
 		initCancel()
 	}
 
+	// Initialize pool budget manager from stored state (BUDGET-05).
+	// Non-fatal: budget manager starts at 0 if DB query fails.
+	if store != nil {
+		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := r.BudgetManager().InitFromStorage(initCtx, store); err != nil {
+			log.Warn().Err(err).Msg("pool budget init failed: starting at 0")
+		}
+		initCancel()
+	}
+
 	// Create HTTP router
 	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa)
 
@@ -175,7 +185,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Spend flush loop — persists in-memory spend totals to usage_logs every 30s (D-09).
+	// Flush loop — persists in-memory spend totals and pool budget state every 30s.
 	// On shutdown, a final flush is performed before process exit.
 	flushDone := make(chan struct{})
 	shutdownFlush := make(chan struct{})
@@ -188,12 +198,20 @@ func main() {
 				select {
 				case <-ticker.C:
 					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					// Pool budget flush (BUDGET-05)
+					if err := r.BudgetManager().FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("pool budget flush failed")
+					}
 					if err := sa.FlushToStorage(flushCtx, store); err != nil {
 						log.Warn().Err(err).Msg("spend flush failed")
 					}
 					flushCancel()
 				case <-shutdownFlush:
 					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					// Pool budget flush (BUDGET-05)
+					if err := r.BudgetManager().FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("pool budget final flush on shutdown failed")
+					}
 					if err := sa.FlushToStorage(flushCtx, store); err != nil {
 						log.Warn().Err(err).Msg("spend final flush on shutdown failed")
 					}

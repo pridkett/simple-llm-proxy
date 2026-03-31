@@ -86,6 +86,13 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		})
 
 		if result.Error != nil {
+			// Check for budget exhaustion specifically (BUDGET-04).
+			for _, reason := range result.FailoverReasons {
+				if reason == router.FailoverBudgetExhausted {
+					model.WriteError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
+					return
+				}
+			}
 			if len(result.DeploymentsTried) == 0 {
 				model.WriteError(w, model.ErrModelNotFound(embReq.Model))
 			} else {
@@ -94,11 +101,12 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 			return
 		}
 
+		budget := r.BudgetManager()
 		r.ReportSuccess(result.DeploymentUsed)
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil && embResp.Usage != nil {
-			go logRequest(store, sa, cm, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false)
+			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false)
 		}
 
 		router.SetRouteHeaders(w, result)
