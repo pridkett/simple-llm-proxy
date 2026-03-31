@@ -128,6 +128,12 @@ func (m *mockSessionStorage) GetSpendSummary(_ context.Context, _, _ time.Time, 
 }
 func (m *mockSessionStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockSessionStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
+func (m *mockSessionStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {

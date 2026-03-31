@@ -120,6 +120,12 @@ func (m *mockStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage
 func (m *mockStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (m *mockStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (m *mockStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {

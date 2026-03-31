@@ -179,6 +179,12 @@ func (s *captureStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ stor
 func (s *captureStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (s *captureStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function
