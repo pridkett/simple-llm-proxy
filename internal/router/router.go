@@ -18,6 +18,8 @@ type Router struct {
 	cooldown    *CooldownManager
 	backoff     *BackoffManager
 	settings    config.RouterSettings
+	pools       map[string]*Pool // pool name -> Pool
+	modelToPool map[string]*Pool // model name -> Pool (for Route() lookup)
 }
 
 // New creates a new router from config.
@@ -27,6 +29,8 @@ func New(cfg *config.Config) (*Router, error) {
 		settings:    cfg.RouterSettings,
 		cooldown:    NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails),
 		backoff:     NewBackoffManager(),
+		pools:       make(map[string]*Pool),
+		modelToPool: make(map[string]*Pool),
 	}
 
 	// Initialize strategy
@@ -258,6 +262,8 @@ func (r *Router) Reload(cfg *config.Config) error {
 	r.settings = cfg.RouterSettings
 	r.strategy = newStrategy
 	r.cooldown = NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails)
+	r.pools = make(map[string]*Pool)
+	r.modelToPool = make(map[string]*Pool)
 	r.mu.Unlock()
 
 	return nil
