@@ -555,3 +555,77 @@ func TestStreamUsageFromChunks(t *testing.T) {
 		t.Errorf("DeploymentKey: got %q, want %q", log.DeploymentKey, deployment.DeploymentKey())
 	}
 }
+
+// ---------------------------------------------------------------------------
+// STREAM-05 Verification: is_streaming flag is correctly recorded.
+// ---------------------------------------------------------------------------
+
+// TestStreamIsStreamingFlag_STREAM05 verifies that streaming requests set
+// IsStreaming=true in the request log, and non-streaming requests set
+// IsStreaming=false. This is the STREAM-05 requirement.
+func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
+	t.Run("streaming response records IsStreaming=true", func(t *testing.T) {
+		chunk := &model.StreamChunk{
+			ID:      "cmp-1",
+			Object:  "chat.completion.chunk",
+			Created: time.Now().Unix(),
+			Model:   "gpt-4",
+			Choices: []model.Choice{{Index: 0, Delta: &model.Delta{Content: "hi"}, FinishReason: "stop"}},
+		}
+
+		mockProv := &streamingMockProvider{
+			name: "openai",
+			makeStream: func(_ context.Context) (provider.Stream, error) {
+				return &mockStream{chunks: []*model.StreamChunk{chunk}}, nil
+			},
+		}
+
+		deployment := makeTestDeployment(mockProv)
+		mr := &spyRouter{deployment: deployment}
+		store := &captureStorage{}
+
+		w := httptest.NewRecorder()
+
+		err := handleStreamingResponseWithRouter(context.Background(), w, deployment,
+			&model.ChatCompletionRequest{
+				Model:    "gpt-4",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+				Stream:   true,
+			}, mr, store, nil, nil, nil, time.Now())
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Wait for async log goroutine
+		time.Sleep(20 * time.Millisecond)
+
+		if len(store.logs) == 0 {
+			t.Fatal("no log recorded")
+		}
+		if !store.logs[0].IsStreaming {
+			t.Errorf("IsStreaming = false, want true for streaming request")
+		}
+	})
+
+	t.Run("non-streaming logRequest passes IsStreaming=false", func(t *testing.T) {
+		// Directly test the logRequest function to verify the non-streaming path.
+		store := &captureStorage{}
+		deployment := makeTestDeployment(&streamingMockProvider{name: "openai"})
+		usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5}
+
+		// Call logRequest with isStreaming=false (simulating non-streaming path)
+		logRequest(store, nil, nil, nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false)
+
+		// Wait for the log to be written (logRequest may run in goroutine in production,
+		// but here we call it synchronously for test determinism).
+		time.Sleep(20 * time.Millisecond)
+
+		if len(store.logs) == 0 {
+			t.Fatal("no log recorded")
+		}
+		if store.logs[0].IsStreaming {
+			t.Errorf("IsStreaming = true, want false for non-streaming request")
+		}
+	})
+}

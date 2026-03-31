@@ -472,6 +472,155 @@ func TestBaseProvider_Embeddings_AuthAndHeaders(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// STREAM-03 Verification: SSE streaming works across all OpenAI-compatible
+// providers via BaseProvider. These tests specifically verify the requirements
+// from STREAM-03 (all providers support streaming).
+// ---------------------------------------------------------------------------
+
+// TestStream_STREAM03_SSECommentLines verifies that SSE comment lines
+// (prefixed with `:`) are correctly skipped by the stream parser.
+// OpenRouter sends `: OPENROUTER PROCESSING` comments during inference.
+func TestStream_STREAM03_SSECommentLines(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+
+		// Simulate OpenRouter-style comment lines
+		fmt.Fprintf(w, ": OPENROUTER PROCESSING\n")
+		fmt.Fprintf(w, ": keep-alive\n")
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","object":"chat.completion.chunk","created":1234,"model":"test","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`)
+		fmt.Fprintf(w, ": OPENROUTER PROCESSING\n")
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"2","object":"chat.completion.chunk","created":1234,"model":"test","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":"stop"}]}`)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+
+	bp := newTestProvider(ts.URL)
+	stream, err := bp.ChatCompletionStream(context.Background(), simpleRequest())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer stream.Close()
+
+	// Should receive exactly 2 data chunks, comment lines skipped
+	chunk1, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv() chunk1 error: %v", err)
+	}
+	if chunk1.Choices[0].Delta.Content != "Hello" {
+		t.Errorf("chunk1 content = %q, want %q", chunk1.Choices[0].Delta.Content, "Hello")
+	}
+
+	chunk2, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv() chunk2 error: %v", err)
+	}
+	if chunk2.Choices[0].Delta.Content != " world" {
+		t.Errorf("chunk2 content = %q, want %q", chunk2.Choices[0].Delta.Content, " world")
+	}
+
+	_, err = stream.Recv()
+	if err != io.EOF {
+		t.Errorf("expected io.EOF after [DONE], got %v", err)
+	}
+}
+
+// TestStream_STREAM03_DoneSentinel verifies that the [DONE] sentinel
+// correctly terminates the stream with io.EOF.
+func TestStream_STREAM03_DoneSentinel(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","object":"chat.completion.chunk","created":1234,"model":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+
+	bp := newTestProvider(ts.URL)
+	stream, err := bp.ChatCompletionStream(context.Background(), simpleRequest())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer stream.Close()
+
+	_, err = stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv() error: %v", err)
+	}
+
+	// After [DONE], stream must return io.EOF
+	_, err = stream.Recv()
+	if err != io.EOF {
+		t.Errorf("expected io.EOF after [DONE] sentinel, got %v", err)
+	}
+}
+
+// TestStream_STREAM03_EmptyDoneSentinel verifies that providers using
+// EOF-only stream termination (empty DoneSentinel) end cleanly.
+// vLLM may close the connection without sending [DONE].
+func TestStream_STREAM03_EmptyDoneSentinel(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","object":"chat.completion.chunk","created":1234,"model":"test","choices":[{"index":0,"delta":{"content":"done"},"finish_reason":"stop"}]}`)
+		// Connection closes without [DONE]
+	}))
+	defer ts.Close()
+
+	bp := newTestProvider(ts.URL)
+	bp.DoneSentinel = "" // EOF-only mode
+
+	stream, err := bp.ChatCompletionStream(context.Background(), simpleRequest())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer stream.Close()
+
+	_, err = stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv() error: %v", err)
+	}
+
+	_, err = stream.Recv()
+	if err != io.EOF {
+		t.Errorf("expected io.EOF when connection closes, got %v", err)
+	}
+}
+
+// TestStream_STREAM03_TransformChunk verifies that the TransformStreamChunk
+// hook is applied to each chunk, enabling providers like MiniMax to inject
+// XML-parsed tool calls into the stream.
+func TestStream_STREAM03_TransformChunk(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"1","object":"chat.completion.chunk","created":1234,"model":"lowercase","choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":"stop"}]}`)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+
+	bp := newTestProvider(ts.URL)
+	bp.TransformStreamChunk = func(chunk *model.StreamChunk) *model.StreamChunk {
+		chunk.Model = strings.ToUpper(chunk.Model)
+		return chunk
+	}
+
+	stream, err := bp.ChatCompletionStream(context.Background(), simpleRequest())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer stream.Close()
+
+	chunk, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv() error: %v", err)
+	}
+	if chunk.Model != "LOWERCASE" {
+		t.Errorf("Model = %q, want %q (uppercased by transform)", chunk.Model, "LOWERCASE")
+	}
+}
+
 func TestRegistryGet_AcceptsProviderOptions(t *testing.T) {
 	reg := provider.NewRegistry()
 
