@@ -64,101 +64,84 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			apiKeyID = &id
 		}
 
-		// Try to get a deployment with retries
-		tried := make(map[*provider.Deployment]bool)
-		var lastErr error
-
-		for attempt := 0; attempt <= r.NumRetries(); attempt++ {
-			deployment, err := r.GetDeploymentWithRetry(chatReq.Model, tried)
-			if err != nil {
-				if attempt == 0 {
-					// First attempt - model doesn't exist
-					model.WriteError(w, model.ErrModelNotFound(chatReq.Model))
-					return
-				}
-				// All deployments tried
-				break
-			}
-			tried[deployment] = true
-
-			// Create request with actual model name
-			providerReq := chatReq
-			providerReq.Model = deployment.ActualModel
-
-			if chatReq.Stream {
-				err = handleStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, cm, apiKeyID, startTime)
-			} else {
-				err = handleNonStreamingResponse(ctx, w, deployment, &providerReq, r, store, sa, cm, apiKeyID, startTime)
-			}
-
-			if err == nil {
-				return
-			}
-
-			lastErr = err
-			var rlErr *provider.RateLimitError
-			if errors.As(err, &rlErr) {
-				// 429: apply backoff, do NOT trigger cooldown
-				r.ReportRateLimit(deployment, rlErr.RetryAfter)
-			} else {
-				r.ReportFailure(deployment)
-			}
+		// Derive sticky session key from API key hash (empty for master key).
+		stickyKey := ""
+		if ck != nil {
+			stickyKey = ck.Key.KeyHash
 		}
 
-		// All retries exhausted
-		model.WriteError(w, model.ErrProviderError("all providers", lastErr))
+		// Route() owns all retry/failover logic. The callback performs the
+		// actual provider call; Route selects deployments and handles failover.
+		result := r.Route(ctx, chatReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+			providerReq := chatReq
+			providerReq.Model = d.ActualModel
+			if chatReq.Stream {
+				stream, err := d.Provider.ChatCompletionStream(ctx, &providerReq)
+				return nil, stream, err
+			}
+			resp, err := d.Provider.ChatCompletion(ctx, &providerReq)
+			return resp, nil, err
+		})
+
+		if result.Error != nil {
+			if result.DeploymentUsed == nil && len(result.DeploymentsTried) == 0 {
+				model.WriteError(w, model.ErrModelNotFound(chatReq.Model))
+			} else {
+				model.WriteError(w, model.ErrProviderError("all providers", result.Error))
+			}
+			return
+		}
+
+		if chatReq.Stream {
+			handleStreamingResponse(ctx, w, result, r, store, sa, cm, apiKeyID, startTime)
+		} else {
+			handleNonStreamingResponse(w, result, r, store, sa, cm, apiKeyID, startTime)
+		}
 	}
 }
 
 func handleNonStreamingResponse(
-	ctx context.Context,
 	w http.ResponseWriter,
-	deployment *provider.Deployment,
-	req *model.ChatCompletionRequest,
+	result *router.RouteResult,
 	r *router.Router,
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
 	cm *costmap.Manager,
 	apiKeyID *int64,
 	startTime time.Time,
-) error {
-	resp, err := deployment.Provider.ChatCompletion(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	r.ReportSuccess(deployment)
+) {
+	r.ReportSuccess(result.DeploymentUsed)
 
 	// Log the request if storage is available
-	if store != nil && resp.Usage != nil {
-		go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", resp.Usage, http.StatusOK, startTime, false)
+	if store != nil && result.Response != nil && result.Response.Usage != nil {
+		go logRequest(store, sa, cm, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false)
 	}
 
+	router.SetRouteHeaders(w, result)
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(result.Response)
 }
 
 func handleStreamingResponse(
 	ctx context.Context,
 	w http.ResponseWriter,
-	deployment *provider.Deployment,
-	req *model.ChatCompletionRequest,
+	result *router.RouteResult,
 	r *router.Router,
 	store storage.Storage,
 	sa *keystore.SpendAccumulator,
 	cm *costmap.Manager,
 	apiKeyID *int64,
 	startTime time.Time,
-) error {
-	stream, err := deployment.Provider.ChatCompletionStream(ctx, req)
-	if err != nil {
-		return err
-	}
+) {
+	stream := result.Stream
 	defer stream.Close()
 
 	// NOTE: r.ReportSuccess is NOT called here — it fires only after successful
 	// stream completion (in the io.EOF branch below).
 	// See ADR 006 D-01: calling here (at stream open) was the STREAM-01 bug.
+
+	// Set route metadata headers BEFORE SSE headers and first chunk.
+	router.SetRouteHeaders(w, result)
 
 	// Set up SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -168,7 +151,7 @@ func handleStreamingResponse(
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return fmt.Errorf("streaming not supported")
+		return
 	}
 
 	var streamUsage *model.Usage // accumulated from chunks that carry Usage (Anthropic message_delta)
@@ -181,7 +164,7 @@ func handleStreamingResponse(
 			flusher.Flush()
 
 			// STREAM-01: ReportSuccess fires here, after all chunks received.
-			r.ReportSuccess(deployment)
+			r.ReportSuccess(result.DeploymentUsed)
 
 			// STREAM-02: use token counts from stream; fall back to empty usage if none provided.
 			usage := streamUsage
@@ -189,17 +172,19 @@ func handleStreamingResponse(
 				usage = &model.Usage{}
 			}
 			if store != nil {
-				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
+				go logRequest(store, sa, cm, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
 			}
-			return nil
+			return
 		}
 		if err != nil {
 			// STREAM-04: client disconnect is not a provider failure.
-			// Return nil so the caller does NOT call ReportFailure.
+			// Return without calling ReportFailure.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil
+				return
 			}
-			return err
+			// Mid-stream error from provider — report failure.
+			r.ReportFailure(result.DeploymentUsed)
+			return
 		}
 
 		// Accumulate usage from any chunk that carries it (Anthropic sends on message_delta).
@@ -209,7 +194,7 @@ func handleStreamingResponse(
 
 		data, err := json.Marshal(chunk)
 		if err != nil {
-			return err
+			return
 		}
 
 		fmt.Fprintf(w, "data: %s\n\n", data)
