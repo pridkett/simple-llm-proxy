@@ -41,10 +41,7 @@ func New(cfg *config.Config) (*Router, error) {
 	for _, mc := range cfg.ModelList {
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
 
-		opts := provider.ProviderOptions{
-			APIKey:  mc.LiteLLMParams.APIKey,
-			APIBase: mc.LiteLLMParams.APIBase,
-		}
+		opts := buildProviderOptions(mc)
 		prov, err := provider.Get(parsed.Provider, opts)
 		if err != nil {
 			return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
@@ -210,10 +207,7 @@ func (r *Router) Reload(cfg *config.Config) error {
 	newDeployments := make(map[string][]*provider.Deployment)
 	for _, mc := range cfg.ModelList {
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
-		opts := provider.ProviderOptions{
-			APIKey:  mc.LiteLLMParams.APIKey,
-			APIBase: mc.LiteLLMParams.APIBase,
-		}
+		opts := buildProviderOptions(mc)
 		prov, err := provider.Get(parsed.Provider, opts)
 		if err != nil {
 			return fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
@@ -313,4 +307,42 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 		return result[i].ModelName < result[j].ModelName
 	})
 	return result
+}
+
+// buildProviderOptions constructs a ProviderOptions from a ModelConfig, mapping
+// config-level extra_headers and extra_params to the typed provider options.
+func buildProviderOptions(mc config.ModelConfig) provider.ProviderOptions {
+	opts := provider.ProviderOptions{
+		APIKey:       mc.LiteLLMParams.APIKey,
+		APIBase:      mc.LiteLLMParams.APIBase,
+		ExtraHeaders: mc.LiteLLMParams.ExtraHeaders,
+	}
+
+	ep := mc.LiteLLMParams.ExtraParams
+	if ep == nil {
+		return opts
+	}
+
+	// Gemini safety settings (D-16): array of {category, threshold} objects.
+	if ss, ok := ep["safety_settings"].([]any); ok {
+		for _, item := range ss {
+			if m, ok := item.(map[string]any); ok {
+				setting := provider.SafetySetting{}
+				if v, ok := m["category"].(string); ok {
+					setting.Category = v
+				}
+				if v, ok := m["threshold"].(string); ok {
+					setting.Threshold = v
+				}
+				opts.SafetySettings = append(opts.SafetySettings, setting)
+			}
+		}
+	}
+
+	// MiniMax XML tool calls toggle (D-17): explicit bool override.
+	if v, ok := ep["xml_tool_calls"].(bool); ok {
+		opts.XMLToolCalls = &v
+	}
+
+	return opts
 }

@@ -298,3 +298,144 @@ model_list:
 		t.Errorf("expected nil Webhooks when section absent, got %v", cfg.Webhooks)
 	}
 }
+
+func TestExtraHeaders(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: openrouter-model
+    litellm_params:
+      model: openrouter/meta-llama/llama-3-70b
+      api_key: test-key
+      extra_headers:
+        HTTP-Referer: https://myapp.example.com
+        X-Title: My Application
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(cfg.ModelList) != 1 {
+		t.Fatalf("expected 1 model, got %d", len(cfg.ModelList))
+	}
+	eh := cfg.ModelList[0].LiteLLMParams.ExtraHeaders
+	if eh == nil {
+		t.Fatal("expected ExtraHeaders to be non-nil")
+	}
+	if eh["HTTP-Referer"] != "https://myapp.example.com" {
+		t.Errorf("HTTP-Referer = %q, want %q", eh["HTTP-Referer"], "https://myapp.example.com")
+	}
+	if eh["X-Title"] != "My Application" {
+		t.Errorf("X-Title = %q, want %q", eh["X-Title"], "My Application")
+	}
+}
+
+func TestExtraHeadersEnvExpansion(t *testing.T) {
+	os.Setenv("TEST_HEADER_SECRET", "secret-header-value")
+	defer os.Unsetenv("TEST_HEADER_SECRET")
+
+	yaml := `
+model_list:
+  - model_name: test-model
+    litellm_params:
+      model: openai/gpt-4
+      api_key: test-key
+      extra_headers:
+        Authorization: os.environ/TEST_HEADER_SECRET
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	eh := cfg.ModelList[0].LiteLLMParams.ExtraHeaders
+	if eh == nil {
+		t.Fatal("expected ExtraHeaders to be non-nil")
+	}
+	if eh["Authorization"] != "secret-header-value" {
+		t.Errorf("Authorization = %q, want %q", eh["Authorization"], "secret-header-value")
+	}
+}
+
+func TestExtraParams(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gemini-pro
+    litellm_params:
+      model: gemini/gemini-pro
+      api_key: test-key
+      extra_params:
+        safety_settings:
+          - category: HARM_CATEGORY_HARASSMENT
+            threshold: BLOCK_NONE
+          - category: HARM_CATEGORY_HATE_SPEECH
+            threshold: BLOCK_LOW_AND_ABOVE
+  - model_name: minimax-chat
+    litellm_params:
+      model: minimax/MiniMax-M2.5
+      api_key: test-key
+      extra_params:
+        xml_tool_calls: false
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(cfg.ModelList) != 2 {
+		t.Fatalf("expected 2 models, got %d", len(cfg.ModelList))
+	}
+
+	// Verify Gemini safety_settings are parsed as raw map.
+	geminiParams := cfg.ModelList[0].LiteLLMParams.ExtraParams
+	if geminiParams == nil {
+		t.Fatal("expected ExtraParams for gemini-pro to be non-nil")
+	}
+	ss, ok := geminiParams["safety_settings"].([]any)
+	if !ok {
+		t.Fatalf("safety_settings not found or wrong type, got %T", geminiParams["safety_settings"])
+	}
+	if len(ss) != 2 {
+		t.Fatalf("expected 2 safety settings, got %d", len(ss))
+	}
+	first, ok := ss[0].(map[string]any)
+	if !ok {
+		t.Fatalf("first safety setting wrong type: %T", ss[0])
+	}
+	if first["category"] != "HARM_CATEGORY_HARASSMENT" {
+		t.Errorf("first category = %v, want HARM_CATEGORY_HARASSMENT", first["category"])
+	}
+	if first["threshold"] != "BLOCK_NONE" {
+		t.Errorf("first threshold = %v, want BLOCK_NONE", first["threshold"])
+	}
+
+	// Verify MiniMax xml_tool_calls is parsed.
+	minimaxParams := cfg.ModelList[1].LiteLLMParams.ExtraParams
+	if minimaxParams == nil {
+		t.Fatal("expected ExtraParams for minimax-chat to be non-nil")
+	}
+	xmlVal, ok := minimaxParams["xml_tool_calls"].(bool)
+	if !ok {
+		t.Fatalf("xml_tool_calls not found or wrong type, got %T", minimaxParams["xml_tool_calls"])
+	}
+	if xmlVal != false {
+		t.Errorf("xml_tool_calls = %v, want false", xmlVal)
+	}
+}
+
+func TestExtraParamsAbsent(t *testing.T) {
+	yaml := `
+model_list:
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: key-a
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if cfg.ModelList[0].LiteLLMParams.ExtraParams != nil {
+		t.Errorf("expected nil ExtraParams when absent, got %v", cfg.ModelList[0].LiteLLMParams.ExtraParams)
+	}
+	if cfg.ModelList[0].LiteLLMParams.ExtraHeaders != nil {
+		t.Errorf("expected nil ExtraHeaders when absent, got %v", cfg.ModelList[0].LiteLLMParams.ExtraHeaders)
+	}
+}

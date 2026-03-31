@@ -44,9 +44,11 @@ type ModelConfig struct {
 
 // LiteLLMParams contains provider-specific parameters.
 type LiteLLMParams struct {
-	Model   string `yaml:"model"`   // provider/model format
-	APIKey  string `yaml:"api_key"` // supports os.environ/VAR
-	APIBase string `yaml:"api_base,omitempty"`
+	Model        string            `yaml:"model"`                    // provider/model format
+	APIKey       string            `yaml:"api_key"`                  // supports os.environ/VAR
+	APIBase      string            `yaml:"api_base,omitempty"`
+	ExtraHeaders map[string]string `yaml:"extra_headers,omitempty"`  // additional HTTP headers (e.g., OpenRouter HTTP-Referer)
+	ExtraParams  map[string]any    `yaml:"extra_params,omitempty"`   // provider-specific config (e.g., Gemini safety_settings, MiniMax xml_tool_calls)
 }
 
 // RouterSettings contains load balancing configuration.

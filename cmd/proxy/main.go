@@ -25,9 +25,14 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
 
-	// Register providers
+	// Register providers — blank imports trigger init() to self-register with the provider registry.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/gemini"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/minimax"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/ollama"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openai"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/vllm"
 )
 
 func main() {
