@@ -6,7 +6,7 @@ import (
 )
 
 // Factory creates a new provider instance.
-type Factory func(apiKey, apiBase string) Provider
+type Factory func(opts ProviderOptions) Provider
 
 // Registry manages provider factories.
 type Registry struct {
@@ -29,7 +29,7 @@ func (r *Registry) Register(name string, factory Factory) {
 }
 
 // Get returns a provider instance for the given name.
-func (r *Registry) Get(name, apiKey, apiBase string) (Provider, error) {
+func (r *Registry) Get(name string, opts ProviderOptions) (Provider, error) {
 	r.mu.RLock()
 	factory, ok := r.factories[name]
 	r.mu.RUnlock()
@@ -38,7 +38,7 @@ func (r *Registry) Get(name, apiKey, apiBase string) (Provider, error) {
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}
 
-	return factory(apiKey, apiBase), nil
+	return factory(opts), nil
 }
 
 // Has returns true if the provider is registered.
@@ -58,6 +58,6 @@ func Register(name string, factory Factory) {
 }
 
 // Get returns a provider from the default registry.
-func Get(name, apiKey, apiBase string) (Provider, error) {
-	return DefaultRegistry.Get(name, apiKey, apiBase)
+func Get(name string, opts ProviderOptions) (Provider, error) {
+	return DefaultRegistry.Get(name, opts)
 }
