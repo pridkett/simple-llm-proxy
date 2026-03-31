@@ -7,9 +7,9 @@ import (
 )
 
 func TestAffinityStrategy_PrefersProvider(t *testing.T) {
-	dA1 := makeDeployment("openai", "gpt-4")
-	dA2 := makeDeployment("openai", "gpt-4-turbo")
-	dB := makeDeployment("anthropic", "claude-3")
+	dA1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	dA2 := makeDeployment("gpt-4-turbo", "openai", "gpt-4-turbo")
+	dB := makeDeployment("claude-3", "anthropic", "claude-3")
 
 	inner := NewRoundRobin()
 	affinity := NewAffinityStrategy("openai", inner)
@@ -28,8 +28,8 @@ func TestAffinityStrategy_PrefersProvider(t *testing.T) {
 }
 
 func TestAffinityStrategy_FallsBackWhenPreferredAbsent(t *testing.T) {
-	dB1 := makeDeployment("anthropic", "claude-3")
-	dB2 := makeDeployment("anthropic", "claude-3-sonnet")
+	dB1 := makeDeployment("claude-3", "anthropic", "claude-3")
+	dB2 := makeDeployment("claude-3-sonnet", "anthropic", "claude-3-sonnet")
 
 	inner := NewRoundRobin()
 	affinity := NewAffinityStrategy("openai", inner)
@@ -48,8 +48,8 @@ func TestAffinityStrategy_FallsBackWhenPreferredAbsent(t *testing.T) {
 }
 
 func TestAffinityStrategy_UsesInnerStrategyAmongPreferred(t *testing.T) {
-	dA1 := makeDeployment("openai", "gpt-4")
-	dA2 := makeDeployment("openai", "gpt-4-turbo")
+	dA1 := makeDeployment("gpt-4", "openai", "gpt-4")
+	dA2 := makeDeployment("gpt-4-turbo", "openai", "gpt-4-turbo")
 
 	weights := map[string]int{
 		dA1.DeploymentKey(): 70,

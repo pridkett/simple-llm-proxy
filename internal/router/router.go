@@ -29,6 +29,8 @@ func New(cfg *config.Config) (*Router, error) {
 		settings:    cfg.RouterSettings,
 		cooldown:    NewCooldownManager(cfg.RouterSettings.CooldownTime, cfg.RouterSettings.AllowedFails),
 		backoff:     NewBackoffManager(),
+		pools:       make(map[string]*Pool),
+		modelToPool: make(map[string]*Pool),
 	}
 
 	// Initialize strategy

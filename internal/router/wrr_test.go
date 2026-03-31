@@ -6,17 +6,9 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
 
-func makeDeployment(providerName, model string) *provider.Deployment {
-	return &provider.Deployment{
-		ModelName:    model,
-		ProviderName: providerName,
-		ActualModel:  model,
-	}
-}
-
 func TestWeightedRoundRobin_ProportionalDistribution(t *testing.T) {
-	dA := makeDeployment("openai", "gpt-4")
-	dB := makeDeployment("anthropic", "claude-3")
+	dA := makeDeployment("gpt-4", "openai", "gpt-4")
+	dB := makeDeployment("claude-3", "anthropic", "claude-3")
 
 	weights := map[string]int{
 		dA.DeploymentKey(): 80,
@@ -47,7 +39,7 @@ func TestWeightedRoundRobin_ProportionalDistribution(t *testing.T) {
 }
 
 func TestWeightedRoundRobin_SingleDeployment(t *testing.T) {
-	d := makeDeployment("openai", "gpt-4")
+	d := makeDeployment("gpt-4", "openai", "gpt-4")
 	wrr := NewWeightedRoundRobin(map[string]int{d.DeploymentKey(): 50})
 
 	for i := 0; i < 10; i++ {
@@ -59,9 +51,9 @@ func TestWeightedRoundRobin_SingleDeployment(t *testing.T) {
 }
 
 func TestWeightedRoundRobin_EqualWeights(t *testing.T) {
-	dA := makeDeployment("openai", "gpt-4")
-	dB := makeDeployment("anthropic", "claude-3")
-	dC := makeDeployment("openrouter", "llama-3")
+	dA := makeDeployment("gpt-4", "openai", "gpt-4")
+	dB := makeDeployment("claude-3", "anthropic", "claude-3")
+	dC := makeDeployment("llama-3", "openrouter", "llama-3")
 
 	weights := map[string]int{
 		dA.DeploymentKey(): 1,
@@ -91,8 +83,8 @@ func TestWeightedRoundRobin_EqualWeights(t *testing.T) {
 }
 
 func TestWeightedRoundRobin_UnknownDeployment(t *testing.T) {
-	dA := makeDeployment("openai", "gpt-4")
-	dB := makeDeployment("anthropic", "claude-3") // Not in weights map
+	dA := makeDeployment("gpt-4", "openai", "gpt-4")
+	dB := makeDeployment("claude-3", "anthropic", "claude-3") // Not in weights map
 
 	weights := map[string]int{
 		dA.DeploymentKey(): 1,
