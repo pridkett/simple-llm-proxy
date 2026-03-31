@@ -147,6 +147,21 @@ type Storage interface {
 	// Flush rows (model='_flush') are excluded. Only spend attributed to active keys is included.
 	// Days with zero spend are not returned — the caller fills gaps if needed.
 	GetDailySpend(ctx context.Context, from, to time.Time, filters SpendFilters) ([]DailySpendRow, error)
+
+	// --- Sticky Session CRUD ---
+
+	// GetStickySession returns the deployment_key for the given session_key and pool.
+	// Returns ("", nil) if no session exists or if expired (last_used_at > 1 hour ago).
+	GetStickySession(ctx context.Context, sessionKey, poolName string) (string, error)
+
+	// UpsertStickySession creates or updates a sticky session mapping.
+	UpsertStickySession(ctx context.Context, sessionKey, poolName, deploymentKey string) error
+
+	// DeleteExpiredStickySessions removes sessions where last_used_at < cutoff.
+	DeleteExpiredStickySessions(ctx context.Context, cutoff time.Time) (int64, error)
+
+	// BulkUpsertStickySessions writes multiple sessions in a single transaction.
+	BulkUpsertStickySessions(ctx context.Context, sessions []StickySession) error
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -258,6 +273,15 @@ type DailySpendRow struct {
 	Day          string  `json:"day"`           // YYYY-MM-DD
 	TotalSpend   float64 `json:"total_spend"`
 	RequestCount int64   `json:"request_count"`
+}
+
+// StickySession represents a client-to-deployment mapping for session affinity.
+// The session key is typically the SHA-256 hash of the API key.
+type StickySession struct {
+	SessionKey    string
+	PoolName      string
+	DeploymentKey string
+	LastUsedAt    time.Time
 }
 
 // SpendRow is one row from GetSpendSummary: per-key spend with JOIN-resolved names.
