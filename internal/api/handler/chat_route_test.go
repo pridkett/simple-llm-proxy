@@ -238,7 +238,7 @@ func TestChatRoute_HeadersOnSuccess(t *testing.T) {
 	}
 
 	cfg := newTestMockConfig("gpt-4")
-	rtr, err := router.New(cfg)
+	rtr, err := router.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestChatRoute_HeadersOnFailover(t *testing.T) {
 		},
 	}
 
-	rtr, err := router.New(cfg)
+	rtr, err := router.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestChatRoute_StreamingHeadersBeforeChunks(t *testing.T) {
 	}
 
 	cfg := newTestMockConfig("gpt-4")
-	rtr, err := router.New(cfg)
+	rtr, err := router.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestChatRoute_ProviderURLHeader(t *testing.T) {
 
 	customBase := "https://custom.api.com/v1"
 	cfg := newTestMockConfigWithBase("gpt-4", customBase)
-	rtr, err := router.New(cfg)
+	rtr, err := router.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}

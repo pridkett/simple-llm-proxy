@@ -187,7 +187,7 @@ func TestRoute_PoolAllExhausted(t *testing.T) {
 func TestRoute_LegacyPathNoPool(t *testing.T) {
 	// Create a router with model_list entries but no pool.
 	cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

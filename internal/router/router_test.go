@@ -109,7 +109,7 @@ func makeMockConfig(models []string, strategy string) *config.Config {
 
 func TestRouterReload_UpdatesDeployments(t *testing.T) {
 	cfg := makeMockConfig([]string{"model-a"}, "simple-shuffle")
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestRouterReload_UpdatesDeployments(t *testing.T) {
 
 func TestRouterReload_UpdatesSettings(t *testing.T) {
 	cfg := makeMockConfig([]string{"model-a"}, "simple-shuffle")
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestRouterReload_ResetsCooldown(t *testing.T) {
 	cfg.RouterSettings.AllowedFails = 1
 	cfg.RouterSettings.CooldownTime = 10 * time.Minute
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestRouterReload_ResetsCooldown(t *testing.T) {
 
 func TestRouterReload_EmptyModels(t *testing.T) {
 	cfg := makeMockConfig([]string{"model-a"}, "simple-shuffle")
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestValidatePoolMembers(t *testing.T) {
 				},
 			},
 		}
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err != nil {
 			t.Errorf("expected no error for valid pool members, got: %v", err)
 		}
@@ -248,7 +248,7 @@ func TestValidatePoolMembers(t *testing.T) {
 				},
 			},
 		}
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err == nil {
 			t.Fatal("expected error for unknown pool member, got nil")
 		}
@@ -263,7 +263,7 @@ func TestValidatePoolMembers(t *testing.T) {
 	t.Run("no provider_pools is valid (backward compat)", func(t *testing.T) {
 		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
 		// cfg.ProviderPools is nil — must not error
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err != nil {
 			t.Errorf("expected no error when provider_pools absent, got: %v", err)
 		}
@@ -280,7 +280,7 @@ func TestValidateWebhookStartup(t *testing.T) {
 				Enabled: true,
 			},
 		}
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err != nil {
 			t.Errorf("expected no error for valid webhook, got: %v", err)
 		}
@@ -294,7 +294,7 @@ func TestValidateWebhookStartup(t *testing.T) {
 				Events: []string{"budget_exhausted"},
 			},
 		}
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err == nil {
 			t.Fatal("expected error for empty webhook url, got nil")
 		}
@@ -311,7 +311,7 @@ func TestValidateWebhookStartup(t *testing.T) {
 				Events: []string{}, // empty
 			},
 		}
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err == nil {
 			t.Fatal("expected error for empty webhook events, got nil")
 		}
@@ -323,7 +323,7 @@ func TestValidateWebhookStartup(t *testing.T) {
 	t.Run("no webhooks is valid (backward compat)", func(t *testing.T) {
 		cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
 		// cfg.Webhooks is nil — must not error
-		_, err := New(cfg)
+		_, err := New(cfg, nil)
 		if err != nil {
 			t.Errorf("expected no error when webhooks absent, got: %v", err)
 		}

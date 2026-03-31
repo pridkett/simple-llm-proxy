@@ -30,7 +30,7 @@ func TestPoolInit_BasicPool(t *testing.T) {
 		},
 	)
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestPoolInit_WeightedStrategy(t *testing.T) {
 		},
 	)
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestPoolInit_DefaultStrategy(t *testing.T) {
 		},
 	)
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestPoolInit_NoPool(t *testing.T) {
 	cfg := makeMockConfig([]string{"gpt-4"}, "simple-shuffle")
 	// No ProviderPools
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestPoolInit_ReloadRebuilds(t *testing.T) {
 		},
 	)
 
-	r, err := New(cfg)
+	r, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

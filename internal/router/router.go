@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
 // Router manages model deployments and load balancing.
@@ -23,8 +25,9 @@ type Router struct {
 	sticky      *StickySessionManager
 }
 
-// New creates a new router from config.
-func New(cfg *config.Config) (*Router, error) {
+// New creates a new router from config. If store is non-nil, sticky session
+// persistence is enabled. Pass nil for tests or when no database is configured.
+func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 	r := &Router{
 		deployments: make(map[string][]*provider.Deployment),
 		settings:    cfg.RouterSettings,
@@ -32,7 +35,7 @@ func New(cfg *config.Config) (*Router, error) {
 		backoff:     NewBackoffManager(),
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
-		sticky:      NewStickySessionManager(nil), // storage wired in Plan 05
+		sticky:      NewStickySessionManager(store),
 	}
 
 	// Initialize strategy
@@ -277,6 +280,14 @@ func (r *Router) Reload(cfg *config.Config) error {
 	r.mu.Unlock()
 
 	return nil
+}
+
+// Start launches background goroutines for sticky session flush and cleanup.
+// Must be called after New() and before serving requests.
+func (r *Router) Start(ctx context.Context) {
+	if r.sticky != nil {
+		r.sticky.Start(ctx)
+	}
 }
 
 // Close stops background goroutines (sticky session flush/cleanup) and

@@ -52,13 +52,7 @@ func main() {
 	// Initialize structured logger before any other operations.
 	logger.Init(cfg.LogSettings)
 
-	// Initialize router
-	r, err := router.New(cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialize router")
-	}
-
-	// Initialize storage
+	// Initialize storage (before router, so sticky sessions can use it)
 	var store storage.Storage
 	var sqliteStore *sqlite.Storage
 	if cfg.GeneralSettings.DatabaseURL != "" {
@@ -73,6 +67,14 @@ func main() {
 		store = sqliteStore
 		defer store.Close()
 	}
+
+	// Initialize router with storage for sticky session persistence
+	r, err := router.New(cfg, store)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize router")
+	}
+	r.Start(context.Background())
+	defer r.Close()
 
 	// Create SCS session manager backed by the custom SQLite session store.
 	// Cookie attributes are set explicitly per ADR 003 §4.

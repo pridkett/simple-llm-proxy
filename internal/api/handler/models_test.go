@@ -136,7 +136,7 @@ func (m *mockStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.St
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
 	t.Helper()
-	r, err := router.New(configForTest())
+	r, err := router.New(configForTest(), nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestModels_ListUnchanged(t *testing.T) {
 		RouterSettings: config.RouterSettings{
 			CooldownTime: 30 * time.Second,
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}

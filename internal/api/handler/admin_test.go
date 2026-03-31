@@ -76,7 +76,7 @@ func TestAdminStatus(t *testing.T) {
 			AllowedFails:    3,
 			CooldownTime:    30 * time.Second,
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -204,7 +204,7 @@ general_settings:
 		t.Fatalf("NewReloader: %v", err)
 	}
 
-	r, err := router.New(reloader.Config())
+	r, err := router.New(reloader.Config(), nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -289,7 +289,7 @@ general_settings:
 		t.Fatalf("NewReloader: %v", err)
 	}
 
-	r, err := router.New(reloader.Config())
+	r, err := router.New(reloader.Config(), nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
