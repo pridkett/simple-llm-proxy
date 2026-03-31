@@ -27,6 +27,7 @@ func makeRouterWithPool(poolName string, deployments []*provider.Deployment) *Ro
 		backoff:     NewBackoffManager(),
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
+		sticky:      NewStickySessionManager(nil),
 	}
 
 	pool := &Pool{

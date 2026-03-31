@@ -20,6 +20,7 @@ type Router struct {
 	settings    config.RouterSettings
 	pools       map[string]*Pool // pool name -> Pool
 	modelToPool map[string]*Pool // model name -> Pool (for Route() lookup)
+	sticky      *StickySessionManager
 }
 
 // New creates a new router from config.
@@ -31,6 +32,7 @@ func New(cfg *config.Config) (*Router, error) {
 		backoff:     NewBackoffManager(),
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
+		sticky:      NewStickySessionManager(nil), // storage wired in Plan 05
 	}
 
 	// Initialize strategy
@@ -275,6 +277,14 @@ func (r *Router) Reload(cfg *config.Config) error {
 	r.mu.Unlock()
 
 	return nil
+}
+
+// Close stops background goroutines (sticky session flush/cleanup) and
+// performs a final flush. Safe to call multiple times.
+func (r *Router) Close() {
+	if r.sticky != nil {
+		r.sticky.Stop()
+	}
 }
 
 // GetStatus returns the current status of all model deployments.
