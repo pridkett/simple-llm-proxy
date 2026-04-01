@@ -24,6 +24,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
+	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 
 	// Register providers — blank imports trigger init() to self-register with the provider registry.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
@@ -172,8 +173,17 @@ func main() {
 		initCancel()
 	}
 
+	// Initialize webhook dispatcher for outbound event delivery (Phase 9).
+	// YAML webhooks from config; DB webhooks loaded at dispatch time.
+	var dispatcher *webhook.WebhookDispatcher
+	if store != nil {
+		dispatcher = webhook.New(store, cfg.Webhooks)
+		dispatcher.Start(context.Background())
+		defer dispatcher.Close()
+	}
+
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)

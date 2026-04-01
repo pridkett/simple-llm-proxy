@@ -243,7 +243,7 @@ func TestChatRoute_HeadersOnSuccess(t *testing.T) {
 		t.Fatalf("router.New: %v", err)
 	}
 
-	handler := ChatCompletions(rtr, nil, nil, nil)
+	handler := ChatCompletions(rtr, nil, nil, nil, nil)
 
 	req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", false))
 	w := httptest.NewRecorder()
@@ -337,7 +337,7 @@ func TestChatRoute_HeadersOnFailover(t *testing.T) {
 		t.Fatalf("router.New: %v", err)
 	}
 
-	handler := ChatCompletions(rtr, nil, nil, nil)
+	handler := ChatCompletions(rtr, nil, nil, nil, nil)
 
 	req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", false))
 	w := httptest.NewRecorder()
@@ -402,7 +402,7 @@ func TestChatRoute_StreamingHeadersBeforeChunks(t *testing.T) {
 		t.Fatalf("router.New: %v", err)
 	}
 
-	handler := ChatCompletions(rtr, nil, nil, nil)
+	handler := ChatCompletions(rtr, nil, nil, nil, nil)
 
 	req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", true))
 	w := httptest.NewRecorder()
@@ -456,7 +456,7 @@ func TestChatRoute_ProviderURLHeader(t *testing.T) {
 		t.Fatalf("router.New: %v", err)
 	}
 
-	handler := ChatCompletions(rtr, nil, nil, nil)
+	handler := ChatCompletions(rtr, nil, nil, nil, nil)
 
 	req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", false))
 	w := httptest.NewRecorder()
