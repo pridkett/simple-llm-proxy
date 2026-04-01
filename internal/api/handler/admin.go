@@ -13,9 +13,10 @@ import (
 )
 
 type adminStatusResponse struct {
-	Status         string                  `json:"status"`
-	UptimeSeconds  int64                   `json:"uptime_seconds"`
+	Status         string                   `json:"status"`
+	UptimeSeconds  int64                    `json:"uptime_seconds"`
 	Models         []router.ModelStatusInfo `json:"models"`
+	Pools          []router.PoolStatusInfo  `json:"pools"`
 	RouterSettings routerSettingsJSON       `json:"router_settings"`
 }
 
@@ -35,6 +36,7 @@ func AdminStatus(r *router.Router, startTime time.Time) http.HandlerFunc {
 			Status:        "healthy",
 			UptimeSeconds: int64(time.Since(startTime).Seconds()),
 			Models:        r.GetStatus(),
+			Pools:         r.GetPoolStatus(),
 			RouterSettings: routerSettingsJSON{
 				RoutingStrategy: settings.RoutingStrategy,
 				NumRetries:      settings.NumRetries,

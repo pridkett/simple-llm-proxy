@@ -211,11 +211,30 @@ type DeploymentInfoItem struct {
 	ProviderName  string     `json:"provider"`
 	ActualModel   string     `json:"actual_model"`
 	APIBase       string     `json:"api_base,omitempty"`
-	Status        string     `json:"status"` // "healthy" or "cooldown"
+	Status        string     `json:"status"` // "healthy", "cooldown", or "backoff"
 	FailureCount  int        `json:"failure_count"`
 	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
 	RPM           int        `json:"rpm,omitempty"`
 	TPM           int        `json:"tpm,omitempty"`
+}
+
+// PoolStatusInfo holds status information for a single provider pool.
+type PoolStatusInfo struct {
+	Name        string                   `json:"name"`
+	Strategy    string                   `json:"strategy"`
+	BudgetSpent float64                  `json:"budget_spent"`
+	BudgetCap   float64                  `json:"budget_cap"` // 0 = unlimited
+	Deployments []PoolDeploymentInfoItem `json:"deployments"`
+}
+
+// PoolDeploymentInfoItem holds status information for a deployment within a pool.
+type PoolDeploymentInfoItem struct {
+	ProviderName  string     `json:"provider"`
+	ActualModel   string     `json:"actual_model"`
+	Status        string     `json:"status"` // "healthy", "cooldown", or "backoff"
+	FailureCount  int        `json:"failure_count"`
+	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
+	Weight        int        `json:"weight"`
 }
 
 // Reload updates the router with a new configuration.
@@ -336,6 +355,9 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 				item.Status = "cooldown"
 				t := s.CooldownUntil
 				item.CooldownUntil = &t
+			} else if r.backoff.InBackoff(d.DeploymentKey()) {
+				item.Status = "backoff"
+				healthyCount++ // backoff is transient; deployment is still counted as available
 			} else {
 				item.Status = "healthy"
 				healthyCount++
@@ -352,6 +374,65 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ModelName < result[j].ModelName
+	})
+	return result
+}
+
+// GetPoolStatus returns pool-level status information including budget and
+// per-deployment backoff state.
+func (r *Router) GetPoolStatus() []PoolStatusInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]PoolStatusInfo, 0, len(r.pools))
+	for _, pool := range r.pools {
+		// Get budget data
+		budgetSpent := r.budget.CurrentSpend(pool.Name)
+		var budgetCap float64
+		if capVal, ok := r.budget.GetCap(pool.Name); ok {
+			budgetCap = capVal
+		}
+
+		deployments := make([]PoolDeploymentInfoItem, 0, len(pool.Members))
+		for _, d := range pool.Members {
+			dk := d.DeploymentKey()
+			cs := r.cooldown.GetStatus(d)
+			weight := 1
+			if w, ok := pool.Weights[dk]; ok {
+				weight = w
+			}
+
+			item := PoolDeploymentInfoItem{
+				ProviderName: d.ProviderName,
+				ActualModel:  d.ActualModel,
+				FailureCount: cs.FailureCount,
+				Weight:       weight,
+			}
+
+			// Determine status: cooldown takes priority over backoff (cooldown is more severe)
+			if cs.InCooldown {
+				item.Status = "cooldown"
+				t := cs.CooldownUntil
+				item.CooldownUntil = &t
+			} else if r.backoff.InBackoff(dk) {
+				item.Status = "backoff"
+			} else {
+				item.Status = "healthy"
+			}
+			deployments = append(deployments, item)
+		}
+
+		info := PoolStatusInfo{
+			Name:        pool.Name,
+			Strategy:    pool.Strategy.Name(),
+			BudgetSpent: budgetSpent,
+			BudgetCap:   budgetCap,
+			Deployments: deployments,
+		}
+		result = append(result, info)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
 	})
 	return result
 }

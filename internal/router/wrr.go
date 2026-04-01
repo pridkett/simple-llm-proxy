@@ -23,6 +23,9 @@ type WeightedRoundRobin struct {
 	weights       map[string]int // DeploymentKey() -> configured weight
 }
 
+// Name returns the strategy name.
+func (w *WeightedRoundRobin) Name() string { return "weighted-round-robin" }
+
 // NewWeightedRoundRobin creates a new WeightedRoundRobin strategy.
 // The weights map uses DeploymentKey() as keys. Keys not present in the map
 // default to weight 1 during selection.

@@ -14,6 +14,9 @@ func NewShuffle() *Shuffle {
 	return &Shuffle{}
 }
 
+// Name returns the strategy name.
+func (s *Shuffle) Name() string { return "simple-shuffle" }
+
 // Select randomly selects a deployment.
 func (s *Shuffle) Select(deployments []*provider.Deployment) *provider.Deployment {
 	if len(deployments) == 0 {

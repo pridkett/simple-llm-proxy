@@ -50,6 +50,9 @@ func (a *AffinityStrategy) Select(deployments []*provider.Deployment) *provider.
 	return a.inner.Select(deployments)
 }
 
+// Name returns the strategy name.
+func (a *AffinityStrategy) Name() string { return "affinity" }
+
 // PreferredProvider returns the name of the preferred provider.
 func (a *AffinityStrategy) PreferredProvider() string {
 	return a.preferred

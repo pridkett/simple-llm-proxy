@@ -49,6 +49,16 @@ func (m *PoolBudgetManager) SetCaps(pools []config.ProviderPool) {
 	}
 }
 
+// GetCap returns the daily budget cap for the given pool and whether a cap was found.
+// Returns (0, false) for unknown pools.
+func (m *PoolBudgetManager) GetCap(poolName string) (float64, bool) {
+	val, ok := m.caps.Load(poolName)
+	if !ok {
+		return 0, false
+	}
+	return val.(float64), true
+}
+
 // HasBudget returns true if the pool has remaining budget for today.
 // Returns true for pools with no cap (BudgetCapDaily == 0) or unknown pools.
 // Performs lazy daily reset: if the stored resetDate is stale (not today), the

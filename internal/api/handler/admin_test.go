@@ -101,6 +101,117 @@ func TestAdminStatus(t *testing.T) {
 	if resp.UptimeSeconds < 5 {
 		t.Errorf("Expected uptime >= 5s, got %d", resp.UptimeSeconds)
 	}
+	if resp.Pools == nil {
+		t.Error("Expected pools field to be present (even if empty)")
+	}
+}
+
+func TestAdminStatus_IncludesPoolStatus(t *testing.T) {
+	cfg := &config.Config{
+		ModelList: []config.ModelConfig{
+			{
+				ModelName: "gpt-4",
+				LiteLLMParams: config.LiteLLMParams{
+					Model:  "openai/gpt-4",
+					APIKey: "test-key",
+				},
+				RPM: 100,
+			},
+			{
+				ModelName: "claude-3",
+				LiteLLMParams: config.LiteLLMParams{
+					Model:  "anthropic/claude-3-sonnet",
+					APIKey: "test-key-2",
+				},
+			},
+		},
+		ProviderPools: []config.ProviderPool{
+			{
+				Name:           "fast-pool",
+				Strategy:       "round-robin",
+				BudgetCapDaily: 50.0,
+				Members: []config.PoolMember{
+					{ModelName: "gpt-4", Weight: 3},
+					{ModelName: "claude-3", Weight: 1},
+				},
+			},
+		},
+		RouterSettings: config.RouterSettings{
+			RoutingStrategy: "simple-shuffle",
+			NumRetries:      2,
+			AllowedFails:    3,
+			CooldownTime:    30 * time.Second,
+		},
+	}
+
+	r, err := router.New(cfg, nil)
+	if err != nil {
+		t.Fatalf("router.New: %v", err)
+	}
+
+	startTime := time.Now().Add(-10 * time.Second)
+	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
+	rr := httptest.NewRecorder()
+
+	AdminStatus(r, startTime)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Decode into a generic map to verify pool structure
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(rr.Body).Decode(&raw); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+
+	poolsJSON, ok := raw["pools"]
+	if !ok {
+		t.Fatal("Expected 'pools' key in response")
+	}
+
+	var pools []router.PoolStatusInfo
+	if err := json.Unmarshal(poolsJSON, &pools); err != nil {
+		t.Fatalf("Unmarshal pools: %v", err)
+	}
+
+	if len(pools) != 1 {
+		t.Fatalf("Expected 1 pool, got %d", len(pools))
+	}
+
+	pool := pools[0]
+	if pool.Name != "fast-pool" {
+		t.Errorf("Expected pool name 'fast-pool', got '%s'", pool.Name)
+	}
+	if pool.Strategy != "round-robin" {
+		t.Errorf("Expected strategy 'round-robin', got '%s'", pool.Strategy)
+	}
+	if pool.BudgetCap != 50.0 {
+		t.Errorf("Expected budget_cap 50.0, got %f", pool.BudgetCap)
+	}
+	if pool.BudgetSpent != 0 {
+		t.Errorf("Expected budget_spent 0, got %f", pool.BudgetSpent)
+	}
+	if len(pool.Deployments) != 2 {
+		t.Fatalf("Expected 2 deployments in pool, got %d", len(pool.Deployments))
+	}
+
+	// Find the gpt-4 deployment and check its weight
+	found := false
+	for _, d := range pool.Deployments {
+		if d.ActualModel == "gpt-4" && d.ProviderName == "openai" {
+			found = true
+			if d.Weight != 3 {
+				t.Errorf("Expected gpt-4 weight 3, got %d", d.Weight)
+			}
+			if d.Status != "healthy" {
+				t.Errorf("Expected status 'healthy', got '%s'", d.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected to find openai/gpt-4 deployment in pool")
+	}
 }
 
 func TestAdminConfig_ReturnsSanitizedConfig(t *testing.T) {

@@ -16,6 +16,9 @@ func NewRoundRobin() *RoundRobin {
 	return &RoundRobin{}
 }
 
+// Name returns the strategy name.
+func (r *RoundRobin) Name() string { return "round-robin" }
+
 // Select selects the next deployment in round-robin fashion.
 func (r *RoundRobin) Select(deployments []*provider.Deployment) *provider.Deployment {
 	if len(deployments) == 0 {
