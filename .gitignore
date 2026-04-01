@@ -5,7 +5,7 @@ bin/
 config.yaml
 frontend/node_modules/
 frontend/dist/
-op.env
+*.op.env
 proxy.db
 proxy.db-shm
 proxy.db-wal
