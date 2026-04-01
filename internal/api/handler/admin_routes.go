@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
@@ -9,7 +10,7 @@ import (
 // RegisterAdminRoutes registers all identity CRUD routes into the provided chi.Router group.
 // The group is expected to already have session middleware applied (sm.LoadAndSave + RequireSession).
 // Called from internal/api/router.go's /admin/* group setup.
-func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Cache) {
+func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Cache, getCfg func() *config.Config) {
 	r.Get("/admin/users", AdminUsers(store))
 	r.Get("/admin/teams", AdminTeams(store))
 	r.Post("/admin/teams", AdminCreateTeam(store))
@@ -36,4 +37,13 @@ func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Ca
 	// Admin-only enforcement (403 for non-admin authenticated users) is done per-handler
 	// via middleware.UserFromContext — the same pattern used by all admin-only handlers.
 	r.Get("/admin/spend", AdminSpend(store))
+
+	// Webhook management (Phase 9)
+	r.Get("/admin/webhooks", AdminListWebhooks(store, getCfg))
+	r.Post("/admin/webhooks", AdminCreateWebhook(store))
+	r.Put("/admin/webhooks/{id}", AdminUpdateWebhook(store))
+	r.Delete("/admin/webhooks/{id}", AdminDeleteWebhook(store))
+
+	// Notification events feed (Phase 9)
+	r.Get("/admin/events", AdminEvents(store))
 }

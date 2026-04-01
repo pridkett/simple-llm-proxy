@@ -139,6 +139,36 @@ func (m *mockStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.St
 	return nil
 }
 
+// Webhook/notification stubs.
+func (m *mockStorage) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockStorage) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockStorage) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (m *mockStorage) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (m *mockStorage) GetEnabledWebhooksByEvent(_ context.Context, _ string) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockStorage) InsertNotificationEvent(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *mockStorage) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
+func (m *mockStorage) DeleteOldNotificationEvents(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
+	return nil
+}
+
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {
 	t.Helper()

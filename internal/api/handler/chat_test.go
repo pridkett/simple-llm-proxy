@@ -196,6 +196,36 @@ func (s *captureStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ fl
 	return nil
 }
 
+// Webhook/notification stubs.
+func (s *captureStorage) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (s *captureStorage) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (s *captureStorage) GetEnabledWebhooksByEvent(_ context.Context, _ string) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) InsertNotificationEvent(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
+func (s *captureStorage) DeleteOldNotificationEvents(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function
 // ---------------------------------------------------------------------------

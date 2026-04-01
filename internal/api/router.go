@@ -87,7 +87,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm))
 
 		// Identity and key management CRUD routes
-		handler.RegisterAdminRoutes(mux, store, cache)
+		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)
 	})
 
 	return mux

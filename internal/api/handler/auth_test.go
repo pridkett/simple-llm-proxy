@@ -122,6 +122,36 @@ func (m *mockAuthStore) BulkUpsertStickySessions(_ context.Context, _ []storage.
 	return nil
 }
 
+// Webhook/notification stubs — required by interface, not exercised by auth tests.
+func (m *mockAuthStore) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (m *mockAuthStore) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (m *mockAuthStore) GetEnabledWebhooksByEvent(_ context.Context, _ string) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) InsertNotificationEvent(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *mockAuthStore) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
+func (m *mockAuthStore) DeleteOldNotificationEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
+func (m *mockAuthStore) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64, _ string, _ int, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *mockAuthStore) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
+	return nil
+}
+
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
 	sm := scs.New()
