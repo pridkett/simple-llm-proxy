@@ -13,10 +13,11 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
+	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 )
 
 // Embeddings handles POST /v1/embeddings requests.
-func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager) http.HandlerFunc {
+func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -84,6 +85,9 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 			embResp = resp
 			return nil, nil, nil // signal success via nil error
 		})
+
+		// Emit routing events to webhook dispatcher.
+		emitRoutingEvents(dispatcher, r, result, embReq.Model)
 
 		if result.Error != nil {
 			// Check for budget exhaustion specifically (BUDGET-04).

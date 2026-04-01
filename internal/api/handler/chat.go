@@ -16,10 +16,11 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
+	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 )
 
 // ChatCompletions handles POST /v1/chat/completions requests.
-func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager) http.HandlerFunc {
+func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -82,6 +83,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			resp, err := d.Provider.ChatCompletion(ctx, &providerReq)
 			return resp, nil, err
 		})
+
+		// Emit routing events to webhook dispatcher (D-01: handler layer, after Route() returns).
+		emitRoutingEvents(dispatcher, r, result, chatReq.Model)
 
 		if result.Error != nil {
 			// Check for budget exhaustion specifically (BUDGET-04).
@@ -258,5 +262,37 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 	// Credit the pool budget accumulator after DB write (BUDGET-02).
 	if budget != nil && poolName != "" && totalCost > 0 {
 		budget.Credit(poolName, totalCost)
+	}
+}
+
+// emitRoutingEvents inspects a RouteResult and emits webhook events for
+// routing anomalies (failover, budget exhaustion, pool cooldown).
+// Per D-01: event emission happens in the handler layer after Route() returns.
+// Per D-03: events fire on every qualifying occurrence, not debounced.
+func emitRoutingEvents(dispatcher *webhook.WebhookDispatcher, r *router.Router, result *router.RouteResult, model string) {
+	if dispatcher == nil {
+		return
+	}
+
+	// provider_failover: failover occurred AND request ultimately succeeded (D-02)
+	if len(result.FailoverReasons) > 0 && result.Error == nil {
+		dispatcher.Emit(webhook.NewProviderFailoverEvent(model, result))
+	}
+
+	// budget_exhausted: all pools exhausted for this model (D-02)
+	for _, reason := range result.FailoverReasons {
+		if reason == router.FailoverBudgetExhausted {
+			dispatcher.Emit(webhook.NewBudgetExhaustedEvent(model, result))
+			break
+		}
+	}
+
+	// pool_cooldown: all members of the result's pool are in cooldown (D-02)
+	// Check by looking up the pool and testing each member against CooldownManager.
+	if result.PoolName != "" {
+		pool := r.GetPool(result.PoolName)
+		if pool != nil && len(pool.Members) > 0 && r.IsPoolFullyCooled(pool) {
+			dispatcher.Emit(webhook.NewPoolCooldownEvent(pool.Name, pool.Members))
+		}
 	}
 }

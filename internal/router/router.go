@@ -459,6 +459,20 @@ func buildPools(
 	return pools, modelToPool
 }
 
+// IsPoolFullyCooled returns true if all members of the pool are currently in cooldown.
+// Used by the handler layer to detect full pool cooldown for webhook events.
+func (r *Router) IsPoolFullyCooled(pool *Pool) bool {
+	if pool == nil || len(pool.Members) == 0 {
+		return false
+	}
+	for _, d := range pool.Members {
+		if !r.cooldown.InCooldown(d) {
+			return false
+		}
+	}
+	return true
+}
+
 // GetPool returns the pool for a given pool name, or nil if not found.
 func (r *Router) GetPool(name string) *Pool {
 	r.mu.RLock()
