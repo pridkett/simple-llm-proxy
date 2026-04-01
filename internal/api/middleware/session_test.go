@@ -128,6 +128,58 @@ func (m *mockSessionStorage) GetSpendSummary(_ context.Context, _, _ time.Time, 
 }
 func (m *mockSessionStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockSessionStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
+func (m *mockSessionStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
+
+// Sticky session stubs — required by interface, not exercised by session tests.
+func (m *mockSessionStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockSessionStorage) UpsertStickySession(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (m *mockSessionStorage) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockSessionStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
+
+// Webhook/notification stubs — required by interface, not exercised by session tests.
+func (m *mockSessionStorage) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (m *mockSessionStorage) DeleteWebhookSubscription(_ context.Context, _ int64) error {
+	return nil
+}
+func (m *mockSessionStorage) GetEnabledWebhooksByEvent(_ context.Context, _ string) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) InsertNotificationEvent(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *mockSessionStorage) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
+func (m *mockSessionStorage) DeleteOldNotificationEvents(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockSessionStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockSessionStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
+	return nil
+}
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {

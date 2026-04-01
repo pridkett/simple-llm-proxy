@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,10 +13,11 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
+	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 )
 
 // Embeddings handles POST /v1/embeddings requests.
-func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager) http.HandlerFunc {
+func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -60,50 +62,59 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 			apiKeyID = &id
 		}
 
-		// Try to get a deployment with retries
-		tried := make(map[*provider.Deployment]bool)
-		var lastErr error
+		// Derive sticky session key from API key hash (empty for master key).
+		stickyKey := ""
+		if ck != nil {
+			stickyKey = ck.Key.KeyHash
+		}
 
-		for attempt := 0; attempt <= r.NumRetries(); attempt++ {
-			deployment, err := r.GetDeploymentWithRetry(embReq.Model, tried)
+		// Route() owns all retry/failover logic. Use a closure variable to
+		// capture the embeddings response since RouteCallback returns
+		// ChatCompletionResponse (not EmbeddingsResponse).
+		var embResp *model.EmbeddingsResponse
+		result := r.Route(ctx, embReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+			if !d.Provider.SupportsEmbeddings() {
+				return nil, nil, fmt.Errorf("provider does not support embeddings")
+			}
+			providerReq := embReq
+			providerReq.Model = d.ActualModel
+			resp, err := d.Provider.Embeddings(ctx, &providerReq)
 			if err != nil {
-				if attempt == 0 {
-					model.WriteError(w, model.ErrModelNotFound(embReq.Model))
+				return nil, nil, err
+			}
+			embResp = resp
+			return nil, nil, nil // signal success via nil error
+		})
+
+		// Emit routing events to webhook dispatcher.
+		emitRoutingEvents(dispatcher, r, result, embReq.Model)
+
+		if result.Error != nil {
+			// Check for budget exhaustion specifically (BUDGET-04).
+			for _, reason := range result.FailoverReasons {
+				if reason == router.FailoverBudgetExhausted {
+					model.WriteError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
 					return
 				}
-				break
 			}
-			tried[deployment] = true
-
-			// Check if provider supports embeddings
-			if !deployment.Provider.SupportsEmbeddings() {
-				model.WriteError(w, model.ErrBadRequest("provider does not support embeddings"))
-				return
+			if len(result.DeploymentsTried) == 0 {
+				model.WriteError(w, model.ErrModelNotFound(embReq.Model))
+			} else {
+				model.WriteError(w, model.ErrProviderError("all providers", result.Error))
 			}
-
-			// Create request with actual model name
-			providerReq := embReq
-			providerReq.Model = deployment.ActualModel
-
-			resp, err := deployment.Provider.Embeddings(ctx, &providerReq)
-			if err != nil {
-				lastErr = err
-				r.ReportFailure(deployment)
-				continue
-			}
-
-			r.ReportSuccess(deployment)
-
-			// Log the request if storage is available
-			if store != nil && resp.Usage != nil {
-				go logRequest(store, sa, cm, apiKeyID, deployment, "/v1/embeddings", resp.Usage, http.StatusOK, startTime, false)
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
 			return
 		}
 
-		model.WriteError(w, model.ErrProviderError("all providers", lastErr))
+		budget := r.BudgetManager()
+		r.ReportSuccess(result.DeploymentUsed)
+
+		// Log the request if storage is available
+		if store != nil && embResp != nil && embResp.Usage != nil {
+			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false)
+		}
+
+		router.SetRouteHeaders(w, result)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(embResp)
 	}
 }

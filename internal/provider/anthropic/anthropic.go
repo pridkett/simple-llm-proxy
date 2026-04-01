@@ -29,13 +29,13 @@ type Provider struct {
 }
 
 // New creates a new Anthropic provider.
-func New(apiKey, apiBase string) provider.Provider {
+func New(opts provider.ProviderOptions) provider.Provider {
 	baseURL := defaultBaseURL
-	if apiBase != "" {
-		baseURL = strings.TrimSuffix(apiBase, "/")
+	if opts.APIBase != "" {
+		baseURL = strings.TrimSuffix(opts.APIBase, "/")
 	}
 	return &Provider{
-		apiKey:  apiKey,
+		apiKey:  opts.APIKey,
 		baseURL: baseURL,
 		client:  &http.Client{},
 	}
@@ -535,5 +535,7 @@ func mapStopReason(reason string) string {
 }
 
 func init() {
-	provider.Register("anthropic", New)
+	provider.Register("anthropic", func(opts provider.ProviderOptions) provider.Provider {
+		return New(opts)
+	})
 }

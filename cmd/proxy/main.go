@@ -24,10 +24,16 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
+	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 
-	// Register providers
+	// Register providers — blank imports trigger init() to self-register with the provider registry.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/gemini"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/minimax"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/ollama"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openai"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/vllm"
 )
 
 func main() {
@@ -47,13 +53,7 @@ func main() {
 	// Initialize structured logger before any other operations.
 	logger.Init(cfg.LogSettings)
 
-	// Initialize router
-	r, err := router.New(cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialize router")
-	}
-
-	// Initialize storage
+	// Initialize storage (before router, so sticky sessions can use it)
 	var store storage.Storage
 	var sqliteStore *sqlite.Storage
 	if cfg.GeneralSettings.DatabaseURL != "" {
@@ -68,6 +68,14 @@ func main() {
 		store = sqliteStore
 		defer store.Close()
 	}
+
+	// Initialize router with storage for sticky session persistence
+	r, err := router.New(cfg, store)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize router")
+	}
+	r.Start(context.Background())
+	defer r.Close()
 
 	// Create SCS session manager backed by the custom SQLite session store.
 	// Cookie attributes are set explicitly per ADR 003 §4.
@@ -155,8 +163,27 @@ func main() {
 		initCancel()
 	}
 
+	// Initialize pool budget manager from stored state (BUDGET-05).
+	// Non-fatal: budget manager starts at 0 if DB query fails.
+	if store != nil {
+		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := r.BudgetManager().InitFromStorage(initCtx, store); err != nil {
+			log.Warn().Err(err).Msg("pool budget init failed: starting at 0")
+		}
+		initCancel()
+	}
+
+	// Initialize webhook dispatcher for outbound event delivery (Phase 9).
+	// YAML webhooks from config; DB webhooks loaded at dispatch time.
+	var dispatcher *webhook.WebhookDispatcher
+	if store != nil {
+		dispatcher = webhook.New(store, cfg.Webhooks)
+		dispatcher.Start(context.Background())
+		defer dispatcher.Close()
+	}
+
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)
@@ -168,7 +195,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Spend flush loop — persists in-memory spend totals to usage_logs every 30s (D-09).
+	// Flush loop — persists in-memory spend totals and pool budget state every 30s.
 	// On shutdown, a final flush is performed before process exit.
 	flushDone := make(chan struct{})
 	shutdownFlush := make(chan struct{})
@@ -181,12 +208,20 @@ func main() {
 				select {
 				case <-ticker.C:
 					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					// Pool budget flush (BUDGET-05)
+					if err := r.BudgetManager().FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("pool budget flush failed")
+					}
 					if err := sa.FlushToStorage(flushCtx, store); err != nil {
 						log.Warn().Err(err).Msg("spend flush failed")
 					}
 					flushCancel()
 				case <-shutdownFlush:
 					flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					// Pool budget flush (BUDGET-05)
+					if err := r.BudgetManager().FlushToStorage(flushCtx, store); err != nil {
+						log.Warn().Err(err).Msg("pool budget final flush on shutdown failed")
+					}
 					if err := sa.FlushToStorage(flushCtx, store); err != nil {
 						log.Warn().Err(err).Msg("spend final flush on shutdown failed")
 					}

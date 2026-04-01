@@ -177,6 +177,24 @@ func parseModelConfig(item any) (ModelConfig, error) {
 		if v, ok := params["api_base"].(string); ok {
 			mc.LiteLLMParams.APIBase = expandEnvVar(v)
 		}
+
+		// Parse extra_headers — additional HTTP headers for provider requests.
+		// Values support os.environ/VAR expansion for secrets.
+		if eh, ok := params["extra_headers"].(map[string]any); ok {
+			mc.LiteLLMParams.ExtraHeaders = make(map[string]string, len(eh))
+			for k, v := range eh {
+				if s, ok := v.(string); ok {
+					mc.LiteLLMParams.ExtraHeaders[k] = expandEnvVar(s)
+				}
+			}
+		}
+
+		// Parse extra_params — provider-specific configuration (e.g., Gemini
+		// safety_settings, MiniMax xml_tool_calls). Stored as raw map and
+		// interpreted by the router when building ProviderOptions.
+		if ep, ok := params["extra_params"].(map[string]any); ok {
+			mc.LiteLLMParams.ExtraParams = ep
+		}
 	}
 
 	if v, ok := m["rpm"].(int); ok {

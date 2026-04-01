@@ -35,7 +35,7 @@ func init() {
 	// Register mock providers so handler tests can create routers with real config.
 	for _, name := range []string{"openai", "anthropic"} {
 		n := name
-		provider.Register(n, func(apiKey, apiBase string) provider.Provider {
+		provider.Register(n, func(opts provider.ProviderOptions) provider.Provider {
 			return &testProvider{name: n}
 		})
 	}
@@ -76,7 +76,7 @@ func TestAdminStatus(t *testing.T) {
 			AllowedFails:    3,
 			CooldownTime:    30 * time.Second,
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -204,7 +204,7 @@ general_settings:
 		t.Fatalf("NewReloader: %v", err)
 	}
 
-	r, err := router.New(reloader.Config())
+	r, err := router.New(reloader.Config(), nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
@@ -289,7 +289,7 @@ general_settings:
 		t.Fatalf("NewReloader: %v", err)
 	}
 
-	r, err := router.New(reloader.Config())
+	r, err := router.New(reloader.Config(), nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}

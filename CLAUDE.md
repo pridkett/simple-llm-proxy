@@ -198,7 +198,7 @@ When starting on a new task - always make sure you being your work off the
 that you're working off a branch. Branches should be clearly named in the form of
     [TYPE]/[NUM]-dashed-word-description
 For example:
-    feat/12-add-in-server-messaging
+    feature/12-add-in-server-messaging
     fix/13-correct-missing-headers-in-cicd
 If you are working off a branch and it seems to be directed for a different branch,
 you are probably doing something wrong. If your current git state appears to be
@@ -209,13 +209,24 @@ other than `main`. Doing so is an amateur move and will get most developers
 fired. ALWAYS make sure that `main` is updated against the main GitHub repo before
 creating a new branch.
 
+The branch number should refer to the GitHub issue you're working on and not
+the GSD phase or GSD identifier. If you don't have a corresponding GitHub issue
+you're working on, make one. It's important that we keep our documentation
+buttoned up.
+
+When completing a task you MUST file a pull request as described in the pull
+request section below. Please make sure that the pull requests build off each
+other if you're doing multiple pull requests so that way there are fewer merge
+commits and conflicts.
+
 ### Working with Issues
 
 When creating an issue, always make sure to apply the appropriate tags to the
 issue. This helps the humans understand what you're doing.
 
 When starting work on an issue, always make sure to assign yourself to the
-issue.
+issue. You must have a GitHub issue for the work that you're doing in addition to
+the GSD phase.
 
 When closing an issue, always make sure to add a detailed writeup of the work
 that was done to implement that issue in code.

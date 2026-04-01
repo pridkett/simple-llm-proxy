@@ -179,6 +179,52 @@ func (s *captureStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ stor
 func (s *captureStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (s *captureStorage) GetStickySession(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (s *captureStorage) UpsertStickySession(_ context.Context, _, _, _ string) error { return nil }
+func (s *captureStorage) DeleteExpiredStickySessions(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) BulkUpsertStickySessions(_ context.Context, _ []storage.StickySession) error {
+	return nil
+}
+func (s *captureStorage) GetPoolBudgetState(_ context.Context) ([]storage.PoolBudgetRow, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpsertPoolBudgetState(_ context.Context, _ string, _ float64, _ string) error {
+	return nil
+}
+
+// Webhook/notification stubs.
+func (s *captureStorage) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (s *captureStorage) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (s *captureStorage) GetEnabledWebhooksByEvent(_ context.Context, _ string) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) InsertNotificationEvent(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
+func (s *captureStorage) DeleteOldNotificationEvents(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64) (int64, error) {
+	return 0, nil
+}
+func (s *captureStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function
@@ -554,4 +600,78 @@ func TestStreamUsageFromChunks(t *testing.T) {
 	if log.DeploymentKey != deployment.DeploymentKey() {
 		t.Errorf("DeploymentKey: got %q, want %q", log.DeploymentKey, deployment.DeploymentKey())
 	}
+}
+
+// ---------------------------------------------------------------------------
+// STREAM-05 Verification: is_streaming flag is correctly recorded.
+// ---------------------------------------------------------------------------
+
+// TestStreamIsStreamingFlag_STREAM05 verifies that streaming requests set
+// IsStreaming=true in the request log, and non-streaming requests set
+// IsStreaming=false. This is the STREAM-05 requirement.
+func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
+	t.Run("streaming response records IsStreaming=true", func(t *testing.T) {
+		chunk := &model.StreamChunk{
+			ID:      "cmp-1",
+			Object:  "chat.completion.chunk",
+			Created: time.Now().Unix(),
+			Model:   "gpt-4",
+			Choices: []model.Choice{{Index: 0, Delta: &model.Delta{Content: "hi"}, FinishReason: "stop"}},
+		}
+
+		mockProv := &streamingMockProvider{
+			name: "openai",
+			makeStream: func(_ context.Context) (provider.Stream, error) {
+				return &mockStream{chunks: []*model.StreamChunk{chunk}}, nil
+			},
+		}
+
+		deployment := makeTestDeployment(mockProv)
+		mr := &spyRouter{deployment: deployment}
+		store := &captureStorage{}
+
+		w := httptest.NewRecorder()
+
+		err := handleStreamingResponseWithRouter(context.Background(), w, deployment,
+			&model.ChatCompletionRequest{
+				Model:    "gpt-4",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+				Stream:   true,
+			}, mr, store, nil, nil, nil, time.Now())
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Wait for async log goroutine
+		time.Sleep(20 * time.Millisecond)
+
+		if len(store.logs) == 0 {
+			t.Fatal("no log recorded")
+		}
+		if !store.logs[0].IsStreaming {
+			t.Errorf("IsStreaming = false, want true for streaming request")
+		}
+	})
+
+	t.Run("non-streaming logRequest passes IsStreaming=false", func(t *testing.T) {
+		// Directly test the logRequest function to verify the non-streaming path.
+		store := &captureStorage{}
+		deployment := makeTestDeployment(&streamingMockProvider{name: "openai"})
+		usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5}
+
+		// Call logRequest with isStreaming=false (simulating non-streaming path)
+		logRequest(store, nil, nil, nil, "", nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false)
+
+		// Wait for the log to be written (logRequest may run in goroutine in production,
+		// but here we call it synchronously for test determinism).
+		time.Sleep(20 * time.Millisecond)
+
+		if len(store.logs) == 0 {
+			t.Fatal("no log recorded")
+		}
+		if store.logs[0].IsStreaming {
+			t.Errorf("IsStreaming = true, want false for non-streaming request")
+		}
+	})
 }
