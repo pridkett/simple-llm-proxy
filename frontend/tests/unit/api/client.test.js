@@ -126,19 +126,19 @@ describe('api client', () => {
       const result = await api.models()
       expect(result).toEqual(payload)
       const [url] = global.fetch.mock.calls[0]
-      expect(url).toBe('/v1/models')
+      expect(url).toBe('/admin/models')
     })
   })
 
   describe('chatCompletion()', () => {
-    it('POSTs to /v1/chat/completions with model and messages', async () => {
+    it('POSTs to /admin/chat/completions with model and messages', async () => {
       const payload = { choices: [{ message: { content: 'Hi' } }] }
       mockFetch(payload)
       const msgs = [{ role: 'user', content: 'Hello' }]
       const result = await api.chatCompletion('gpt-4', msgs)
       expect(result).toEqual(payload)
       const [url, opts] = global.fetch.mock.calls[0]
-      expect(url).toBe('/v1/chat/completions')
+      expect(url).toBe('/admin/chat/completions')
       expect(opts.method).toBe('POST')
       const body = JSON.parse(opts.body)
       expect(body.model).toBe('gpt-4')
@@ -168,7 +168,7 @@ describe('api client', () => {
       const result = await api.chatCompletionStream('gpt-4', [{ role: 'user', content: 'Hi' }])
       expect(result).toBe(mockBody)
       const [url, opts] = global.fetch.mock.calls[0]
-      expect(url).toBe('/v1/chat/completions')
+      expect(url).toBe('/admin/chat/completions')
       expect(JSON.parse(opts.body).stream).toBe(true)
     })
 
