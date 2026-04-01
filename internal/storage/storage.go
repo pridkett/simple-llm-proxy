@@ -171,6 +171,44 @@ type Storage interface {
 	// UpsertPoolBudgetState creates or updates the budget state for a pool.
 	// Uses INSERT OR REPLACE on pool_name primary key.
 	UpsertPoolBudgetState(ctx context.Context, poolName string, spendToday float64, resetDate string) error
+
+	// --- Webhook Subscriptions ---
+
+	// ListWebhookSubscriptions returns all webhook subscriptions ordered by created_at DESC.
+	ListWebhookSubscriptions(ctx context.Context) ([]*WebhookSubscription, error)
+
+	// CreateWebhookSubscription inserts a new webhook subscription and returns it with assigned ID.
+	CreateWebhookSubscription(ctx context.Context, sub *WebhookSubscription) (*WebhookSubscription, error)
+
+	// UpdateWebhookSubscription modifies url, events, secret, and enabled fields of an existing subscription.
+	UpdateWebhookSubscription(ctx context.Context, sub *WebhookSubscription) error
+
+	// DeleteWebhookSubscription removes a webhook subscription by ID. No error for non-existent ID.
+	DeleteWebhookSubscription(ctx context.Context, id int64) error
+
+	// GetEnabledWebhooksByEvent returns only enabled subscriptions whose events array contains the given event type.
+	GetEnabledWebhooksByEvent(ctx context.Context, eventType string) ([]*WebhookSubscription, error)
+
+	// --- Notification Events ---
+
+	// InsertNotificationEvent inserts a routing event and returns its new row ID.
+	InsertNotificationEvent(ctx context.Context, eventType string, payload string) (int64, error)
+
+	// ListNotificationEvents returns paginated notification events with total count.
+	// When eventType is non-empty, results are filtered to that event type.
+	ListNotificationEvents(ctx context.Context, limit, offset int, eventType string) ([]*NotificationEvent, int, error)
+
+	// DeleteOldNotificationEvents removes events older than the given cutoff and returns the count deleted.
+	// CASCADE will also delete associated webhook_deliveries rows.
+	DeleteOldNotificationEvents(ctx context.Context, olderThan time.Time) (int64, error)
+
+	// --- Webhook Deliveries ---
+
+	// InsertWebhookDelivery creates a delivery record. subscriptionID is nil for YAML webhook deliveries.
+	InsertWebhookDelivery(ctx context.Context, subscriptionID *int64, eventID int64) (int64, error)
+
+	// UpdateWebhookDeliveryStatus updates status, response_code, attempt_count, and sets last_attempt_at to now.
+	UpdateWebhookDeliveryStatus(ctx context.Context, id int64, status string, responseCode int, attemptCount int) error
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -312,4 +350,24 @@ type PoolBudgetRow struct {
 	PoolName   string  `json:"pool_name"`
 	SpendToday float64 `json:"spend_today"`
 	ResetDate  string  `json:"reset_date"` // "2006-01-02" UTC
+}
+
+// WebhookSubscription represents a DB-stored webhook (UI-created).
+// YAML-defined webhooks are held in memory and never written to webhook_subscriptions.
+type WebhookSubscription struct {
+	ID        int64     `json:"id"`
+	URL       string    `json:"url"`
+	Events    []string  `json:"events"`    // JSON-decoded from TEXT column
+	Secret    string    `json:"-"`          // never serialize to API response
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NotificationEvent represents a routing event in the notification feed.
+// Retained for 30 days; older events are pruned by DeleteOldNotificationEvents.
+type NotificationEvent struct {
+	ID        int64     `json:"id"`
+	EventType string    `json:"event_type"`
+	Payload   string    `json:"payload"` // raw JSON string
+	CreatedAt time.Time `json:"created_at"`
 }

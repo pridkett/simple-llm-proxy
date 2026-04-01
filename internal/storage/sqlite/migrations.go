@@ -265,6 +265,26 @@ func (s *Storage) migrate(ctx context.Context) error {
 
 		// Migration 29: Index sticky_routing_sessions(last_used_at) for expiry cleanup.
 		`CREATE INDEX IF NOT EXISTS idx_sticky_routing_sessions_last_used_at ON sticky_routing_sessions(last_used_at)`,
+
+		// Migration 30: Drop webhook_deliveries to fix missing ON DELETE CASCADE
+		// and NOT NULL constraint on subscription_id. No production data exists.
+		`DROP TABLE IF EXISTS webhook_deliveries`,
+
+		// Migration 31: Recreate webhook_deliveries with ON DELETE CASCADE on both FKs
+		// and nullable subscription_id for YAML webhook delivery tracking.
+		`CREATE TABLE webhook_deliveries (
+    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER  REFERENCES webhook_subscriptions(id) ON DELETE CASCADE,
+    event_id        INTEGER  NOT NULL REFERENCES notification_events(id) ON DELETE CASCADE,
+    attempt_count   INTEGER  NOT NULL DEFAULT 0,
+    last_attempt_at DATETIME,
+    status          TEXT     NOT NULL DEFAULT 'pending',
+    response_code   INTEGER,
+    created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+
+		// Migration 32: Recreate the index dropped with the table in migration 30.
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_subscription_id ON webhook_deliveries(subscription_id)`,
 	}
 
 	for i, sql := range migrations {
