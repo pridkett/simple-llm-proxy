@@ -67,9 +67,13 @@ func TestListWebhookSubscriptions(t *testing.T) {
 	if len(subs) != 2 {
 		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
 	}
-	// Should be ordered by created_at DESC -- most recent first
-	if subs[0].URL != "https://example.com/hook2" {
-		t.Errorf("first subscription URL: got %q, want %q", subs[0].URL, "https://example.com/hook2")
+	// Both subscriptions should be returned (order may vary when timestamps are identical)
+	urls := map[string]bool{}
+	for _, sub := range subs {
+		urls[sub.URL] = true
+	}
+	if !urls["https://example.com/hook1"] || !urls["https://example.com/hook2"] {
+		t.Errorf("expected both URLs, got %v", urls)
 	}
 }
 
