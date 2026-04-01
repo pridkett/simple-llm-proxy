@@ -142,10 +142,10 @@ func (m *mockAuthStore) InsertNotificationEvent(_ context.Context, _, _ string) 
 func (m *mockAuthStore) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
 	return nil, 0, nil
 }
-func (m *mockAuthStore) DeleteOldNotificationEvents(_ context.Context, _ int) (int64, error) {
+func (m *mockAuthStore) DeleteOldNotificationEvents(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
-func (m *mockAuthStore) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64, _ string, _ int, _ string) (int64, error) {
+func (m *mockAuthStore) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64) (int64, error) {
 	return 0, nil
 }
 func (m *mockAuthStore) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
