@@ -179,6 +179,19 @@ func (s *captureStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ stor
 func (s *captureStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) {
 	return nil, nil
 }
+func (s *captureStorage) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (s *captureStorage) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (s *captureStorage) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function

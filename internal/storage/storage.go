@@ -147,6 +147,26 @@ type Storage interface {
 	// Flush rows (model='_flush') are excluded. Only spend attributed to active keys is included.
 	// Days with zero spend are not returned — the caller fills gaps if needed.
 	GetDailySpend(ctx context.Context, from, to time.Time, filters SpendFilters) ([]DailySpendRow, error)
+
+	// --- Webhook Subscriptions ---
+
+	// ListWebhookSubscriptions returns all webhook subscriptions ordered by created_at DESC.
+	ListWebhookSubscriptions(ctx context.Context) ([]*WebhookSubscription, error)
+
+	// CreateWebhookSubscription inserts a new webhook subscription and returns it with assigned ID.
+	CreateWebhookSubscription(ctx context.Context, sub *WebhookSubscription) (*WebhookSubscription, error)
+
+	// UpdateWebhookSubscription modifies url, events, secret, and enabled fields of an existing subscription.
+	UpdateWebhookSubscription(ctx context.Context, sub *WebhookSubscription) error
+
+	// DeleteWebhookSubscription removes a webhook subscription by ID. No error for non-existent ID.
+	DeleteWebhookSubscription(ctx context.Context, id int64) error
+
+	// --- Notification Events ---
+
+	// ListNotificationEvents returns paginated notification events with total count.
+	// When eventType is non-empty, results are filtered to that event type.
+	ListNotificationEvents(ctx context.Context, limit, offset int, eventType string) ([]*NotificationEvent, int, error)
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -271,4 +291,24 @@ type SpendRow struct {
 	TotalSpend float64  `json:"total_spend"`
 	MaxBudget  *float64 `json:"max_budget"`  // nil = unlimited (hard cap)
 	SoftBudget *float64 `json:"soft_budget"` // nil = no soft alert threshold
+}
+
+// WebhookSubscription represents a DB-stored webhook (UI-created).
+// YAML-defined webhooks are held in memory and never written to webhook_subscriptions.
+type WebhookSubscription struct {
+	ID        int64     `json:"id"`
+	URL       string    `json:"url"`
+	Events    []string  `json:"events"`    // JSON-decoded from TEXT column
+	Secret    string    `json:"-"`          // never serialize to API response
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NotificationEvent represents a routing event in the notification feed.
+// Retained for 30 days; older events are pruned by DeleteOldNotificationEvents.
+type NotificationEvent struct {
+	ID        int64     `json:"id"`
+	EventType string    `json:"event_type"`
+	Payload   string    `json:"payload"` // raw JSON string
+	CreatedAt time.Time `json:"created_at"`
 }
