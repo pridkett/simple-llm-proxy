@@ -103,6 +103,19 @@ func (m *mockAuthStore) GetSpendSummary(_ context.Context, _, _ time.Time, _ sto
 }
 func (m *mockAuthStore) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
 func (m *mockAuthStore) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
+func (m *mockAuthStore) ListWebhookSubscriptions(_ context.Context) ([]*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) CreateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) (*storage.WebhookSubscription, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) UpdateWebhookSubscription(_ context.Context, _ *storage.WebhookSubscription) error {
+	return nil
+}
+func (m *mockAuthStore) DeleteWebhookSubscription(_ context.Context, _ int64) error { return nil }
+func (m *mockAuthStore) ListNotificationEvents(_ context.Context, _, _ int, _ string) ([]*storage.NotificationEvent, int, error) {
+	return nil, 0, nil
+}
 
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
