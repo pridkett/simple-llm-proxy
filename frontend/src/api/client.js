@@ -324,4 +324,37 @@ export const api = {
     const query = qs.toString() ? `?${qs}` : ''
     return request(`/admin/spend${query}`)
   },
+
+  /** GET /admin/webhooks -- returns all webhooks (YAML + UI) */
+  webhooks() {
+    return request('/admin/webhooks')
+  },
+
+  /** POST /admin/webhooks -- create a new UI webhook */
+  createWebhook(data) {
+    return request('/admin/webhooks', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  /** PUT /admin/webhooks/:id -- update a UI webhook */
+  updateWebhook(id, data) {
+    return request(`/admin/webhooks/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  /** DELETE /admin/webhooks/:id -- delete a UI webhook */
+  deleteWebhook(id) {
+    return request(`/admin/webhooks/${id}`, { method: 'DELETE' })
+  },
+
+  /**
+   * GET /admin/events -- returns paginated notification events
+   * @param {{ limit?: number, offset?: number, event_type?: string }} params
+   */
+  events(params = {}) {
+    const qs = new URLSearchParams()
+    if (params.limit) qs.set('limit', String(params.limit))
+    if (params.offset) qs.set('offset', String(params.offset))
+    if (params.event_type) qs.set('event_type', params.event_type)
+    const query = qs.toString() ? `?${qs}` : ''
+    return request(`/admin/events${query}`)
+  },
 }
