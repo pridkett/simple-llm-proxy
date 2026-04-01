@@ -25,6 +25,9 @@ const routes = [
   { path: '/applications', name: 'applications', component: ApplicationsView },
   { path: '/keys', name: 'keys', component: KeysView },
   { path: '/cost', name: 'cost', component: () => import('../views/CostView.vue') },
+  { path: '/pools', name: 'pools', component: () => import('../views/PoolsView.vue') },
+  { path: '/webhooks', name: 'webhooks', component: () => import('../views/WebhooksView.vue') },
+  { path: '/events', name: 'events', component: () => import('../views/EventsView.vue') },
 ]
 
 const router = createRouter({

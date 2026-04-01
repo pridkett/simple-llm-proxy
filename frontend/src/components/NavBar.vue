@@ -90,6 +90,9 @@ const adminLinks = [
   { to: '/applications', label: 'Applications' },
   { to: '/keys', label: 'Keys' },
   { to: '/cost', label: 'Cost' },
+  { to: '/pools', label: 'Pools' },
+  { to: '/webhooks', label: 'Webhooks' },
+  { to: '/events', label: 'Events' },
 ]
 
 async function fetchAlertCount() {

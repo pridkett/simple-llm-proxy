@@ -300,6 +300,78 @@ describe('api client', () => {
     })
   })
 
+  describe('webhooks()', () => {
+    it('calls GET /admin/webhooks', async () => {
+      const payload = { webhooks: [] }
+      mockFetch(payload)
+      const result = await api.webhooks()
+      expect(result).toEqual(payload)
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/webhooks')
+      expect(opts.method).toBeUndefined() // default GET
+    })
+  })
+
+  describe('createWebhook()', () => {
+    it('POSTs to /admin/webhooks with body', async () => {
+      const data = { url: 'https://x.com', events: ['provider_failover'], secret: 's', enabled: true }
+      mockFetch({ id: 1, ...data })
+      const result = await api.createWebhook(data)
+      expect(result.url).toBe('https://x.com')
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/webhooks')
+      expect(opts.method).toBe('POST')
+      const body = JSON.parse(opts.body)
+      expect(body.url).toBe('https://x.com')
+      expect(body.events).toEqual(['provider_failover'])
+    })
+  })
+
+  describe('updateWebhook()', () => {
+    it('PUTs to /admin/webhooks/{id} with body', async () => {
+      const data = { url: 'https://y.com', events: ['pool_cooldown'], secret: 'new', enabled: false }
+      mockFetch({ id: 5, ...data })
+      await api.updateWebhook(5, data)
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/webhooks/5')
+      expect(opts.method).toBe('PUT')
+      const body = JSON.parse(opts.body)
+      expect(body.url).toBe('https://y.com')
+      expect(body.events).toEqual(['pool_cooldown'])
+    })
+  })
+
+  describe('deleteWebhook()', () => {
+    it('DELETEs /admin/webhooks/{id}', async () => {
+      mockFetch(null, 204)
+      // 204 returns null
+      global.fetch.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve(null) })
+      await api.deleteWebhook(5)
+      const [url, opts] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/webhooks/5')
+      expect(opts.method).toBe('DELETE')
+    })
+  })
+
+  describe('events()', () => {
+    it('calls GET /admin/events with no params by default', async () => {
+      mockFetch({ events: [], total: 0 })
+      await api.events()
+      const [url] = global.fetch.mock.calls[0]
+      expect(url).toBe('/admin/events')
+    })
+
+    it('appends query params when provided', async () => {
+      mockFetch({ events: [], total: 0 })
+      await api.events({ limit: 50, offset: 0, event_type: 'provider_failover' })
+      const [url] = global.fetch.mock.calls[0]
+      // offset=0 is falsy, so it won't be included
+      expect(url).toContain('/admin/events?')
+      expect(url).toContain('limit=50')
+      expect(url).toContain('event_type=provider_failover')
+    })
+  })
+
   describe('Test C: 401 on /login does NOT redirect (loop prevention)', () => {
     it('does not redirect when already on /login route', async () => {
       let capturedHref = ''

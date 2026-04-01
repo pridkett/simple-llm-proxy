@@ -73,4 +73,22 @@ describe('StatusBadge', () => {
     expect(span.classes()).toContain('bg-red-50')
     expect(span.classes()).toContain('text-red-700')
   })
+
+  it('renders "Backoff" for status backoff', () => {
+    const wrapper = mount(StatusBadge, { props: { status: 'backoff' } })
+    expect(wrapper.text()).toBe('Backoff')
+  })
+
+  it('applies amber classes for backoff status', () => {
+    const wrapper = mount(StatusBadge, { props: { status: 'backoff' } })
+    const span = wrapper.find('span')
+    expect(span.classes()).toContain('bg-amber-50')
+    expect(span.classes()).toContain('text-amber-700')
+  })
+
+  it('applies amber dot for backoff status', () => {
+    const wrapper = mount(StatusBadge, { props: { status: 'backoff' } })
+    const dot = wrapper.find('span span')
+    expect(dot.classes()).toContain('bg-amber-500')
+  })
 })
