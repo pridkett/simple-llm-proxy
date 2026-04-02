@@ -34,7 +34,7 @@ func AdminStatus(r *router.Router, startTime time.Time) http.HandlerFunc {
 		settings := r.Settings()
 		resp := adminStatusResponse{
 			Status:        "healthy",
-			UptimeSeconds: int64(time.Since(startTime).Seconds()),
+			UptimeSeconds: int64(time.Now().Sub(startTime.Round(0)).Seconds()),
 			Models:        r.GetStatus(),
 			Pools:         r.GetPoolStatus(),
 			RouterSettings: routerSettingsJSON{
