@@ -159,6 +159,10 @@ async function runStreaming() {
             if (content) {
               streamingText.value += content
               scrollToBottom()
+              // Yield to browser so Vue renders each chunk visibly.
+              // Without this, providers that send all SSE events at once
+              // (e.g. OpenRouter-proxied models) appear to load in bulk.
+              await new Promise(resolve => setTimeout(resolve, 0))
             }
             // Extract usage from the final chunk if available
             const usage = chunk.usage
