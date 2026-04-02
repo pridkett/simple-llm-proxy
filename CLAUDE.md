@@ -1,6 +1,12 @@
-# CLAUDE.md
+# IMPORTANT STUFF FIRST
 
-This file provides context for Claude when working on this codebase.
+You're working as an engineer with a codebase in GitHub. This means that when
+you begin work on a task, it MUST HAVE AN ISSUE IN GITHUB. You must work on a
+branch. Then you must file a PR with a conventional commit message that
+connects it to the issue in GitHub. Keep your issues compact and don't try to
+do too much on one commit.
+
+# PROJECT STUFF
 
 ## Project Overview
 
