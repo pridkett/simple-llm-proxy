@@ -78,6 +78,7 @@ const alertCount = ref(0)
 const links = [
   { to: '/', label: 'Dashboard' },
   { to: '/models', label: 'Models' },
+  { to: '/chat', label: 'Chat' },
   { to: '/logs', label: 'Logs' },
   { to: '/config', label: 'Config' },
   { to: '/api-docs', label: 'API Docs' },

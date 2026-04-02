@@ -35,6 +35,7 @@ function makeRouter(currentPath = '/') {
       { path: '/login', name: 'login', component: { template: '<div/>' }, meta: { requiresAuth: false } },
       { path: '/', name: 'dashboard', component: { template: '<div/>' } },
       { path: '/models', name: 'models', component: { template: '<div/>' } },
+      { path: '/chat', name: 'chat', component: { template: '<div/>' } },
       { path: '/logs', name: 'logs', component: { template: '<div/>' } },
       { path: '/config', name: 'config', component: { template: '<div/>' } },
       { path: '/api-docs', name: 'api-docs', component: { template: '<div/>' } },
@@ -63,6 +64,7 @@ describe('NavBar', () => {
     const text = wrapper.text()
     expect(text).toContain('Dashboard')
     expect(text).toContain('Models')
+    expect(text).toContain('Chat')
     expect(text).toContain('Logs')
     expect(text).toContain('Config')
     expect(text).toContain('API Docs')

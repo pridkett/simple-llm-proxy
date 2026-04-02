@@ -10,12 +10,14 @@ import UsersView from '../views/UsersView.vue'
 import TeamsView from '../views/TeamsView.vue'
 import ApplicationsView from '../views/ApplicationsView.vue'
 import KeysView from '../views/KeysView.vue'
+import ChatView from '../views/ChatView.vue'
 import { useSession } from '../composables/useSession.js'
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { requiresAuth: false } },
   { path: '/', name: 'dashboard', component: DashboardView },
   { path: '/models', name: 'models', component: ModelsView },
+  { path: '/chat', name: 'chat', component: ChatView },
   { path: '/logs', name: 'logs', component: LogsView },
   { path: '/config', name: 'config', component: ConfigView },
   { path: '/settings', name: 'settings', component: SettingsView },
