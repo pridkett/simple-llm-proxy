@@ -20,23 +20,64 @@
 
       <!-- Model selector -->
       <div v-if="loadingModels" class="text-sm text-gray-400">Loading models…</div>
-      <div v-else-if="availableModels.length === 0" class="text-sm text-red-500 text-sm">
+      <div v-else-if="availableModels.length === 0" class="text-sm text-red-500">
         No models available — check your connection and API key
       </div>
-      <div v-else class="flex flex-wrap gap-2">
-        <button
-          v-for="model in availableModels"
-          :key="model"
-          class="text-xs rounded-full px-3 py-1.5 border transition-colors"
-          :class="selectedModels.includes(model)
-            ? 'bg-indigo-600 text-white border-indigo-600'
-            : selectedModels.length >= 4
-              ? 'bg-white text-gray-400 border-gray-200 cursor-not-allowed'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-          @click="toggleModel(model)"
-        >
-          {{ model }}
-        </button>
+      <div v-else class="space-y-2">
+        <!-- Selected model chips -->
+        <div v-if="selectedModels.length > 0" class="flex flex-wrap gap-2">
+          <span
+            v-for="model in selectedModels"
+            :key="model"
+            class="inline-flex items-center gap-1 text-xs rounded-full pl-3 pr-1.5 py-1 bg-indigo-600 text-white"
+          >
+            {{ model }}
+            <button
+              class="w-4 h-4 rounded-full hover:bg-indigo-500 flex items-center justify-center"
+              :disabled="anyStreaming"
+              @click="toggleModel(model)"
+              title="Remove model"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </span>
+        </div>
+        <!-- Search dropdown -->
+        <div v-if="selectedModels.length < 4" class="relative" ref="dropdownRef">
+          <input
+            v-model="modelSearch"
+            type="text"
+            class="input text-sm w-full max-w-sm"
+            :placeholder="selectedModels.length === 0 ? 'Search and select models…' : 'Add another model…'"
+            :disabled="anyStreaming"
+            @focus="dropdownOpen = true"
+            @input="dropdownOpen = true"
+            @keydown.escape="dropdownOpen = false"
+            @keydown.enter.prevent="selectFirstMatch"
+          />
+          <div
+            v-if="dropdownOpen && filteredModels.length > 0"
+            class="absolute z-10 mt-1 w-full max-w-sm bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+          >
+            <button
+              v-for="model in filteredModels"
+              :key="model"
+              class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              @mousedown.prevent="toggleModel(model); modelSearch = ''"
+            >
+              {{ model }}
+            </button>
+          </div>
+          <div
+            v-if="dropdownOpen && modelSearch && filteredModels.length === 0"
+            class="absolute z-10 mt-1 w-full max-w-sm bg-white border border-gray-200 rounded-md shadow-lg px-3 py-2 text-sm text-gray-400"
+          >
+            No matching models
+          </div>
+        </div>
+        <p v-else class="text-xs text-gray-400">Maximum 4 models selected</p>
       </div>
 
       <!-- Advanced options (collapsible) -->
@@ -145,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../api/client.js'
 import ChatPanel from '../components/ChatPanel.vue'
 
@@ -156,13 +197,43 @@ const loadingModels = ref(true)
 onMounted(async () => {
   try {
     const data = await api.models()
-    availableModels.value = (data.data ?? []).map(m => m.id)
+    availableModels.value = (data.data ?? []).map(m => m.id).sort((a, b) => a.localeCompare(b))
   } catch {
     /* silently ignore; empty state shown */
   } finally {
     loadingModels.value = false
   }
+  document.addEventListener('click', handleClickOutside)
 })
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+// ── Model search / dropdown ────────────────────────────────────────────────
+const modelSearch = ref('')
+const dropdownOpen = ref(false)
+const dropdownRef = ref(null)
+
+const filteredModels = computed(() => {
+  const q = modelSearch.value.toLowerCase()
+  return availableModels.value.filter(m =>
+    !selectedModels.value.includes(m) && m.toLowerCase().includes(q)
+  )
+})
+
+function selectFirstMatch() {
+  if (filteredModels.value.length > 0) {
+    toggleModel(filteredModels.value[0])
+    modelSearch.value = ''
+  }
+}
+
+function handleClickOutside(e) {
+  if (dropdownRef.value && !dropdownRef.value.contains(e.target)) {
+    dropdownOpen.value = false
+  }
+}
 
 // ── Model selection ────────────────────────────────────────────────────────
 const selectedModels = ref([])

@@ -37,6 +37,15 @@ function makeRouter() {
   })
 }
 
+/** Helper: open the dropdown, find a model option, and click it */
+async function selectModelFromDropdown(wrapper, modelName) {
+  const input = wrapper.find('input[type="text"]')
+  await input.setValue(modelName)
+  await input.trigger('focus')
+  const option = wrapper.findAll('.max-h-48 button').find(b => b.text() === modelName)
+  if (option) await option.trigger('mousedown')
+}
+
 describe('ChatView', () => {
   beforeEach(() => {
     mockModels.mockReset()
@@ -55,15 +64,16 @@ describe('ChatView', () => {
     expect(wrapper.text()).toContain('Select one or more models above to start chatting')
   })
 
-  it('renders model pills after loading', async () => {
+  it('shows search input after loading', async () => {
     mockModels.mockResolvedValue({ data: [{ id: 'gpt-4' }, { id: 'claude-3' }] })
     const router = makeRouter()
     await router.push('/chat')
     const wrapper = mount(ChatView, { global: { plugins: [router] } })
     await flushPromises()
 
-    const buttons = wrapper.findAll('button').filter(b => ['gpt-4', 'claude-3'].includes(b.text()))
-    expect(buttons.length).toBe(2)
+    const input = wrapper.find('input[type="text"]')
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('placeholder')).toContain('Search and select models')
   })
 
   it('shows loading state while fetching models', async () => {
@@ -85,23 +95,52 @@ describe('ChatView', () => {
     expect(wrapper.text()).toContain('No models available')
   })
 
-  it('selects a model when pill is clicked', async () => {
+  it('sorts models alphabetically', async () => {
+    mockModels.mockResolvedValue({ data: [{ id: 'zeta' }, { id: 'alpha' }, { id: 'mid' }] })
+    const router = makeRouter()
+    await router.push('/chat')
+    const wrapper = mount(ChatView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // Open dropdown
+    const input = wrapper.find('input[type="text"]')
+    await input.trigger('focus')
+
+    const options = wrapper.findAll('.max-h-48 button').map(b => b.text())
+    expect(options).toEqual(['alpha', 'mid', 'zeta'])
+  })
+
+  it('filters models by search query', async () => {
+    mockModels.mockResolvedValue({ data: [{ id: 'gpt-4' }, { id: 'claude-3' }, { id: 'gemini-pro' }] })
+    const router = makeRouter()
+    await router.push('/chat')
+    const wrapper = mount(ChatView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const input = wrapper.find('input[type="text"]')
+    await input.setValue('cl')
+    await input.trigger('focus')
+
+    const options = wrapper.findAll('.max-h-48 button').map(b => b.text())
+    expect(options).toEqual(['claude-3'])
+  })
+
+  it('selects a model from the dropdown', async () => {
     mockModels.mockResolvedValue({ data: [{ id: 'gpt-4' }, { id: 'claude-3' }] })
     const router = makeRouter()
     await router.push('/chat')
     const wrapper = mount(ChatView, { global: { plugins: [router] } })
     await flushPromises()
 
-    const gpt4Pill = wrapper.findAll('button').find(b => b.text() === 'gpt-4')
-    await gpt4Pill.trigger('click')
+    await selectModelFromDropdown(wrapper, 'gpt-4')
 
-    // After selection, empty state should be gone and a ChatPanel should appear
+    // After selection: chip visible, empty state gone, panel appears
     expect(wrapper.text()).not.toContain('Select one or more models above')
     expect(wrapper.text()).toContain('gpt-4')
     expect(wrapper.text()).toContain('Send a message to start')
   })
 
-  it('limits selection to 4 models', async () => {
+  it('limits selection to 4 models and hides search input', async () => {
     mockModels.mockResolvedValue({
       data: [
         { id: 'model-1' }, { id: 'model-2' }, { id: 'model-3' },
@@ -113,15 +152,14 @@ describe('ChatView', () => {
     const wrapper = mount(ChatView, { global: { plugins: [router] } })
     await flushPromises()
 
-    // Select 4 models
+    // Select 4 models via dropdown
     for (const name of ['model-1', 'model-2', 'model-3', 'model-4']) {
-      const pill = wrapper.findAll('button').find(b => b.text() === name)
-      await pill.trigger('click')
+      await selectModelFromDropdown(wrapper, name)
     }
 
-    // 5th pill should have disabled styling (cursor-not-allowed)
-    const fifthPill = wrapper.findAll('button').find(b => b.text() === 'model-5')
-    expect(fifthPill.classes()).toContain('cursor-not-allowed')
+    // Search input should be gone, replaced by "Maximum 4" message
+    expect(wrapper.find('input[type="text"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Maximum 4 models selected')
   })
 
   it('disables send button when no models selected', async () => {
@@ -135,18 +173,19 @@ describe('ChatView', () => {
     expect(sendBtn.attributes('disabled')).toBeDefined()
   })
 
-  it('deselects a model when its pill is clicked again', async () => {
+  it('removes a model when its chip X button is clicked', async () => {
     mockModels.mockResolvedValue({ data: [{ id: 'gpt-4' }] })
     const router = makeRouter()
     await router.push('/chat')
     const wrapper = mount(ChatView, { global: { plugins: [router] } })
     await flushPromises()
 
-    const pill = wrapper.findAll('button').find(b => b.text() === 'gpt-4')
-    await pill.trigger('click') // select
+    await selectModelFromDropdown(wrapper, 'gpt-4')
     expect(wrapper.text()).not.toContain('Select one or more models above')
 
-    await pill.trigger('click') // deselect
+    // Click the X button on the chip
+    const removeBtn = wrapper.find('.bg-indigo-600 button')
+    await removeBtn.trigger('click')
     expect(wrapper.text()).toContain('Select one or more models above')
   })
 })
