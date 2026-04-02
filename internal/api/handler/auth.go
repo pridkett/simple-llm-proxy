@@ -34,11 +34,20 @@ func AuthLogin(oidcProvider *auth.OIDCProvider) http.HandlerFunc {
 			return
 		}
 
+		// PKCE: generate code verifier for S256 challenge (ADR 003 Decision 15)
+		codeVerifier, err := auth.RandString(32)
+		if err != nil {
+			model.WriteError(w, model.ErrInternal("failed to generate PKCE verifier"))
+			return
+		}
+
 		auth.SetCallbackCookie(w, r, "state", state)
 		auth.SetCallbackCookie(w, r, "nonce", nonce)
+		auth.SetCallbackCookie(w, r, "pkce", codeVerifier)
 
 		redirectURL := oidcProvider.OAuth2Config.AuthCodeURL(state,
 			oauth2.SetAuthURLParam("nonce", nonce),
+			oauth2.S256ChallengeOption(codeVerifier),
 		)
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 	}
@@ -84,8 +93,17 @@ func AuthCallback(oidcProvider *auth.OIDCProvider, store storage.Storage, sm *sc
 			return
 		}
 
-		// 3. Exchange code for token
-		token, err := oidcProvider.OAuth2Config.Exchange(ctx, r.URL.Query().Get("code"))
+		// 2b. Read PKCE verifier cookie
+		pkceCookie, err := r.Cookie("pkce")
+		if err != nil {
+			http.Error(w, "PKCE verifier cookie missing", http.StatusBadRequest)
+			return
+		}
+
+		// 3. Exchange code for token (with PKCE verifier per ADR 003 Decision 15)
+		token, err := oidcProvider.OAuth2Config.Exchange(ctx, r.URL.Query().Get("code"),
+			oauth2.VerifierOption(pkceCookie.Value),
+		)
 		if err != nil {
 			log.Warn().Err(err).Msg("token exchange failed")
 			http.Error(w, "token exchange failed", http.StatusBadRequest)
