@@ -226,10 +226,11 @@ function buildHistoryForModel(model, turnIndex) {
 }
 
 // Returns completed turns for a model as { userContent, assistantContent } pairs.
-// During streaming, only include turns before the in-flight one.
+// Exclude the in-flight turn only if THIS model is still streaming (not globally).
 function completedTurnsFor(model) {
   const replies = assistantMsgs[model] ?? []
-  const limit = anyStreaming.value ? currentTurnIndex.value : sharedUserMsgs.value.length
+  const isModelStreaming = streamingState[model]
+  const limit = isModelStreaming ? currentTurnIndex.value : sharedUserMsgs.value.length
   return sharedUserMsgs.value.slice(0, limit).map((userContent, i) => ({
     userContent,
     assistantContent: replies[i] ?? '',
