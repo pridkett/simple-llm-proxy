@@ -10,47 +10,53 @@
             Teams
           </div>
           <div v-if="loadingTeams" class="px-3 py-3 text-gray-500 text-sm">Loading...</div>
-          <div v-else-if="teamsError" class="px-3 py-3 text-red-600 text-sm">{{ teamsError }}</div>
-          <ul v-else>
-            <li
-              v-for="team in teams"
-              :key="team.id"
-              :data-testid="`team-item-${team.id}`"
-              class="flex items-center justify-between px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-0"
-              :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'"
-              @click="selectTeam(team)"
-            >
-              <span>{{ team.name }}</span>
-              <div>
-                <!-- Confirmation inline delete UI -->
-                <template v-if="pendingDeleteTeamId === team.id">
-                  <span class="text-xs text-gray-500 mr-1">Delete?</span>
+          <template v-else>
+            <!-- Inline error banner for teams (doesn't replace the list) -->
+            <div v-if="teamsError" class="px-3 py-2 bg-red-50 border-b border-red-200 text-sm text-red-600 flex justify-between items-center">
+              <span>{{ teamsError }}</span>
+              <button @click="teamsError = null" class="ml-2 text-red-400 hover:text-red-600 text-xs">✕</button>
+            </div>
+            <ul>
+              <li
+                v-for="team in teams"
+                :key="team.id"
+                :data-testid="`team-item-${team.id}`"
+                class="flex items-center justify-between px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-0"
+                :class="selectedTeam?.id === team.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'"
+                @click="selectTeam(team)"
+              >
+                <span>{{ team.name }}</span>
+                <div v-if="isAdmin">
+                  <!-- Confirmation inline delete UI (admin only) -->
+                  <template v-if="pendingDeleteTeamId === team.id">
+                    <span class="text-xs text-gray-500 mr-1">Delete?</span>
+                    <button
+                      :data-testid="`confirm-delete-${team.id}`"
+                      @click.stop="confirmDeleteTeam(team.id)"
+                      class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
+                    >Yes</button>
+                    <button
+                      @click.stop="cancelDeleteTeam"
+                      class="text-xs text-gray-500 hover:text-gray-700"
+                    >No</button>
+                  </template>
                   <button
-                    :data-testid="`confirm-delete-${team.id}`"
-                    @click.stop="confirmDeleteTeam(team.id)"
-                    class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
-                  >Yes</button>
-                  <button
-                    @click.stop="cancelDeleteTeam"
-                    class="text-xs text-gray-500 hover:text-gray-700"
-                  >No</button>
-                </template>
-                <button
-                  v-else
-                  :data-testid="`delete-team-${team.id}`"
-                  @click.stop="startDeleteTeam(team.id)"
-                  class="text-xs text-red-500 hover:text-red-700 ml-2"
-                >Delete</button>
-              </div>
-            </li>
-            <li v-if="teams.length === 0 && !loadingTeams" class="px-3 py-3 text-sm text-gray-400 italic">
-              No teams yet
-            </li>
-          </ul>
+                    v-else
+                    :data-testid="`delete-team-${team.id}`"
+                    @click.stop="startDeleteTeam(team.id)"
+                    class="text-xs text-red-500 hover:text-red-700 ml-2"
+                  >Delete</button>
+                </div>
+              </li>
+              <li v-if="teams.length === 0 && !loadingTeams" class="px-3 py-3 text-sm text-gray-400 italic">
+                No teams yet
+              </li>
+            </ul>
+          </template>
         </div>
 
-        <!-- Create team form -->
-        <form @submit.prevent="handleCreateTeam" class="mt-3 flex gap-2">
+        <!-- Create team form (admin only) -->
+        <form v-if="isAdmin" @submit.prevent="handleCreateTeam" class="mt-3 flex gap-2">
           <input
             v-model="newTeamName"
             type="text"
@@ -79,13 +85,13 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th v-if="isAdmin" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-if="members.length === 0">
-                <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 italic">
-                  No members yet — add a first member to this team below
+                <td :colspan="isAdmin ? 4 : 3" class="px-4 py-8 text-center text-sm text-gray-400 italic">
+                  No members yet<template v-if="isAdmin"> — add a first member to this team below</template>
                 </td>
               </tr>
               <tr v-for="member in members" :key="member.user_id">
@@ -93,6 +99,7 @@
                 <td class="px-4 py-3 text-sm text-gray-500">{{ member.user_email }}</td>
                 <td class="px-4 py-3 text-sm">
                   <select
+                    v-if="isAdmin"
                     :value="member.role"
                     @change="handleRoleChange(member, $event.target.value)"
                     class="border border-gray-300 rounded px-2 py-1 text-sm"
@@ -101,8 +108,9 @@
                     <option value="member">member</option>
                     <option value="viewer">viewer</option>
                   </select>
+                  <span v-else class="text-gray-600">{{ member.role }}</span>
                 </td>
-                <td class="px-4 py-3 text-sm">
+                <td v-if="isAdmin" class="px-4 py-3 text-sm">
                   <template v-if="pendingRemoveMemberId === member.user_id">
                     <span class="text-xs text-gray-500 mr-1">Remove {{ member.user_name }}?</span>
                     <button
@@ -130,8 +138,8 @@
             <button @click="membersError = null" class="ml-3 text-red-400 hover:text-red-600">✕</button>
           </div>
 
-          <!-- Add member form -->
-          <div class="border-t border-gray-200 pt-4">
+          <!-- Add member form (admin only) -->
+          <div v-if="isAdmin" class="border-t border-gray-200 pt-4">
             <h3 class="text-sm font-medium text-gray-700 mb-3">Add Member</h3>
             <form @submit.prevent="handleAddMember" class="flex items-end gap-3">
               <!-- User search combobox -->
@@ -205,6 +213,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../api/client.js'
+import { useSession } from '../composables/useSession.js'
+
+const { currentUser } = useSession()
+const isAdmin = computed(() => !!currentUser.value?.is_admin)
 
 const teams = ref([])
 const loadingTeams = ref(true)
@@ -281,7 +293,8 @@ async function loadTeams() {
   loadingTeams.value = true
   teamsError.value = null
   try {
-    teams.value = await api.teams()
+    const result = isAdmin.value ? await api.teams() : await api.myTeams()
+    teams.value = result ?? []
   } catch (e) {
     teamsError.value = e.message
   } finally {
@@ -383,7 +396,12 @@ async function confirmRemoveMember(member) {
 
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
-  await Promise.all([loadTeams(), api.users().then((u) => { allUsers.value = u || [] })])
+  const tasks = [loadTeams()]
+  // Only admins need the full user list (for the add-member search combobox)
+  if (isAdmin.value) {
+    tasks.push(api.users().then((u) => { allUsers.value = u || [] }))
+  }
+  await Promise.all(tasks)
 })
 
 onBeforeUnmount(() => {

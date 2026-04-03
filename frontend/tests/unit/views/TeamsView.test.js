@@ -3,11 +3,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { ref } from 'vue'
 
-// Mock useSession to control auth state
+// --- Controllable session mock ---
+// We need to be able to switch between admin and non-admin users per test.
+const mockCurrentUser = ref({ id: 'u1', email: 'admin@example.com', name: 'Admin', is_admin: true })
+
 vi.mock('@/composables/useSession.js', () => ({
   useSession: () => ({
     isAuthenticated: ref(true),
-    currentUser: ref({ id: 'u1', email: 'admin@example.com', name: 'Admin', is_admin: true }),
+    currentUser: mockCurrentUser,
     loading: ref(false),
     fetchCurrentUser: vi.fn().mockResolvedValue(true),
     clearSession: vi.fn(),
@@ -18,6 +21,7 @@ vi.mock('@/composables/useSession.js', () => ({
 vi.mock('@/api/client.js', () => ({
   api: {
     teams: vi.fn(),
+    myTeams: vi.fn(),
     createTeam: vi.fn(),
     deleteTeam: vi.fn(),
     teamMembers: vi.fn(),
@@ -50,7 +54,10 @@ const sampleMembers = [
 
 describe('TeamsView', () => {
   beforeEach(() => {
+    // Default to admin user
+    mockCurrentUser.value = { id: 'u1', email: 'admin@example.com', name: 'Admin', is_admin: true }
     vi.mocked(api.teams).mockReset()
+    vi.mocked(api.myTeams).mockReset()
     vi.mocked(api.createTeam).mockReset()
     vi.mocked(api.deleteTeam).mockReset()
     vi.mocked(api.teamMembers).mockReset()
@@ -142,5 +149,111 @@ describe('TeamsView', () => {
     expect(api.teamMembers).toHaveBeenCalledWith(1)
     expect(wrapper.text()).toContain('Alice')
     expect(wrapper.text()).toContain('Bob')
+  })
+
+  // --- Non-admin tests ---
+
+  it('TestTeamsViewNonAdminUsesMyTeams: non-admin calls api.myTeams instead of api.teams', async () => {
+    mockCurrentUser.value = { id: 'u2', email: 'user@example.com', name: 'User', is_admin: false }
+    vi.mocked(api.myTeams).mockResolvedValue([sampleTeams[0]])
+
+    const router = makeRouter()
+    await router.push('/teams')
+    const wrapper = mount(TeamsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(api.myTeams).toHaveBeenCalledTimes(1)
+    expect(api.teams).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Alpha Team')
+  })
+
+  it('TestTeamsViewNonAdminHidesCreateTeam: non-admin does not see create team form', async () => {
+    mockCurrentUser.value = { id: 'u2', email: 'user@example.com', name: 'User', is_admin: false }
+    vi.mocked(api.myTeams).mockResolvedValue(sampleTeams)
+
+    const router = makeRouter()
+    await router.push('/teams')
+    const wrapper = mount(TeamsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // The create form should not exist
+    const form = wrapper.find('form')
+    expect(form.exists()).toBe(false)
+  })
+
+  it('TestTeamsViewNonAdminHidesDeleteButtons: non-admin does not see delete buttons', async () => {
+    mockCurrentUser.value = { id: 'u2', email: 'user@example.com', name: 'User', is_admin: false }
+    vi.mocked(api.myTeams).mockResolvedValue(sampleTeams)
+
+    const router = makeRouter()
+    await router.push('/teams')
+    const wrapper = mount(TeamsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const deleteBtn = wrapper.find('[data-testid="delete-team-1"]')
+    expect(deleteBtn.exists()).toBe(false)
+  })
+
+  it('TestTeamsViewNonAdminReadOnlyMembers: non-admin sees members read-only without actions column', async () => {
+    mockCurrentUser.value = { id: 'u2', email: 'user@example.com', name: 'User', is_admin: false }
+    vi.mocked(api.myTeams).mockResolvedValue(sampleTeams)
+    vi.mocked(api.teamMembers).mockResolvedValue(sampleMembers)
+
+    const router = makeRouter()
+    await router.push('/teams')
+    const wrapper = mount(TeamsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // Click a team to open detail
+    const teamItem = wrapper.find('[data-testid="team-item-1"]')
+    await teamItem.trigger('click')
+    await flushPromises()
+
+    // Members should be visible
+    expect(wrapper.text()).toContain('Alice')
+    expect(wrapper.text()).toContain('Bob')
+
+    // Actions column header should not exist
+    const headers = wrapper.findAll('th')
+    const headerTexts = headers.map((h) => h.text())
+    expect(headerTexts).not.toContain('Actions')
+
+    // Role should be displayed as plain text, not a select dropdown
+    const selects = wrapper.findAll('table select')
+    expect(selects.length).toBe(0)
+
+    // Remove buttons should not exist
+    expect(wrapper.text()).not.toContain('Remove')
+
+    // Add member form should not exist
+    expect(wrapper.text()).not.toContain('Add Member')
+  })
+
+  it('TestTeamsViewErrorDoesNotReplaceList: error on create does not hide team list', async () => {
+    vi.mocked(api.teams).mockResolvedValue(sampleTeams)
+    vi.mocked(api.createTeam).mockRejectedValue(new Error('Forbidden'))
+
+    const router = makeRouter()
+    await router.push('/teams')
+    const wrapper = mount(TeamsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // Both teams visible initially
+    expect(wrapper.text()).toContain('Alpha Team')
+    expect(wrapper.text()).toContain('Beta Team')
+
+    // Try to create a team (will fail)
+    const nameInput = wrapper.find('input[type="text"]')
+    await nameInput.setValue('Bad Team')
+    const form = wrapper.find('form')
+    await form.trigger('submit')
+    await flushPromises()
+
+    // Error should be shown inline
+    expect(wrapper.text()).toContain('Forbidden')
+
+    // Teams should still be visible (not replaced by error)
+    expect(wrapper.text()).toContain('Alpha Team')
+    expect(wrapper.text()).toContain('Beta Team')
   })
 })
