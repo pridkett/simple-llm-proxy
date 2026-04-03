@@ -30,78 +30,9 @@
           <tbody class="bg-white divide-y divide-gray-50">
             <!-- Create form row (when editingId === -1) -->
             <tr v-if="editingId === -1">
-              <td colspan="5" class="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                <div class="space-y-3">
-                  <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">URL</label>
-                    <input v-model="form.url" type="url" class="input text-sm w-full" placeholder="https://example.com/webhook" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Events</label>
-                    <div class="flex gap-4">
-                      <label class="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" value="provider_failover" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                        Provider Failover
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" value="budget_exhausted" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                        Budget Exhausted
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" value="pool_cooldown" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                        Pool Cooldown
-                      </label>
-                    </div>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Secret</label>
-                    <input v-model="form.secret" type="password" class="input text-sm w-full" placeholder="Enter shared secret for HMAC signing" />
-                  </div>
-                  <div>
-                    <label class="flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" v-model="form.enabled" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                      Enabled
-                    </label>
-                  </div>
-                  <p v-if="formError" class="text-red-600 text-xs">{{ formError }}</p>
-                </div>
-                <div class="flex gap-2 mt-3">
-                  <button class="btn-primary text-xs" @click="save" :disabled="saving">
-                    {{ saving ? 'Saving Webhook...' : 'Save Webhook' }}
-                  </button>
-                  <button class="btn-secondary text-xs" @click="cancelEdit">Discard Changes</button>
-                </div>
-              </td>
-            </tr>
-
-            <template v-for="wh in webhooks" :key="wh.id">
-              <!-- Webhook data row -->
-              <tr class="hover:bg-gray-50 transition-colors">
-                <td class="px-6 py-3 font-mono text-xs truncate max-w-xs">{{ wh.url }}</td>
-                <td class="px-6 py-3 text-gray-600 text-xs">{{ wh.events.join(', ') }}</td>
-                <td class="px-6 py-3">
-                  <span v-if="wh.source === 'yaml'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">YAML</span>
-                  <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">UI</span>
-                </td>
-                <td class="px-6 py-3 text-gray-600 text-xs">{{ wh.enabled ? 'Enabled' : 'Disabled' }}</td>
-                <td class="px-6 py-3 text-right">
-                  <template v-if="!wh.read_only">
-                    <template v-if="confirmingDeleteId === wh.id">
-                      <span class="text-xs text-gray-600 mr-2">Are you sure?</span>
-                      <button class="text-xs text-red-600 hover:text-red-800 font-medium mr-2" @click="confirmDelete(wh.id)">Yes, delete</button>
-                      <button class="text-xs text-gray-600 hover:text-gray-800 font-medium" @click="confirmingDeleteId = null">Keep Webhook</button>
-                    </template>
-                    <template v-else>
-                      <button class="text-xs text-indigo-600 hover:text-indigo-800 font-medium mr-3" @click="startEdit(wh)">Edit</button>
-                      <button class="text-xs text-red-600 hover:text-red-800 font-medium" @click="confirmingDeleteId = wh.id">Delete</button>
-                    </template>
-                  </template>
-                </td>
-              </tr>
-
-              <!-- Edit form row (shown below the webhook being edited) -->
-              <tr v-if="editingId === wh.id">
-                <td colspan="5" class="px-6 py-4 bg-gray-50 border-b border-gray-100">
+              <td colspan="5" class="px-6 py-4">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h3 class="text-sm font-medium text-gray-700 mb-3">New Webhook</h3>
                   <div class="space-y-3">
                     <div>
                       <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">URL</label>
@@ -141,6 +72,81 @@
                       {{ saving ? 'Saving Webhook...' : 'Save Webhook' }}
                     </button>
                     <button class="btn-secondary text-xs" @click="cancelEdit">Discard Changes</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <template v-for="wh in webhooks" :key="wh.id">
+              <!-- Webhook data row -->
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-3 font-mono text-xs truncate max-w-xs">{{ wh.url }}</td>
+                <td class="px-6 py-3 text-gray-600 text-xs">{{ wh.events.join(', ') }}</td>
+                <td class="px-6 py-3">
+                  <span v-if="wh.source === 'yaml'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">YAML</span>
+                  <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">UI</span>
+                </td>
+                <td class="px-6 py-3 text-gray-600 text-xs">{{ wh.enabled ? 'Enabled' : 'Disabled' }}</td>
+                <td class="px-6 py-3 text-right">
+                  <template v-if="!wh.read_only">
+                    <template v-if="confirmingDeleteId === wh.id">
+                      <span class="text-xs text-gray-500 mr-1">Delete?</span>
+                      <button class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium" @click="confirmDelete(wh.id)">Yes</button>
+                      <button class="text-xs text-gray-500 hover:text-gray-700" @click="confirmingDeleteId = null">No</button>
+                    </template>
+                    <template v-else>
+                      <button class="text-xs text-indigo-600 hover:text-indigo-800 font-medium mr-3" @click="startEdit(wh)">Edit</button>
+                      <button class="text-xs text-red-600 hover:text-red-800 font-medium" @click="confirmingDeleteId = wh.id">Delete</button>
+                    </template>
+                  </template>
+                </td>
+              </tr>
+
+              <!-- Edit form row (shown below the webhook being edited) -->
+              <tr v-if="editingId === wh.id">
+                <td colspan="5" class="px-6 py-4">
+                  <div class="bg-gray-50 border border-indigo-200 rounded-lg p-4 ring-1 ring-indigo-100">
+                    <h3 class="text-sm font-medium text-gray-700 mb-3">Edit Webhook</h3>
+                    <div class="space-y-3">
+                      <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">URL</label>
+                        <input v-model="form.url" type="url" class="input text-sm w-full" placeholder="https://example.com/webhook" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Events</label>
+                        <div class="flex gap-4">
+                          <label class="flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" value="provider_failover" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            Provider Failover
+                          </label>
+                          <label class="flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" value="budget_exhausted" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            Budget Exhausted
+                          </label>
+                          <label class="flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" value="pool_cooldown" v-model="form.events" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            Pool Cooldown
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Secret</label>
+                        <input v-model="form.secret" type="password" class="input text-sm w-full" placeholder="Enter shared secret for HMAC signing" />
+                      </div>
+                      <div>
+                        <label class="flex items-center gap-2 text-sm text-gray-700">
+                          <input type="checkbox" v-model="form.enabled" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                          Enabled
+                        </label>
+                      </div>
+                      <p v-if="formError" class="text-red-600 text-xs">{{ formError }}</p>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                      <button class="btn-primary text-xs" @click="save" :disabled="saving">
+                        {{ saving ? 'Saving Webhook...' : 'Save Webhook' }}
+                      </button>
+                      <button class="btn-secondary text-xs" @click="cancelEdit">Discard Changes</button>
+                    </div>
                   </div>
                 </td>
               </tr>

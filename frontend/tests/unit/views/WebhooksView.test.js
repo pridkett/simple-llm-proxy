@@ -182,7 +182,7 @@ describe('WebhooksView', () => {
     expect(wrapper.text()).toContain('Discard Changes')
   })
 
-  it('clicking "Delete" replaces button with "Are you sure?" and confirmation buttons', async () => {
+  it('clicking "Delete" replaces button with "Delete?" confirmation and Yes/No buttons', async () => {
     vi.mocked(api.webhooks).mockResolvedValue(mockWebhooksData)
     const router = makeRouter()
     await router.push('/webhooks')
@@ -198,10 +198,10 @@ describe('WebhooksView', () => {
     await deleteBtn.trigger('click')
     await nextTick()
 
-    // After clicking delete, confirmation should appear
-    expect(wrapper.text()).toContain('Are you sure?')
-    expect(wrapper.text()).toContain('Yes, delete')
-    expect(wrapper.text()).toContain('Keep Webhook')
+    // After clicking delete, confirmation should appear (consistent with TeamsView/KeysView)
+    expect(wrapper.text()).toContain('Delete?')
+    expect(wrapper.text()).toContain('Yes')
+    expect(wrapper.text()).toContain('No')
   })
 
   it('"Add Webhook" button exists in page header', async () => {
