@@ -84,7 +84,16 @@ func main() {
 		sm.Store = &sqlite.SessionStore{DB: sqliteStore.DB()}
 	}
 	sm.Lifetime = 24 * time.Hour
-	sm.IdleTimeout = 2 * time.Hour
+	// IdleTimeout is disabled (zero value) so SCS does not slide the session
+	// expiry on every authenticated request.  When IdleTimeout > 0, SCS calls
+	// CommitCtx on every request to push the expiry window forward — even when
+	// no session data has changed — which causes unnecessary SQLite writes and
+	// was the root cause of SQLITE_BUSY errors before serialization was added
+	// in #21.  With IdleTimeout = 0, sessions live for their full Lifetime
+	// (24 h) regardless of activity and CommitCtx is only called when data
+	// actually changes (login, logout, etc.).
+	// See: https://github.com/pridkett/simple-llm-proxy/issues/26
+	sm.IdleTimeout = 0
 	sm.Cookie.Name = "proxy_session"
 	sm.Cookie.HttpOnly = true
 	sm.Cookie.Secure = !cfg.OIDCSettings.DevMode // true in production, false in local HTTP dev
