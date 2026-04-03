@@ -10,7 +10,6 @@ func buildSchemas() openapi3.Schemas {
 		// Request types
 		"ChatCompletionRequest":  chatCompletionRequestSchema(),
 		"EmbeddingsRequest":      embeddingsRequestSchema(),
-		"CompletionRequest":      completionRequestSchema(),
 		"Message":                messageSchema(),
 		"ContentPart":            contentPartSchema(),
 		"ImageURL":               imageURLSchema(),
@@ -189,88 +188,6 @@ func embeddingsRequestSchema() *openapi3.SchemaRef {
 						Type:        &openapi3.Types{"string"},
 						Description: "The format to return the embeddings in",
 						Enum:        []any{"float", "base64"},
-					},
-				},
-			},
-		},
-	}
-}
-
-func completionRequestSchema() *openapi3.SchemaRef {
-	return &openapi3.SchemaRef{
-		Value: &openapi3.Schema{
-			Type:        &openapi3.Types{"object"},
-			Required:    []string{"model", "prompt"},
-			Description: "Legacy completion request (deprecated)",
-			Properties: openapi3.Schemas{
-				"model": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"string"},
-						Description: "ID of the model to use",
-					},
-				},
-				"prompt": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Description: "The prompt to generate completions for",
-					},
-				},
-				"max_tokens": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"integer"},
-						Description: "Maximum number of tokens to generate",
-					},
-				},
-				"temperature": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"number"},
-						Description: "Sampling temperature",
-						Min:         ptr(0.0),
-						Max:         ptr(2.0),
-					},
-				},
-				"top_p": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"number"},
-						Description: "Nucleus sampling parameter",
-					},
-				},
-				"n": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"integer"},
-						Description: "Number of completions to generate",
-					},
-				},
-				"stream": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"boolean"},
-						Description: "Whether to stream partial progress",
-					},
-				},
-				"stop": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"array"},
-						Description: "Sequences where the API will stop generating",
-						Items: &openapi3.SchemaRef{
-							Value: &openapi3.Schema{Type: &openapi3.Types{"string"}},
-						},
-					},
-				},
-				"presence_penalty": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"number"},
-						Description: "Penalty for new tokens based on presence",
-					},
-				},
-				"frequency_penalty": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"number"},
-						Description: "Penalty for new tokens based on frequency",
-					},
-				},
-				"user": &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						Type:        &openapi3.Types{"string"},
-						Description: "A unique identifier representing the end-user",
 					},
 				},
 			},

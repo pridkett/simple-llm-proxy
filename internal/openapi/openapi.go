@@ -63,7 +63,7 @@ func (s *Spec) Build() error {
 			},
 			&openapi3.Tag{
 				Name:        "Completions",
-				Description: "Legacy completion endpoints (deprecated)",
+				Description: "Legacy completion endpoints (deprecated — returns 410 Gone)",
 			},
 			&openapi3.Tag{
 				Name:        "Admin",

@@ -173,39 +173,24 @@ func completionsPath() *openapi3.PathItem {
 	return &openapi3.PathItem{
 		Post: &openapi3.Operation{
 			Tags:        []string{"Completions"},
-			Summary:     "Create completion (deprecated)",
-			Description: "Creates a completion for the provided prompt. This is a legacy endpoint; use /v1/chat/completions instead.",
+			Summary:     "Create completion (deprecated — returns 410 Gone)",
+			Description: "This endpoint is deprecated and always returns 410 Gone. Use POST /v1/chat/completions instead.",
 			OperationID: "createCompletion",
 			Deprecated:  true,
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
-			RequestBody: &openapi3.RequestBodyRef{
-				Value: &openapi3.RequestBody{
-					Required: true,
-					Content: openapi3.Content{
-						"application/json": &openapi3.MediaType{
-							Schema: &openapi3.SchemaRef{
-								Ref: "#/components/schemas/CompletionRequest",
-							},
-						},
-					},
-				},
-			},
 			Responses: openapi3.NewResponses(
-				openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{
+				openapi3.WithStatus(http.StatusGone, &openapi3.ResponseRef{
 					Value: &openapi3.Response{
-						Description: strPtr("Successful response"),
+						Description: strPtr("Endpoint deprecated. Use POST /v1/chat/completions instead."),
 						Content: openapi3.Content{
 							"application/json": &openapi3.MediaType{
 								Schema: &openapi3.SchemaRef{
-									Ref: "#/components/schemas/ChatCompletionResponse",
+									Ref: "#/components/schemas/APIError",
 								},
 							},
 						},
 					},
 				}),
-				openapi3.WithStatus(http.StatusBadRequest, errorResponseRef("Invalid request")),
-				openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication failed")),
-				openapi3.WithStatus(http.StatusNotImplemented, errorResponseRef("Not implemented")),
 			),
 		},
 	}

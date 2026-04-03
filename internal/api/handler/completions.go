@@ -3,34 +3,32 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/pwagstro/simple_llm_proxy/internal/model"
 )
 
-// Completions handles POST /v1/completions requests (legacy endpoint).
-// This is a placeholder for future implementation.
+// deprecatedEndpointError is the JSON structure returned for deprecated endpoints.
+type deprecatedEndpointError struct {
+	Error deprecatedDetail `json:"error"`
+}
+
+type deprecatedDetail struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Code    int    `json:"code"`
+}
+
+// Completions handles POST /v1/completions requests.
+// This endpoint is deprecated — it returns 410 Gone directing clients
+// to use POST /v1/chat/completions instead.
 func Completions() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		model.WriteError(w, model.ErrBadRequest("legacy completions endpoint not implemented; use /v1/chat/completions instead"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusGone)
+		json.NewEncoder(w).Encode(deprecatedEndpointError{
+			Error: deprecatedDetail{
+				Message: "POST /v1/completions is deprecated. Use POST /v1/chat/completions instead.",
+				Type:    "deprecated_endpoint",
+				Code:    http.StatusGone,
+			},
+		})
 	}
 }
-
-// CompletionResponse represents a legacy completion response.
-type CompletionResponse struct {
-	ID      string              `json:"id"`
-	Object  string              `json:"object"`
-	Created int64               `json:"created"`
-	Model   string              `json:"model"`
-	Choices []CompletionChoice  `json:"choices"`
-	Usage   *model.Usage        `json:"usage,omitempty"`
-}
-
-// CompletionChoice represents a legacy completion choice.
-type CompletionChoice struct {
-	Text         string `json:"text"`
-	Index        int    `json:"index"`
-	FinishReason string `json:"finish_reason,omitempty"`
-}
-
-// Unused but kept for type reference
-var _ = json.Marshal
