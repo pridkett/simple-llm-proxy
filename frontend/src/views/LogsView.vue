@@ -15,6 +15,7 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request ID</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endpoint</th>
@@ -27,6 +28,9 @@
               <tr v-for="log in logsData.logs" :key="log.request_id" class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                   {{ formatDate(log.request_time) }}
+                </td>
+                <td class="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap" :title="log.request_id">
+                  {{ truncateID(log.request_id) }}
                 </td>
                 <td class="px-4 py-3 font-medium">{{ log.model }}</td>
                 <td class="px-4 py-3 text-gray-600 capitalize">{{ log.provider }}</td>
@@ -43,7 +47,7 @@
                 </td>
               </tr>
               <tr v-if="!logsData.logs?.length">
-                <td colspan="7" class="px-4 py-12 text-center text-gray-500">
+                <td colspan="8" class="px-4 py-12 text-center text-gray-500">
                   No request logs yet. Logs appear after sending requests through the proxy.
                 </td>
               </tr>
@@ -120,5 +124,10 @@ function nextPage() {
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString()
+}
+
+function truncateID(id) {
+  if (!id) return ''
+  return id.length > 8 ? id.slice(0, 8) + '...' : id
 }
 </script>
