@@ -111,6 +111,13 @@ type Storage interface {
 	// Does not delete the key record — revoked keys remain visible in ListAPIKeys.
 	RevokeAPIKey(ctx context.Context, id int64) error
 
+	// GetAPIKeyByID looks up a key by its numeric ID. Returns (nil, nil) if not found.
+	GetAPIKeyByID(ctx context.Context, id int64) (*APIKey, error)
+
+	// ListUserAccessibleKeys returns all active API keys the given user has access to
+	// via team membership, enriched with team and application names.
+	ListUserAccessibleKeys(ctx context.Context, userID string) ([]*AccessibleKey, error)
+
 	// GetKeyAllowedModels returns the model names in the allowlist for the given key.
 	// Returns an empty slice if no allowlist entries exist (all models allowed).
 	GetKeyAllowedModels(ctx context.Context, keyID int64) ([]string, error)
@@ -263,6 +270,18 @@ type APIKey struct {
 	SoftBudget    *float64 `json:"soft_budget"` // nil = no alert threshold
 	IsActive      bool     `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+// AccessibleKey is an API key enriched with team and application context,
+// returned by ListUserAccessibleKeys for the key selection UI.
+type AccessibleKey struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	KeyPrefix string `json:"key_prefix"`
+	AppID     int64  `json:"app_id"`
+	AppName   string `json:"app_name"`
+	TeamID    int64  `json:"team_id"`
+	TeamName  string `json:"team_name"`
 }
 
 // APIKeyAllowedModel represents a single model entry in a key's allowlist.

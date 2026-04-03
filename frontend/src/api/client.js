@@ -117,19 +117,19 @@ export const api = {
    * Returns the raw Response body so the caller can read it as a stream.
    * @param {string} model
    * @param {Array<{role:string,content:string}>} messages
-   * @param {{ temperature?: number, signal?: AbortSignal }} options
+   * @param {{ temperature?: number, signal?: AbortSignal, chargeKeyId?: number }} options
    */
   async chatCompletionStream(model, messages, options = {}) {
     const body = { model, messages, stream: true }
     if (options.temperature !== undefined) body.temperature = options.temperature
 
+    const headers = { 'Content-Type': 'application/json' }
+    if (options.chargeKeyId) headers['X-Charge-Key-ID'] = String(options.chargeKeyId)
+
     const res = await fetch(`${BASE_URL}/admin/chat/completions`, {
       method: 'POST',
       credentials: 'include', // HttpOnly session cookie
-      headers: {
-        'Content-Type': 'application/json',
-        // NO Authorization header — session is cookie-based
-      },
+      headers,
       body: JSON.stringify(body),
       signal: options.signal,
     })
@@ -217,6 +217,11 @@ export const api = {
     return request(`/v1/models/${encodeURIComponent(modelName)}/costs`, {
       method: 'DELETE',
     })
+  },
+
+  /** GET /admin/keys/mine — returns API keys the current user can access */
+  myKeys() {
+    return request('/admin/keys/mine')
   },
 
   /** GET /admin/users — returns all authenticated users (admin only) */

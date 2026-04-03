@@ -80,6 +80,29 @@
         <p v-else class="text-xs text-gray-400">Maximum 4 models selected</p>
       </div>
 
+      <!-- API key selector -->
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-600 whitespace-nowrap">Charge to:</label>
+        <select
+          v-model="selectedKeyId"
+          class="input text-sm max-w-sm"
+          :disabled="anyStreaming || loadingKeys"
+        >
+          <option v-if="currentUser?.is_admin" :value="null">Master Key</option>
+          <option
+            v-for="key in accessibleKeys"
+            :key="key.id"
+            :value="key.id"
+          >
+            {{ key.team_name }} / {{ key.app_name }} / {{ key.name }} ({{ key.key_prefix }}…)
+          </option>
+        </select>
+        <span v-if="loadingKeys" class="text-xs text-gray-400">Loading keys…</span>
+        <span v-else-if="!currentUser?.is_admin && accessibleKeys.length === 0" class="text-xs text-red-500">
+          No API keys available — ask your team admin to create one
+        </span>
+      </div>
+
       <!-- Advanced options (collapsible) -->
       <details class="group">
         <summary class="text-xs text-gray-500 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-700 w-fit">
@@ -144,6 +167,7 @@
           :turns="completedTurnsFor(model)"
           :current-user-content="currentUserContent"
           :turn-index="currentTurnIndex"
+          :charge-key-id="selectedKeyId"
           @turn-complete="onTurnComplete"
           @streaming-change="onStreamingChange"
         />
@@ -159,7 +183,7 @@
             class="input resize-none text-sm"
             rows="2"
             placeholder="Type your message… (Ctrl+Enter to send)"
-            :disabled="anyStreaming || selectedModels.length === 0"
+            :disabled="anyStreaming || selectedModels.length === 0 || !hasValidKey"
             @keydown.ctrl.enter.prevent="send"
             @keydown.meta.enter.prevent="send"
           />
@@ -174,7 +198,7 @@
           </button>
           <button
             class="btn-primary text-sm"
-            :disabled="anyStreaming || !userInput.trim() || selectedModels.length === 0"
+            :disabled="anyStreaming || !userInput.trim() || selectedModels.length === 0 || !hasValidKey"
             @click="send"
           >
             Send
@@ -188,21 +212,42 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../api/client.js'
+import { useSession } from '../composables/useSession.js'
 import ChatPanel from '../components/ChatPanel.vue'
+
+const { currentUser } = useSession()
 
 // ── Model list ─────────────────────────────────────────────────────────────
 const availableModels = ref([])
 const loadingModels = ref(true)
 
+// ── API key selection ──────────────────────────────────────────────────────
+const accessibleKeys = ref([])
+const loadingKeys = ref(true)
+const selectedKeyId = ref(null) // null = master key (admin default)
+
 onMounted(async () => {
-  try {
-    const data = await api.models()
-    availableModels.value = (data.data ?? []).map(m => m.id).sort((a, b) => a.localeCompare(b))
-  } catch {
-    /* silently ignore; empty state shown */
-  } finally {
-    loadingModels.value = false
+  // Fetch models and keys in parallel
+  const [modelsResult, keysResult] = await Promise.allSettled([
+    api.models(),
+    api.myKeys(),
+  ])
+
+  if (modelsResult.status === 'fulfilled' && modelsResult.value) {
+    availableModels.value = (modelsResult.value.data ?? []).map(m => m.id).sort((a, b) => a.localeCompare(b))
   }
+  loadingModels.value = false
+
+  if (keysResult.status === 'fulfilled' && keysResult.value) {
+    accessibleKeys.value = keysResult.value
+  }
+  loadingKeys.value = false
+
+  // Non-admin users: default to their first key (they can't use master key)
+  if (!currentUser.value?.is_admin && accessibleKeys.value.length > 0) {
+    selectedKeyId.value = accessibleKeys.value[0].id
+  }
+
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -269,6 +314,11 @@ const streamingState = reactive({})
 
 const anyStreaming = computed(() =>
   selectedModels.value.some(m => streamingState[m])
+)
+
+// Admins can always send (master key); non-admins need a selected key.
+const hasValidKey = computed(() =>
+  currentUser.value?.is_admin || selectedKeyId.value != null
 )
 
 // ── Grid layout ────────────────────────────────────────────────────────────

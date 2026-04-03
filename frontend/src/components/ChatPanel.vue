@@ -79,6 +79,7 @@ const props = defineProps({
   turns:              { type: Array,   default: () => [] },
   currentUserContent: { type: String,  default: '' },
   turnIndex:          { type: Number,  default: 0 },
+  chargeKeyId:        { type: Number,  default: null },
 })
 
 const emit = defineEmits(['turn-complete', 'streaming-change', 'error'])
@@ -124,6 +125,7 @@ async function runStreaming() {
     const body = await api.chatCompletionStream(props.modelName, props.pendingMessages, {
       temperature: props.temperature,
       signal: abortController.signal,
+      chargeKeyId: props.chargeKeyId,
     })
 
     const reader = body.getReader()

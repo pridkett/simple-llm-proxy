@@ -16,11 +16,13 @@ vi.mock('@/composables/useSession.js', () => ({
 
 // Mock API
 const mockModels = vi.fn()
+const mockMyKeys = vi.fn()
 const mockChatCompletionStream = vi.fn()
 
 vi.mock('@/api/client.js', () => ({
   api: {
     models: (...args) => mockModels(...args),
+    myKeys: (...args) => mockMyKeys(...args),
     chatCompletionStream: (...args) => mockChatCompletionStream(...args),
   },
 }))
@@ -49,7 +51,10 @@ async function selectModelFromDropdown(wrapper, modelName) {
 describe('ChatView', () => {
   beforeEach(() => {
     mockModels.mockReset()
+    mockMyKeys.mockReset()
     mockChatCompletionStream.mockReset()
+    // Default: admin user with no keys (master key available)
+    mockMyKeys.mockResolvedValue([])
   })
 
   it('renders heading and empty state when no models selected', async () => {
