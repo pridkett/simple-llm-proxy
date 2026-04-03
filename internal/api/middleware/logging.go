@@ -58,6 +58,11 @@ func Logging() func(http.Handler) http.Handler {
 				ev = log.Info()
 			}
 
+			// Include correlation ID if present in context.
+			if reqID := RequestIDFromContext(r.Context()); reqID != "" {
+				ev = ev.Str("request_id", reqID)
+			}
+
 			ev.Str("method", r.Method).
 				Str("path", r.URL.Path).
 				Int("status", rw.status).

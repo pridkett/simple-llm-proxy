@@ -125,8 +125,10 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			return resp, nil, err
 		})
 
+		requestID := middleware.RequestIDFromContext(ctx)
+
 		// Emit routing events to webhook dispatcher (D-01: handler layer, after Route() returns).
-		emitRoutingEvents(dispatcher, r, result, chatReq.Model)
+		emitRoutingEvents(dispatcher, r, result, chatReq.Model, requestID)
 
 		if result.Error != nil {
 			// Check for budget exhaustion specifically (BUDGET-04).
@@ -147,9 +149,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		budget := r.BudgetManager()
 
 		if chatReq.Stream {
-			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime)
+			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID)
 		} else {
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime)
+			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID)
 		}
 	}
 }
@@ -165,12 +167,13 @@ func handleNonStreamingResponse(
 	poolName string,
 	apiKeyID *int64,
 	startTime time.Time,
+	requestID string,
 ) {
 	r.ReportSuccess(result.DeploymentUsed)
 
 	// Log the request if storage is available
 	if store != nil && result.Response != nil && result.Response.Usage != nil {
-		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false)
+		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false, requestID)
 	}
 
 	router.SetRouteHeaders(w, result)
@@ -190,6 +193,7 @@ func handleStreamingResponse(
 	poolName string,
 	apiKeyID *int64,
 	startTime time.Time,
+	requestID string,
 ) {
 	stream := result.Stream
 	defer stream.Close()
@@ -230,7 +234,7 @@ func handleStreamingResponse(
 				usage = &model.Usage{}
 			}
 			if store != nil {
-				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true)
+				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true, requestID)
 			}
 			return
 		}
@@ -263,10 +267,11 @@ func handleStreamingResponse(
 // logRequest writes the request log to storage, credits the spend accumulator,
 // and credits the pool budget manager.
 // Called asynchronously (via goroutine) after each successful request.
+// requestID is the correlation ID from the X-Request-ID middleware.
 // apiKeyID is nil when the request was authenticated via master key.
 // budget/poolName may be nil/empty for non-pool models.
 // isStreaming indicates whether this was a streaming or non-streaming request.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool) {
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool, requestID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -278,7 +283,7 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 	}
 
 	log := &storage.RequestLog{
-		RequestID:     fmt.Sprintf("%d", time.Now().UnixNano()),
+		RequestID:     requestID,
 		APIKeyID:      apiKeyID,
 		Model:         deployment.ModelName,
 		Provider:      deployment.ProviderName,
@@ -310,20 +315,25 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 // routing anomalies (failover, budget exhaustion, pool cooldown).
 // Per D-01: event emission happens in the handler layer after Route() returns.
 // Per D-03: events fire on every qualifying occurrence, not debounced.
-func emitRoutingEvents(dispatcher *webhook.WebhookDispatcher, r *router.Router, result *router.RouteResult, model string) {
+// requestID is threaded into each event's Context map for traceability.
+func emitRoutingEvents(dispatcher *webhook.WebhookDispatcher, r *router.Router, result *router.RouteResult, model string, requestID string) {
 	if dispatcher == nil {
 		return
 	}
 
 	// provider_failover: failover occurred AND request ultimately succeeded (D-02)
 	if len(result.FailoverReasons) > 0 && result.Error == nil {
-		dispatcher.Emit(webhook.NewProviderFailoverEvent(model, result))
+		ev := webhook.NewProviderFailoverEvent(model, result)
+		ev.Context["request_id"] = requestID
+		dispatcher.Emit(ev)
 	}
 
 	// budget_exhausted: all pools exhausted for this model (D-02)
 	for _, reason := range result.FailoverReasons {
 		if reason == router.FailoverBudgetExhausted {
-			dispatcher.Emit(webhook.NewBudgetExhaustedEvent(model, result))
+			ev := webhook.NewBudgetExhaustedEvent(model, result)
+			ev.Context["request_id"] = requestID
+			dispatcher.Emit(ev)
 			break
 		}
 	}
@@ -333,7 +343,9 @@ func emitRoutingEvents(dispatcher *webhook.WebhookDispatcher, r *router.Router, 
 	if result.PoolName != "" {
 		pool := r.GetPool(result.PoolName)
 		if pool != nil && len(pool.Members) > 0 && r.IsPoolFullyCooled(pool) {
-			dispatcher.Emit(webhook.NewPoolCooldownEvent(pool.Name, pool.Members))
+			ev := webhook.NewPoolCooldownEvent(pool.Name, pool.Members)
+			ev.Context["request_id"] = requestID
+			dispatcher.Emit(ev)
 		}
 	}
 }

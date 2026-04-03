@@ -87,7 +87,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		})
 
 		// Emit routing events to webhook dispatcher.
-		emitRoutingEvents(dispatcher, r, result, embReq.Model)
+		requestID := middleware.RequestIDFromContext(ctx)
+		emitRoutingEvents(dispatcher, r, result, embReq.Model, requestID)
 
 		if result.Error != nil {
 			// Check for budget exhaustion specifically (BUDGET-04).
@@ -110,7 +111,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil && embResp.Usage != nil {
-			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false)
+			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false, requestID)
 		}
 
 		router.SetRouteHeaders(w, result)
