@@ -168,6 +168,12 @@ func (m *mockStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64
 func (m *mockStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (m *mockStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockStorage) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
+	return nil, nil
+}
 
 // newRouterForTest creates a router loaded with the gpt-4 config from configForTest().
 func newRouterForTest(t *testing.T) *router.Router {

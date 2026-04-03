@@ -146,6 +146,10 @@ func (m *mockStore) ListAPIKeys(context.Context, int64) ([]*storage.APIKey, erro
 	panic("not used")
 }
 func (m *mockStore) RevokeAPIKey(context.Context, int64) error                        { panic("not used") }
+func (m *mockStore) GetAPIKeyByID(context.Context, int64) (*storage.APIKey, error)    { panic("not used") }
+func (m *mockStore) ListUserAccessibleKeys(context.Context, string) ([]*storage.AccessibleKey, error) {
+	panic("not used")
+}
 func (m *mockStore) GetKeyAllowedModels(context.Context, int64) ([]string, error) {
 	panic("not used")
 }

@@ -225,6 +225,12 @@ func (s *captureStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ in
 func (s *captureStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (s *captureStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (s *captureStorage) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
+	return nil, nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function

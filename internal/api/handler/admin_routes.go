@@ -25,6 +25,7 @@ func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Ca
 	r.Delete("/admin/applications/{id}", AdminDeleteApplication(store))
 
 	// Key management routes (Phase 2)
+	r.Get("/admin/keys/mine", AdminMyKeys(store))
 	r.Get("/admin/applications/{id}/keys", AdminListKeys(store))
 	r.Post("/admin/applications/{id}/keys", AdminCreateKey(store))
 	r.Delete("/admin/api-keys/{id}", AdminRevokeKey(store, cache))

@@ -80,6 +80,51 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 	return keys, rows.Err()
 }
 
+// GetAPIKeyByID looks up a key by its numeric ID. Returns (nil, nil) if not found.
+func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*storage.APIKey, error) {
+	key := &storage.APIKey{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
+		FROM api_keys WHERE id = ?
+	`, id).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
+		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get api key by id: %w", err)
+	}
+	return key, nil
+}
+
+// ListUserAccessibleKeys returns all active API keys the user can access via team membership,
+// enriched with team and application names for the UI.
+func (s *Storage) ListUserAccessibleKeys(ctx context.Context, userID string) ([]*storage.AccessibleKey, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT k.id, k.name, k.key_prefix, a.id, a.name, t.id, t.name
+		FROM api_keys k
+		JOIN applications a ON a.id = k.application_id
+		JOIN teams t ON t.id = a.team_id
+		JOIN team_members tm ON tm.team_id = t.id
+		WHERE tm.user_id = ? AND k.is_active = TRUE
+		ORDER BY t.name, a.name, k.name
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list user accessible keys: %w", err)
+	}
+	defer rows.Close()
+
+	keys := make([]*storage.AccessibleKey, 0)
+	for rows.Next() {
+		ak := &storage.AccessibleKey{}
+		if err := rows.Scan(&ak.ID, &ak.Name, &ak.KeyPrefix, &ak.AppID, &ak.AppName, &ak.TeamID, &ak.TeamName); err != nil {
+			return nil, fmt.Errorf("list user accessible keys scan: %w", err)
+		}
+		keys = append(keys, ak)
+	}
+	return keys, rows.Err()
+}
+
 // RevokeAPIKey marks the key as inactive. Record is preserved for audit.
 func (s *Storage) RevokeAPIKey(ctx context.Context, id int64) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE api_keys SET is_active = FALSE WHERE id = ?`, id)

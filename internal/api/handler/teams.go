@@ -212,3 +212,25 @@ func AdminMyTeams(store storage.Storage) http.HandlerFunc {
 		json.NewEncoder(w).Encode(myTeams)
 	}
 }
+
+// AdminMyKeys handles GET /admin/keys/mine — returns all API keys the session user
+// can access via team membership, enriched with team and application names.
+func AdminMyKeys(store storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := middleware.UserFromContext(r.Context())
+		if user == nil {
+			model.WriteError(w, model.ErrForbidden("authentication required"))
+			return
+		}
+		keys, err := store.ListUserAccessibleKeys(r.Context(), user.ID)
+		if err != nil {
+			model.WriteError(w, model.ErrInternal("failed to list keys"))
+			return
+		}
+		if keys == nil {
+			keys = []*storage.AccessibleKey{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(keys)
+	}
+}

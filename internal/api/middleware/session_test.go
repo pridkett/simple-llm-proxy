@@ -180,6 +180,12 @@ func (m *mockSessionStorage) InsertWebhookDelivery(_ context.Context, _ *int64, 
 func (m *mockSessionStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (m *mockSessionStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
+	return nil, nil
+}
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {

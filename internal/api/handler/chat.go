@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
@@ -63,6 +64,46 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		if ck != nil {
 			id := ck.Key.ID
 			apiKeyID = &id
+		}
+
+		// X-Charge-Key-ID header: session-auth clients can attribute charges to a specific API key.
+		// Admins may charge any key; non-admins are verified via team membership.
+		if chargeHeader := req.Header.Get("X-Charge-Key-ID"); chargeHeader != "" && ck == nil && store != nil {
+			chargeID, parseErr := strconv.ParseInt(chargeHeader, 10, 64)
+			if parseErr != nil {
+				model.WriteError(w, model.ErrBadRequest("invalid X-Charge-Key-ID"))
+				return
+			}
+			chargeKey, lookupErr := store.GetAPIKeyByID(ctx, chargeID)
+			if lookupErr != nil || chargeKey == nil {
+				model.WriteError(w, model.ErrBadRequest("API key not found"))
+				return
+			}
+			if !chargeKey.IsActive {
+				model.WriteError(w, model.ErrBadRequest("API key is revoked"))
+				return
+			}
+			// Non-admin users must have access to the key via team membership.
+			user := middleware.UserFromContext(ctx)
+			if user != nil && !user.IsAdmin {
+				accessible, accessErr := store.ListUserAccessibleKeys(ctx, user.ID)
+				if accessErr != nil {
+					model.WriteError(w, model.ErrInternal("failed to verify key access"))
+					return
+				}
+				found := false
+				for _, ak := range accessible {
+					if ak.ID == chargeID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					model.WriteError(w, model.ErrForbidden("you do not have access to this API key"))
+					return
+				}
+			}
+			apiKeyID = &chargeID
 		}
 
 		// Derive sticky session key from API key hash (empty for master key).
