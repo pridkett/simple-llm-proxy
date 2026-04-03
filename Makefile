@@ -1,4 +1,4 @@
-.PHONY: build run test clean frontend-install frontend-dev frontend-build frontend-test
+.PHONY: build run test clean dev frontend-install frontend-dev frontend-build frontend-test
 
 # Build the proxy binary
 build:
@@ -11,6 +11,10 @@ run: build
 # Run with example config
 run-example: build
 	./bin/proxy -config config.yaml.example
+
+# Start backend + frontend dev servers (requires op CLI and op.env)
+dev: build
+	@./scripts/dev.sh
 
 # Run tests
 test:
