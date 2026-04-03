@@ -227,9 +227,9 @@ func TestRequireSession(t *testing.T) {
 	}
 }
 
-// TestRequireSessionMissing verifies the two response modes when no session exists:
-//   - Accept: text/html (browser nav)  → 302 redirect to /login
-//   - Accept: application/json (API)   → 401 JSON
+// TestRequireSessionMissing verifies that unauthenticated requests always receive
+// 401 JSON regardless of Accept header. All /admin/* routes are API-only (the Vue
+// SPA uses hash-based routing, so browsers never navigate directly to these paths).
 func TestRequireSessionMissing(t *testing.T) {
 	sm := newTestSessionManager()
 	store := &mockSessionStorage{}
@@ -241,50 +241,47 @@ func TestRequireSessionMissing(t *testing.T) {
 	protected := sm.LoadAndSave(RequireSession(store, sm)(handler))
 
 	tests := []struct {
-		name           string
-		acceptHeader   string
-		wantStatus     int
-		wantRedirect   bool
+		name         string
+		acceptHeader string
 	}{
 		{
-			name:         "browser nav gets redirect",
+			name:         "text/html accept still gets 401 JSON",
 			acceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-			wantStatus:   http.StatusSeeOther,
-			wantRedirect: true,
 		},
 		{
-			name:         "API caller gets 401 JSON",
+			name:         "application/json accept gets 401 JSON",
 			acceptHeader: "application/json",
-			wantStatus:   http.StatusUnauthorized,
-			wantRedirect: false,
+		},
+		{
+			name:         "wildcard accept gets 401 JSON",
+			acceptHeader: "*/*",
+		},
+		{
+			name:         "no accept header gets 401 JSON",
+			acceptHeader: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/admin/status", nil)
-			req.Header.Set("Accept", tt.acceptHeader)
+			if tt.acceptHeader != "" {
+				req.Header.Set("Accept", tt.acceptHeader)
+			}
 
 			rr := httptest.NewRecorder()
 			protected.ServeHTTP(rr, req)
 
-			if rr.Code != tt.wantStatus {
-				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			if rr.Code != http.StatusUnauthorized {
+				t.Errorf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 			}
 
-			if tt.wantRedirect {
-				location := rr.Header().Get("Location")
-				if location != "/login" {
-					t.Errorf("expected redirect to /login, got: %q", location)
-				}
-			} else {
-				var body map[string]interface{}
-				if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
-					t.Fatalf("response body is not valid JSON: %v", err)
-				}
-				if _, ok := body["error"]; !ok {
-					t.Errorf("expected JSON body with 'error' field, got: %v", body)
-				}
+			var body map[string]interface{}
+			if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+				t.Fatalf("response body is not valid JSON: %v", err)
+			}
+			if _, ok := body["error"]; !ok {
+				t.Errorf("expected JSON body with 'error' field, got: %v", body)
 			}
 		})
 	}
