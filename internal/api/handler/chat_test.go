@@ -97,7 +97,7 @@ func (s *captureStorage) LogRequest(_ context.Context, log *storage.RequestLog) 
 // Remaining storage.Storage methods — minimal stubs for interface compliance.
 func (s *captureStorage) Initialize(_ context.Context) error { return nil }
 func (s *captureStorage) Close() error                       { return nil }
-func (s *captureStorage) GetLogs(_ context.Context, _, _ int) ([]*storage.RequestLog, int, error) {
+func (s *captureStorage) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
 func (s *captureStorage) UpsertCostMapKey(_ context.Context, _, _ string) error { return nil }

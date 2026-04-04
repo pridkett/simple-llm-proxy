@@ -18,7 +18,8 @@ type Storage interface {
 
 	// GetLogs returns paginated request logs ordered by most recent first.
 	// Returns the logs, total count, and any error.
-	GetLogs(ctx context.Context, limit, offset int) ([]*RequestLog, int, error)
+	// The filters parameter allows optional filtering by model, team, or application.
+	GetLogs(ctx context.Context, limit, offset int, filters LogsFilter) ([]*RequestLog, int, error)
 
 	// UpsertCostMapKey sets a cost map key override for the given proxy model name.
 	// Clears any existing CustomSpec for that model.
@@ -314,6 +315,20 @@ type RequestLog struct {
 	RequestTime   time.Time
 	IsStreaming   bool
 	DeploymentKey string
+
+	// Enriched fields populated by GetLogs via LEFT JOIN.
+	// Empty when api_key_id is NULL (master key requests).
+	KeyName  string
+	AppName  string
+	TeamName string
+}
+
+// LogsFilter optionally narrows a GetLogs query by model, team, or application.
+// All pointer fields are nil when no filter is applied.
+type LogsFilter struct {
+	Model  string // empty string means no filter
+	TeamID *int64
+	AppID  *int64
 }
 
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.

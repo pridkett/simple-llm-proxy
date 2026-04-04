@@ -77,22 +77,67 @@ func (s *Storage) DB() *sql.DB {
 }
 
 // GetLogs returns paginated request logs ordered by most recent first.
-func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.RequestLog, int, error) {
+// It LEFT JOINs through api_keys -> applications -> teams to resolve names.
+// The filters parameter allows optional filtering by model, team, or application.
+func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storage.LogsFilter) ([]*storage.RequestLog, int, error) {
+	// Build WHERE clauses for optional filters.
+	var whereClauses []string
+	var whereArgs []interface{}
+
+	if filters.Model != "" {
+		whereClauses = append(whereClauses, "ul.model = ?")
+		whereArgs = append(whereArgs, filters.Model)
+	}
+	if filters.TeamID != nil {
+		whereClauses = append(whereClauses, "t.id = ?")
+		whereArgs = append(whereArgs, *filters.TeamID)
+	}
+	if filters.AppID != nil {
+		whereClauses = append(whereClauses, "app.id = ?")
+		whereArgs = append(whereArgs, *filters.AppID)
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + whereClauses[0]
+		for _, c := range whereClauses[1:] {
+			whereSQL += " AND " + c
+		}
+	}
+
+	// Count total matching rows.
+	countQuery := `
+		SELECT COUNT(*)
+		FROM usage_logs ul
+		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
+		LEFT JOIN applications app ON ak.application_id = app.id
+		LEFT JOIN teams t ON app.team_id = t.id` + whereSQL
+
 	var total int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs").Scan(&total)
+	err := s.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting logs: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT request_id, model, provider, endpoint,
-		       input_tokens, output_tokens, total_cost,
-		       status_code, latency_ms, request_time,
-		       is_streaming, COALESCE(deployment_key, '')
-		FROM usage_logs
-		ORDER BY request_time DESC
-		LIMIT ? OFFSET ?
-	`, limit, offset)
+	// Fetch the page of logs with enriched fields.
+	dataQuery := `
+		SELECT ul.request_id, ul.model, ul.provider, ul.endpoint,
+		       ul.input_tokens, ul.output_tokens, ul.total_cost,
+		       ul.status_code, ul.latency_ms, ul.request_time,
+		       ul.is_streaming, COALESCE(ul.deployment_key, ''),
+		       ul.api_key_id,
+		       COALESCE(ak.name, ''),
+		       COALESCE(app.name, ''),
+		       COALESCE(t.name, '')
+		FROM usage_logs ul
+		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
+		LEFT JOIN applications app ON ak.application_id = app.id
+		LEFT JOIN teams t ON app.team_id = t.id` + whereSQL + `
+		ORDER BY ul.request_time DESC
+		LIMIT ? OFFSET ?`
+
+	dataArgs := append(whereArgs, limit, offset)
+	rows, err := s.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("querying logs: %w", err)
 	}
@@ -106,6 +151,8 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.Re
 			&entry.InputTokens, &entry.OutputTokens, &entry.TotalCost,
 			&entry.StatusCode, &entry.LatencyMS, &entry.RequestTime,
 			&entry.IsStreaming, &entry.DeploymentKey,
+			&entry.APIKeyID,
+			&entry.KeyName, &entry.AppName, &entry.TeamName,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning log: %w", err)
 		}

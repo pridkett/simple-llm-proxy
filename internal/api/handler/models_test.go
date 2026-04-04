@@ -32,7 +32,7 @@ type mockStorage struct {
 func (m *mockStorage) Initialize(_ context.Context) error { return nil }
 func (m *mockStorage) Close() error                        { return nil }
 func (m *mockStorage) LogRequest(_ context.Context, _ *storage.RequestLog) error { return nil }
-func (m *mockStorage) GetLogs(_ context.Context, _, _ int) ([]*storage.RequestLog, int, error) {
+func (m *mockStorage) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
 func (m *mockStorage) UpsertCostMapKey(_ context.Context, modelName, key string) error {

@@ -85,12 +85,15 @@ export const api = {
 
   /**
    * GET /admin/logs
-   * @param {{ limit?: number, offset?: number }} params
+   * @param {{ limit?: number, offset?: number, model?: string, team_id?: number, app_id?: number }} params
    */
   logs(params = {}) {
     const qs = new URLSearchParams()
     if (params.limit) qs.set('limit', String(params.limit))
     if (params.offset) qs.set('offset', String(params.offset))
+    if (params.model) qs.set('model', params.model)
+    if (params.team_id) qs.set('team_id', String(params.team_id))
+    if (params.app_id) qs.set('app_id', String(params.app_id))
     const query = qs.toString() ? `?${qs}` : ''
     return request(`/admin/logs${query}`)
   },
