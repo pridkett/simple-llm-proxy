@@ -21,6 +21,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/logger"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
+	"github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
@@ -32,7 +33,7 @@ import (
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/minimax"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/ollama"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openai"
-	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
+	// openrouter is imported above (non-blank) for model discovery; init() still runs.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/vllm"
 )
 
@@ -52,6 +53,27 @@ func main() {
 
 	// Initialize structured logger before any other operations.
 	logger.Init(cfg.LogSettings)
+
+	// Register OpenRouter model discovery for wildcard expansion.
+	// When the config contains "openrouter/*", all available models are
+	// fetched from the OpenRouter API and registered as individual deployments.
+	reloader.SetDiscoveryProviders([]config.DiscoveryProvider{
+		{
+			Prefix:     "openrouter",
+			IsWildcard: openrouter.IsWildcard,
+			Discover:   openrouter.DiscoverModels,
+		},
+	})
+
+	// Expand wildcard entries (e.g., openrouter/*) before router creation.
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		if err := reloader.ExpandWildcardsOnConfig(ctx); err != nil {
+			log.Warn().Err(err).Msg("failed to expand wildcard model entries; continuing with static config")
+		}
+		cancel()
+		cfg = reloader.Config() // refresh cfg pointer after expansion
+	}
 
 	// Initialize storage (before router, so sticky sessions can use it)
 	var store storage.Storage
