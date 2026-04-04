@@ -99,7 +99,7 @@ func (m *mockStore) DeleteOldNotificationEvents(_ context.Context, olderThan tim
 func (m *mockStore) Initialize(context.Context) error                               { panic("not used") }
 func (m *mockStore) Close() error                                                    { panic("not used") }
 func (m *mockStore) LogRequest(context.Context, *storage.RequestLog) error           { panic("not used") }
-func (m *mockStore) GetLogs(context.Context, int, int) ([]*storage.RequestLog, int, error) {
+func (m *mockStore) GetLogs(context.Context, int, int, storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	panic("not used")
 }
 func (m *mockStore) UpsertCostMapKey(context.Context, string, string) error          { panic("not used") }

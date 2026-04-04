@@ -40,7 +40,7 @@ func (m *mockSessionStorage) Close() error                         { return nil 
 func (m *mockSessionStorage) LogRequest(ctx context.Context, log *storage.RequestLog) error {
 	return nil
 }
-func (m *mockSessionStorage) GetLogs(ctx context.Context, limit, offset int) ([]*storage.RequestLog, int, error) {
+func (m *mockSessionStorage) GetLogs(ctx context.Context, limit, offset int, filters storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
 func (m *mockSessionStorage) UpsertCostMapKey(ctx context.Context, modelName, costMapKey string) error {

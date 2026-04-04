@@ -137,8 +137,8 @@ type logEntry struct {
 	Model         string    `json:"model"`
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
-	InputTokens   int       `json:"prompt_tokens"`    // JSON key kept for frontend compatibility
-	OutputTokens  int       `json:"completion_tokens"` // JSON key kept for frontend compatibility
+	InputTokens   int       `json:"prompt_tokens"`     // JSON key kept for frontend compatibility
+	OutputTokens  int       `json:"completion_tokens"`  // JSON key kept for frontend compatibility
 	TotalTokens   int       `json:"total_tokens"`
 	TotalCost     float64   `json:"total_cost"`
 	StatusCode    int       `json:"status_code"`
@@ -146,6 +146,10 @@ type logEntry struct {
 	RequestTime   time.Time `json:"request_time"`
 	IsStreaming   bool      `json:"is_streaming"`
 	DeploymentKey string    `json:"deployment_key"`
+	APIKeyID      *int64    `json:"api_key_id"`
+	KeyName       string    `json:"key_name"`
+	AppName       string    `json:"app_name"`
+	TeamName      string    `json:"team_name"`
 }
 
 type adminLogsResponse struct {
@@ -156,6 +160,7 @@ type adminLogsResponse struct {
 }
 
 // AdminLogs handles GET /admin/logs.
+// Optional query params: model, team_id, app_id (for filtering).
 func AdminLogs(store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if store == nil {
@@ -177,7 +182,21 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 			}
 		}
 
-		logs, total, err := store.GetLogs(req.Context(), limit, offset)
+		// Parse optional filter params.
+		var filters storage.LogsFilter
+		filters.Model = req.URL.Query().Get("model")
+		if v := req.URL.Query().Get("team_id"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+				filters.TeamID = &n
+			}
+		}
+		if v := req.URL.Query().Get("app_id"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+				filters.AppID = &n
+			}
+		}
+
+		logs, total, err := store.GetLogs(req.Context(), limit, offset, filters)
 		if err != nil {
 			http.Error(w, `{"error":{"message":"failed to fetch logs","type":"server_error"}}`, http.StatusInternalServerError)
 			return
@@ -199,6 +218,10 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 				RequestTime:   l.RequestTime,
 				IsStreaming:   l.IsStreaming,
 				DeploymentKey: l.DeploymentKey,
+				APIKeyID:      l.APIKeyID,
+				KeyName:       l.KeyName,
+				AppName:       l.AppName,
+				TeamName:      l.TeamName,
 			})
 		}
 		if entries == nil {

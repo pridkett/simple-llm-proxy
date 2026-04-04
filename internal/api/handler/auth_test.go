@@ -59,7 +59,7 @@ func (m *mockAuthStore) ListApplications(_ context.Context, _ int64) ([]*storage
 func (m *mockAuthStore) CleanExpiredSessions(_ context.Context) error { return nil }
 func (m *mockAuthStore) Initialize(_ context.Context) error             { return nil }
 func (m *mockAuthStore) LogRequest(_ context.Context, _ *storage.RequestLog) error { return nil }
-func (m *mockAuthStore) GetLogs(_ context.Context, _, _ int) ([]*storage.RequestLog, int, error) {
+func (m *mockAuthStore) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
 func (m *mockAuthStore) UpsertCostMapKey(_ context.Context, _, _ string) error { return nil }
