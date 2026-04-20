@@ -316,6 +316,13 @@ type RequestLog struct {
 	IsStreaming   bool
 	DeploymentKey string
 
+	// New v1.2 telemetry fields. Populated by Phases 13 and 14 respectively;
+	// Phase 12 stores nil/zero defaults until those phases ship.
+	PoolName        string  // empty string = request not routed through a named pool
+	TTFTMs          *int64  // nil = non-streaming or TTFT not yet measured
+	ReqBodySnippet  string  // empty string until Phase 14 body capture middleware ships
+	RespBodySnippet string  // empty string until Phase 13 handler instrumentation ships
+
 	// Enriched fields populated by GetLogs via LEFT JOIN.
 	// Empty when api_key_id is NULL (master key requests).
 	KeyName  string
