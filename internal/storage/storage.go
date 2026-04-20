@@ -332,10 +332,17 @@ type RequestLog struct {
 
 // LogsFilter optionally narrows a GetLogs query by model, team, or application.
 // All pointer fields are nil when no filter is applied.
+// String fields use empty-string sentinel: empty = no filter (consistent with Model).
 type LogsFilter struct {
 	Model  string // empty string means no filter
 	TeamID *int64
 	AppID  *int64
+	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
+	Provider string     // empty string = no filter (same pattern as Model)
+	PoolName string     // empty string = no filter (same pattern as Model)
+	KeyID    *int64     // nil = no filter (same pattern as TeamID/AppID)
+	DateFrom *time.Time // nil = no lower bound on request_time
+	DateTo   *time.Time // nil = no upper bound on request_time
 }
 
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.
