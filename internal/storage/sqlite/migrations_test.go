@@ -69,6 +69,7 @@ func TestMigrate(t *testing.T) {
 		"id", "request_id", "api_key_id", "model", "provider", "endpoint",
 		"input_tokens", "output_tokens", "total_cost", "status_code", "latency_ms",
 		"request_time", "is_streaming", "cache_read_tokens", "cache_write_tokens", "deployment_key",
+		"pool_name", "ttft_ms", "req_body_snippet", "resp_body_snippet",
 	}
 	for _, col := range requiredCols {
 		if !colNames[col] {
@@ -95,14 +96,16 @@ func TestMigrationIdempotency(t *testing.T) {
 		t.Fatalf("second migrate() call failed (not idempotent): %v", err)
 	}
 
-	// schema_migrations should have exactly 37 rows.
+	// schema_migrations should have exactly 43 rows (37 original + 6 new v1.2 telemetry migrations).
 	// The existing slice had 34 entries. Migrations 30-32 add 3 more
 	// (DROP webhook_deliveries, CREATE with CASCADE, recreate index).
+	// Migrations 38-43 add 6 more (pool_name, ttft_ms, req_body_snippet, resp_body_snippet columns,
+	// plus two composite indexes for provider+model time-series and pool_name queries).
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 37 {
-		t.Errorf("expected 37 rows in schema_migrations, got %d", count)
+	if count != 43 {
+		t.Errorf("expected 43 rows in schema_migrations, got %d", count)
 	}
 }
