@@ -439,3 +439,34 @@ model_list:
 		t.Errorf("expected nil ExtraHeaders when absent, got %v", cfg.ModelList[0].LiteLLMParams.ExtraHeaders)
 	}
 }
+
+func TestGeneralSettingsDefaults(t *testing.T) {
+	cfg := Defaults()
+	if cfg.GeneralSettings.BodySnippetLimit != 500 {
+		t.Errorf("BodySnippetLimit default: got %d, want 500", cfg.GeneralSettings.BodySnippetLimit)
+	}
+	if cfg.GeneralSettings.LogRetentionDays != 30 {
+		t.Errorf("LogRetentionDays default: got %d, want 30", cfg.GeneralSettings.LogRetentionDays)
+	}
+}
+
+func TestGeneralSettingsYAMLParsing(t *testing.T) {
+	yaml := `
+general_settings:
+  master_key: test-key
+  database_url: ./test.db
+  port: 8080
+  body_snippet_limit: 100
+  log_retention_days: 7
+`
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if cfg.GeneralSettings.BodySnippetLimit != 100 {
+		t.Errorf("BodySnippetLimit: got %d, want 100", cfg.GeneralSettings.BodySnippetLimit)
+	}
+	if cfg.GeneralSettings.LogRetentionDays != 7 {
+		t.Errorf("LogRetentionDays: got %d, want 7", cfg.GeneralSettings.LogRetentionDays)
+	}
+}

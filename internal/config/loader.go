@@ -77,6 +77,12 @@ func Parse(data []byte) (*Config, error) {
 		if v, ok := gs["port"].(int); ok {
 			cfg.GeneralSettings.Port = v
 		}
+		if v, ok := gs["body_snippet_limit"].(int); ok {
+			cfg.GeneralSettings.BodySnippetLimit = v
+		}
+		if v, ok := gs["log_retention_days"].(int); ok {
+			cfg.GeneralSettings.LogRetentionDays = v
+		}
 	}
 
 	// Process log_settings
