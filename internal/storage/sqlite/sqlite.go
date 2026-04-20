@@ -96,6 +96,26 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		whereClauses = append(whereClauses, "app.id = ?")
 		whereArgs = append(whereArgs, *filters.AppID)
 	}
+	if filters.Provider != "" {
+		whereClauses = append(whereClauses, "ul.provider = ?")
+		whereArgs = append(whereArgs, filters.Provider)
+	}
+	if filters.PoolName != "" {
+		whereClauses = append(whereClauses, "ul.pool_name = ?")
+		whereArgs = append(whereArgs, filters.PoolName)
+	}
+	if filters.KeyID != nil {
+		whereClauses = append(whereClauses, "ak.id = ?")
+		whereArgs = append(whereArgs, *filters.KeyID)
+	}
+	if filters.DateFrom != nil {
+		whereClauses = append(whereClauses, "ul.request_time >= ?")
+		whereArgs = append(whereArgs, filters.DateFrom.UTC())
+	}
+	if filters.DateTo != nil {
+		whereClauses = append(whereClauses, "ul.request_time <= ?")
+		whereArgs = append(whereArgs, filters.DateTo.UTC())
+	}
 
 	whereSQL := ""
 	if len(whereClauses) > 0 {
@@ -128,7 +148,11 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		       ul.api_key_id,
 		       COALESCE(ak.name, ''),
 		       COALESCE(app.name, ''),
-		       COALESCE(t.name, '')
+		       COALESCE(t.name, ''),
+		       COALESCE(ul.pool_name, ''),
+		       ul.ttft_ms,
+		       COALESCE(ul.req_body_snippet, ''),
+		       COALESCE(ul.resp_body_snippet, '')
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
@@ -146,6 +170,7 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 	var logs []*storage.RequestLog
 	for rows.Next() {
 		entry := &storage.RequestLog{}
+		var ttftNull sql.NullInt64
 		if err := rows.Scan(
 			&entry.RequestID, &entry.Model, &entry.Provider, &entry.Endpoint,
 			&entry.InputTokens, &entry.OutputTokens, &entry.TotalCost,
@@ -153,8 +178,16 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 			&entry.IsStreaming, &entry.DeploymentKey,
 			&entry.APIKeyID,
 			&entry.KeyName, &entry.AppName, &entry.TeamName,
+			&entry.PoolName,
+			&ttftNull,
+			&entry.ReqBodySnippet,
+			&entry.RespBodySnippet,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning log: %w", err)
+		}
+		if ttftNull.Valid {
+			v := ttftNull.Int64
+			entry.TTFTMs = &v
 		}
 		logs = append(logs, entry)
 	}
@@ -172,8 +205,9 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 			request_id, api_key_id, model, provider, endpoint,
 			input_tokens, output_tokens, total_cost,
 			status_code, latency_ms, request_time,
-			is_streaming, deployment_key
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			is_streaming, deployment_key,
+			pool_name, ttft_ms, req_body_snippet, resp_body_snippet
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		log.RequestID,
 		log.APIKeyID,
@@ -188,6 +222,10 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 		log.RequestTime.UTC().Round(0),
 		log.IsStreaming,
 		log.DeploymentKey,
+		log.PoolName,
+		log.TTFTMs,
+		log.ReqBodySnippet,
+		log.RespBodySnippet,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting log: %w", err)
