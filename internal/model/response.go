@@ -31,6 +31,8 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	CacheReadTokens  int `json:"cache_read_tokens,omitempty"`  // populated by Anthropic only; zero for all other providers
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"` // populated by Anthropic only; zero for all other providers
 }
 
 // EmbeddingsResponse represents an OpenAI-compatible embeddings response.
