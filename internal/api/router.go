@@ -56,7 +56,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Use(middleware.KeyAuth(reloader.Config().GeneralSettings.MasterKey, store, cache, rl, sa))
 
 		// OpenAI-compatible endpoints
-		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher))
+		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
 		mux.Post("/v1/completions", handler.Completions())
 		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher))
 		mux.Get("/v1/models", handler.Models(r))
@@ -85,7 +85,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Model endpoints mirrored for session-auth browser clients
 		mux.Get("/admin/models", handler.Models(r))
 		mux.Get("/admin/models/{model}", handler.ModelDetail(r, cm))
-		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher))
+		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
 		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher))
 
 		// Identity and key management CRUD routes
