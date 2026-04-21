@@ -96,8 +96,10 @@ type anthropicResponse struct {
 }
 
 type anthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 }
 
 type anthropicStreamEvent struct {
@@ -232,7 +234,9 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		reader := bufio.NewReader(resp.Body)
 		responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 
-		var inputTokens int // accumulated from message_start event
+		var inputTokens int      // accumulated from message_start event
+		var cacheReadTokens int  // accumulated from message_start event
+		var cacheWriteTokens int // accumulated from message_start event
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -262,7 +266,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 				continue // Skip malformed events
 			}
 
-			chunk := p.translateStreamEvent(&event, responseID, req.Model, &inputTokens)
+			chunk := p.translateStreamEvent(&event, responseID, req.Model, &inputTokens, &cacheReadTokens, &cacheWriteTokens)
 			if chunk != nil {
 				select {
 				case chunks <- chunk:
@@ -369,14 +373,17 @@ func (p *Provider) translateResponse(resp *anthropicResponse, requestModel strin
 			PromptTokens:     resp.Usage.InputTokens,
 			CompletionTokens: resp.Usage.OutputTokens,
 			TotalTokens:      resp.Usage.InputTokens + resp.Usage.OutputTokens,
+			CacheReadTokens:  resp.Usage.CacheReadInputTokens,     // Anthropic cache read hits
+			CacheWriteTokens: resp.Usage.CacheCreationInputTokens, // Anthropic cache writes
 		},
 	}
 }
 
 // translateStreamEvent converts an Anthropic SSE event to an OpenAI StreamChunk.
 // inputTokens is a pointer to the accumulated input token count from message_start;
-// it is updated in-place when processing message_start and read when processing message_delta.
-func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string, inputTokens *int) *model.StreamChunk {
+// cacheReadTokens and cacheWriteTokens are pointers to cache token counts from message_start.
+// All three pointers are updated in-place when processing message_start and read when processing message_delta.
+func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string, inputTokens *int, cacheReadTokens *int, cacheWriteTokens *int) *model.StreamChunk {
 	switch event.Type {
 	case "content_block_delta":
 		if event.Delta != nil && event.Delta.Text != "" {
@@ -396,9 +403,15 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 			}
 		}
 	case "message_start":
-		// Extract input token count for later use in message_delta.
+		// Extract input token count and cache token counts for later use in message_delta.
 		if event.Message != nil && inputTokens != nil {
 			*inputTokens = event.Message.Usage.InputTokens
+			if cacheReadTokens != nil {
+				*cacheReadTokens = event.Message.Usage.CacheReadInputTokens
+			}
+			if cacheWriteTokens != nil {
+				*cacheWriteTokens = event.Message.Usage.CacheCreationInputTokens
+			}
 		}
 		return &model.StreamChunk{
 			ID:      id,
@@ -421,17 +434,27 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 				outputTokens = event.Usage.OutputTokens
 			}
 			// Populate Usage when token counts are available.
-			// input tokens were captured from the preceding message_start event.
+			// input tokens and cache tokens were captured from the preceding message_start event.
 			var usage *model.Usage
 			in := 0
 			if inputTokens != nil {
 				in = *inputTokens
+			}
+			cr := 0
+			if cacheReadTokens != nil {
+				cr = *cacheReadTokens
+			}
+			cw := 0
+			if cacheWriteTokens != nil {
+				cw = *cacheWriteTokens
 			}
 			if outputTokens > 0 || in > 0 {
 				usage = &model.Usage{
 					PromptTokens:     in,
 					CompletionTokens: outputTokens,
 					TotalTokens:      in + outputTokens,
+					CacheReadTokens:  cr, // from message_start event
+					CacheWriteTokens: cw, // from message_start event
 				}
 			}
 			return &model.StreamChunk{
