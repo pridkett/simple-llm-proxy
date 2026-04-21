@@ -322,6 +322,8 @@ type RequestLog struct {
 	TTFTMs          *int64  // nil = non-streaming or TTFT not yet measured
 	ReqBodySnippet  string  // empty string until Phase 14 body capture middleware ships
 	RespBodySnippet string  // empty string until Phase 13 handler instrumentation ships
+	CacheReadTokens  int    // populated from usage.CacheReadTokens; 0 for non-Anthropic
+	CacheWriteTokens int    // populated from usage.CacheWriteTokens; 0 for non-Anthropic
 
 	// Enriched fields populated by GetLogs via LEFT JOIN.
 	// Empty when api_key_id is NULL (master key requests).
