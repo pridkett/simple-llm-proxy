@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
@@ -21,7 +24,7 @@ import (
 )
 
 // ChatCompletions handles POST /v1/chat/completions requests.
-func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher) http.HandlerFunc {
+func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -148,8 +151,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		budget := r.BudgetManager()
 
+		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID)
+			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit)
 		} else {
 			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID)
 		}
@@ -173,12 +177,14 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && result.Response != nil && result.Response.Usage != nil {
-		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false, requestID)
+		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false, requestID, nil, "")
 	}
 
 	router.SetRouteHeaders(w, result)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result.Response)
+	if err := json.NewEncoder(w).Encode(result.Response); err != nil {
+		fmt.Fprintf(os.Stderr, "handleNonStreamingResponse: encode error (request_id=%s): %v\n", requestID, err)
+	}
 }
 
 func handleStreamingResponse(
@@ -194,6 +200,7 @@ func handleStreamingResponse(
 	apiKeyID *int64,
 	startTime time.Time,
 	requestID string,
+	bodySnippetLimit int,
 ) {
 	stream := result.Stream
 	defer stream.Close()
@@ -216,7 +223,10 @@ func handleStreamingResponse(
 		return
 	}
 
-	var streamUsage *model.Usage // accumulated from chunks that carry Usage (Anthropic message_delta)
+	var streamUsage *model.Usage  // accumulated from chunks that carry Usage (Anthropic message_delta)
+	var ttftMs *int64             // INSTR-01: nil until first successful Recv()
+	var ttftSet bool              // set to true after first Recv() success
+	var snippetBuilder strings.Builder // INSTR-03: accumulates Delta.Content up to bodySnippetLimit
 
 	for {
 		chunk, err := stream.Recv()
@@ -234,7 +244,7 @@ func handleStreamingResponse(
 				usage = &model.Usage{}
 			}
 			if store != nil {
-				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true, requestID)
+				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true, requestID, ttftMs, snippetBuilder.String())
 			}
 			return
 		}
@@ -247,6 +257,28 @@ func handleStreamingResponse(
 			// Mid-stream error from provider — report failure.
 			r.ReportFailure(result.DeploymentUsed)
 			return
+		}
+
+		// INSTR-01: Record TTFT at first successful stream.Recv(), NOT at Flush().
+		// This measures provider latency, not client serialization time. (Watch-out: LiteLLM #8999.)
+		if !ttftSet {
+			ms := time.Since(startTime).Milliseconds()
+			ttftMs = &ms
+			ttftSet = true
+		}
+
+		// INSTR-03: Accumulate response body snippet (cap-as-you-go to avoid unbounded memory).
+		if chunk != nil && len(chunk.Choices) > 0 && chunk.Choices[0].Delta != nil {
+			content := chunk.Choices[0].Delta.Content
+			if content != "" && bodySnippetLimit > 0 {
+				remaining := bodySnippetLimit - snippetBuilder.Len()
+				if remaining > 0 {
+					if len(content) > remaining {
+						content = content[:remaining]
+					}
+					snippetBuilder.WriteString(content)
+				}
+			}
 		}
 
 		// Accumulate usage from any chunk that carries it (Anthropic sends on message_delta).
@@ -271,7 +303,10 @@ func handleStreamingResponse(
 // apiKeyID is nil when the request was authenticated via master key.
 // budget/poolName may be nil/empty for non-pool models.
 // isStreaming indicates whether this was a streaming or non-streaming request.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool, requestID string) {
+// ttftMs is nil for non-streaming requests; set to time-to-first-token in ms for streaming.
+// respBodySnippet is empty for non-streaming requests; accumulated Delta.Content for streaming.
+// NOTE: signature has 15 params — a logRequestParams struct refactor is planned for a polish phase.
+func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool, requestID string, ttftMs *int64, respBodySnippet string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -279,26 +314,35 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 	if cm != nil && usage != nil {
 		spec := cm.GetEffectiveSpec(deployment.ModelName, []string{deployment.ActualModel})
 		totalCost = float64(usage.PromptTokens)*spec.Spec.InputCostPerToken +
-			float64(usage.CompletionTokens)*spec.Spec.OutputCostPerToken
+			float64(usage.CompletionTokens)*spec.Spec.OutputCostPerToken +
+			float64(usage.CacheReadTokens)*spec.Spec.CacheReadInputTokenCost +
+			float64(usage.CacheWriteTokens)*spec.Spec.CacheCreationInputTokenCost
 	}
 
 	log := &storage.RequestLog{
-		RequestID:     requestID,
-		APIKeyID:      apiKeyID,
-		Model:         deployment.ModelName,
-		Provider:      deployment.ProviderName,
-		Endpoint:      endpoint,
-		InputTokens:   usage.PromptTokens,
-		OutputTokens:  usage.CompletionTokens,
-		TotalCost:     totalCost,
-		StatusCode:    status,
-		LatencyMS:     time.Since(startTime).Milliseconds(),
-		RequestTime:   startTime,
-		IsStreaming:   isStreaming,
-		DeploymentKey: deployment.DeploymentKey(),
+		RequestID:        requestID,
+		APIKeyID:         apiKeyID,
+		Model:            deployment.ModelName,
+		Provider:         deployment.ProviderName,
+		Endpoint:         endpoint,
+		InputTokens:      usage.PromptTokens,
+		OutputTokens:     usage.CompletionTokens,
+		TotalCost:        totalCost,
+		StatusCode:       status,
+		LatencyMS:        time.Since(startTime).Milliseconds(),
+		RequestTime:      startTime,
+		IsStreaming:      isStreaming,
+		DeploymentKey:    deployment.DeploymentKey(),
+		PoolName:         poolName,           // INSTR-02: wired from poolName param
+		TTFTMs:           ttftMs,             // INSTR-01: nil for non-streaming
+		RespBodySnippet:  respBodySnippet,    // INSTR-03: empty for non-streaming
+		CacheReadTokens:  usage.CacheReadTokens,  // INSTR-04: 0 for non-Anthropic
+		CacheWriteTokens: usage.CacheWriteTokens, // INSTR-04: 0 for non-Anthropic
 	}
 
-	store.LogRequest(ctx, log)
+	if err := store.LogRequest(ctx, log); err != nil {
+		fmt.Fprintf(os.Stderr, "logRequest: failed to write usage log (request_id=%s): %v\n", log.RequestID, err)
+	}
 
 	// Credit the spend accumulator after DB write.
 	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {

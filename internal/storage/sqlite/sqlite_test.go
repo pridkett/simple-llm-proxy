@@ -339,3 +339,148 @@ func TestGetLogsFilters(t *testing.T) {
 		}
 	})
 }
+
+// TestLogRequestNewColumns verifies the 4 new columns round-trip through LogRequest and raw SELECT.
+func TestLogRequestNewColumns(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	log := &storage.RequestLog{
+		RequestID:       "test-new-cols-001",
+		Model:           "gpt-4",
+		Provider:        "openai",
+		Endpoint:        "/v1/chat/completions",
+		StatusCode:      200,
+		LatencyMS:       100,
+		RequestTime:     time.Now().UTC().Round(time.Second),
+		PoolName:        "my-pool",
+		ReqBodySnippet:  "hello request",
+		RespBodySnippet: "hello response",
+		// TTFTMs left nil — non-streaming
+	}
+	if err := s.LogRequest(ctx, log); err != nil {
+		t.Fatalf("LogRequest failed: %v", err)
+	}
+
+	var poolName, reqSnippet, respSnippet string
+	var ttftMs *int64
+	err := s.db.QueryRowContext(ctx,
+		"SELECT pool_name, ttft_ms, req_body_snippet, resp_body_snippet FROM usage_logs WHERE request_id = ?",
+		log.RequestID,
+	).Scan(&poolName, &ttftMs, &reqSnippet, &respSnippet)
+	if err != nil {
+		t.Fatalf("SELECT new columns failed: %v", err)
+	}
+	if poolName != "my-pool" {
+		t.Errorf("pool_name: got %q, want %q", poolName, "my-pool")
+	}
+	if ttftMs != nil {
+		t.Errorf("ttft_ms: got %v, want nil (non-streaming)", ttftMs)
+	}
+	if reqSnippet != "hello request" {
+		t.Errorf("req_body_snippet: got %q, want %q", reqSnippet, "hello request")
+	}
+	if respSnippet != "hello response" {
+		t.Errorf("resp_body_snippet: got %q, want %q", respSnippet, "hello response")
+	}
+}
+
+// TestGetLogsProviderFilter verifies provider filter returns only matching rows.
+func TestGetLogsProviderFilter(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	for _, r := range []struct{ id, provider string }{
+		{"prov-001", "openai"},
+		{"prov-002", "anthropic"},
+	} {
+		if err := s.LogRequest(ctx, &storage.RequestLog{
+			RequestID: r.id, Model: "m", Provider: r.provider,
+			Endpoint: "/v1/chat/completions", StatusCode: 200, LatencyMS: 10,
+			RequestTime: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("LogRequest: %v", err)
+		}
+	}
+
+	logs, total, err := s.GetLogs(ctx, 10, 0, storage.LogsFilter{Provider: "anthropic"})
+	if err != nil {
+		t.Fatalf("GetLogs: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total: got %d, want 1", total)
+	}
+	if len(logs) != 1 || logs[0].Provider != "anthropic" {
+		t.Errorf("expected 1 anthropic log, got %v", logs)
+	}
+}
+
+// TestGetLogsPoolNameFilter verifies pool_name filter returns only matching rows.
+func TestGetLogsPoolNameFilter(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	for _, r := range []struct{ id, pool string }{
+		{"pool-001", "pool-a"},
+		{"pool-002", "pool-b"},
+	} {
+		if err := s.LogRequest(ctx, &storage.RequestLog{
+			RequestID: r.id, Model: "m", Provider: "openai", PoolName: r.pool,
+			Endpoint: "/v1/chat/completions", StatusCode: 200, LatencyMS: 10,
+			RequestTime: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("LogRequest: %v", err)
+		}
+	}
+
+	logs, total, err := s.GetLogs(ctx, 10, 0, storage.LogsFilter{PoolName: "pool-a"})
+	if err != nil {
+		t.Fatalf("GetLogs: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total: got %d, want 1", total)
+	}
+	if len(logs) != 1 || logs[0].PoolName != "pool-a" {
+		t.Errorf("expected 1 pool-a log, got %v", logs)
+	}
+}
+
+// TestGetLogsDateFilter verifies DateFrom/DateTo range filter returns only matching rows.
+func TestGetLogsDateFilter(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
+	for _, r := range []struct {
+		id string
+		t  time.Time
+	}{
+		{"date-001", base.Add(-24 * time.Hour)}, // yesterday
+		{"date-002", base},                       // target day
+		{"date-003", base.Add(24 * time.Hour)},  // tomorrow
+	} {
+		if err := s.LogRequest(ctx, &storage.RequestLog{
+			RequestID: r.id, Model: "m", Provider: "openai",
+			Endpoint: "/v1/chat/completions", StatusCode: 200, LatencyMS: 10,
+			RequestTime: r.t,
+		}); err != nil {
+			t.Fatalf("LogRequest: %v", err)
+		}
+	}
+
+	from := base.Add(-time.Hour)  // 1 hour before base
+	to := base.Add(time.Hour)     // 1 hour after base
+	logs, total, err := s.GetLogs(ctx, 10, 0, storage.LogsFilter{
+		DateFrom: &from,
+		DateTo:   &to,
+	})
+	if err != nil {
+		t.Fatalf("GetLogs: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total: got %d, want 1", total)
+	}
+	if len(logs) != 1 || logs[0].RequestID != "date-002" {
+		t.Errorf("expected date-002, got %v", logs)
+	}
+}

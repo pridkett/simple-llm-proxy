@@ -64,6 +64,12 @@ type GeneralSettings struct {
 	MasterKey   string `yaml:"master_key"`
 	DatabaseURL string `yaml:"database_url"`
 	Port        int    `yaml:"port"`
+	// BodySnippetLimit is the maximum number of bytes captured from request/response bodies
+	// for observability snippets. 0 disables body capture entirely. Default: 500.
+	BodySnippetLimit int `yaml:"body_snippet_limit"`
+	// LogRetentionDays is the number of days to retain usage_logs rows.
+	// The retention cleanup goroutine deletes rows older than this. Default: 30.
+	LogRetentionDays int `yaml:"log_retention_days"`
 }
 
 // ProviderPool defines a named group of model deployments with shared routing strategy
@@ -100,8 +106,10 @@ func Defaults() *Config {
 			CooldownTime:    30 * time.Second,
 		},
 		GeneralSettings: GeneralSettings{
-			Port:        8080,
-			DatabaseURL: "./proxy.db",
+			Port:             8080,
+			DatabaseURL:      "./proxy.db",
+			BodySnippetLimit: 500,
+			LogRetentionDays: 30,
 		},
 		LogSettings: LogSettings{
 			Level:      "info",

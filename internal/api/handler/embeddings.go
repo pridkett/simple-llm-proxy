@@ -111,7 +111,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil && embResp.Usage != nil {
-			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false, requestID)
+			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false, requestID, nil, "")
 		}
 
 		router.SetRouteHeaders(w, result)

@@ -316,6 +316,15 @@ type RequestLog struct {
 	IsStreaming   bool
 	DeploymentKey string
 
+	// New v1.2 telemetry fields. Populated by Phases 13 and 14 respectively;
+	// Phase 12 stores nil/zero defaults until those phases ship.
+	PoolName        string  // empty string = request not routed through a named pool
+	TTFTMs          *int64  // nil = non-streaming or TTFT not yet measured
+	ReqBodySnippet  string  // empty string until Phase 14 body capture middleware ships
+	RespBodySnippet string  // empty string until Phase 13 handler instrumentation ships
+	CacheReadTokens  int    // populated from usage.CacheReadTokens; 0 for non-Anthropic
+	CacheWriteTokens int    // populated from usage.CacheWriteTokens; 0 for non-Anthropic
+
 	// Enriched fields populated by GetLogs via LEFT JOIN.
 	// Empty when api_key_id is NULL (master key requests).
 	KeyName  string
@@ -325,10 +334,17 @@ type RequestLog struct {
 
 // LogsFilter optionally narrows a GetLogs query by model, team, or application.
 // All pointer fields are nil when no filter is applied.
+// String fields use empty-string sentinel: empty = no filter (consistent with Model).
 type LogsFilter struct {
 	Model  string // empty string means no filter
 	TeamID *int64
 	AppID  *int64
+	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
+	Provider string     // empty string = no filter (same pattern as Model)
+	PoolName string     // empty string = no filter (same pattern as Model)
+	KeyID    *int64     // nil = no filter (same pattern as TeamID/AppID)
+	DateFrom *time.Time // nil = no lower bound on request_time
+	DateTo   *time.Time // nil = no upper bound on request_time
 }
 
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.

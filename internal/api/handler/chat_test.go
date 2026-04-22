@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -278,6 +279,7 @@ type routerInterface interface {
 // handleStreamingResponseWithRouter is a testable variant of handleStreamingResponse
 // that accepts a routerInterface instead of *router.Router.
 // It implements the target behavior of Task 4 so the tests capture the right semantics.
+// bodySnippetLimit controls resp_body_snippet accumulation; 0 disables it.
 func handleStreamingResponseWithRouter(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -289,7 +291,13 @@ func handleStreamingResponseWithRouter(
 	_ interface{}, // cm — not tested here
 	apiKeyID *int64,
 	startTime time.Time,
+	bodySnippetLimit ...int, // optional; defaults to 0 (disabled) for backward compat
 ) error {
+	snippetLimit := 0
+	if len(bodySnippetLimit) > 0 {
+		snippetLimit = bodySnippetLimit[0]
+	}
+
 	stream, err := deployment.Provider.ChatCompletionStream(ctx, req)
 	if err != nil {
 		return err
@@ -311,6 +319,9 @@ func handleStreamingResponseWithRouter(
 	}
 
 	var streamUsage *model.Usage
+	var ttftMs *int64
+	var ttftSet bool
+	var snippetBuilder strings.Builder
 
 	for {
 		chunk, err := stream.Recv()
@@ -327,18 +338,41 @@ func handleStreamingResponseWithRouter(
 				usage = &model.Usage{}
 			}
 			if store != nil {
+				capturedTTFT := ttftMs
+				capturedSnippet := snippetBuilder.String()
 				go func(u *model.Usage) {
-					logRequestForTest(store, apiKeyID, deployment, "/v1/chat/completions", u, http.StatusOK, startTime)
+					logRequestForTest(store, apiKeyID, deployment, "/v1/chat/completions", u, http.StatusOK, startTime, capturedTTFT, capturedSnippet)
 				}(usage)
 			}
 			return nil
 		}
 		if err != nil {
 			// STREAM-04: client disconnect is not a provider failure.
-			if err == context.Canceled || err == context.DeadlineExceeded {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
 			}
 			return err
+		}
+
+		// INSTR-01: Record TTFT at first successful stream.Recv().
+		if !ttftSet {
+			ms := time.Since(startTime).Milliseconds()
+			ttftMs = &ms
+			ttftSet = true
+		}
+
+		// INSTR-03: Accumulate response body snippet (cap-as-you-go).
+		if chunk != nil && len(chunk.Choices) > 0 && chunk.Choices[0].Delta != nil {
+			content := chunk.Choices[0].Delta.Content
+			if content != "" && snippetLimit > 0 {
+				remaining := snippetLimit - snippetBuilder.Len()
+				if remaining > 0 {
+					if len(content) > remaining {
+						content = content[:remaining]
+					}
+					snippetBuilder.WriteString(content)
+				}
+			}
 		}
 
 		// Accumulate usage from any chunk that carries it.
@@ -352,25 +386,27 @@ func handleStreamingResponseWithRouter(
 	}
 }
 
-// logRequestForTest writes a minimal log entry for test assertions.
-func logRequestForTest(store storage.Storage, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time) {
+// logRequestForTest writes a log entry for test assertions including TTFT and snippet.
+func logRequestForTest(store storage.Storage, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, ttftMs *int64, respBodySnippet string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	store.LogRequest(ctx, &storage.RequestLog{
-		RequestID:     fmt.Sprintf("%d", time.Now().UnixNano()),
-		APIKeyID:      apiKeyID,
-		Model:         deployment.ModelName,
-		Provider:      deployment.ProviderName,
-		Endpoint:      endpoint,
-		InputTokens:   usage.PromptTokens,
-		OutputTokens:  usage.CompletionTokens,
-		TotalCost:     0,
-		StatusCode:    status,
-		LatencyMS:     time.Since(startTime).Milliseconds(),
-		RequestTime:   startTime,
-		IsStreaming:   true,
-		DeploymentKey: deployment.DeploymentKey(),
+		RequestID:       fmt.Sprintf("%d", time.Now().UnixNano()),
+		APIKeyID:        apiKeyID,
+		Model:           deployment.ModelName,
+		Provider:        deployment.ProviderName,
+		Endpoint:        endpoint,
+		InputTokens:     usage.PromptTokens,
+		OutputTokens:    usage.CompletionTokens,
+		TotalCost:       0,
+		StatusCode:      status,
+		LatencyMS:       time.Since(startTime).Milliseconds(),
+		RequestTime:     startTime,
+		IsStreaming:     true,
+		DeploymentKey:   deployment.DeploymentKey(),
+		TTFTMs:          ttftMs,
+		RespBodySnippet: respBodySnippet,
 	})
 }
 
@@ -667,7 +703,7 @@ func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
 		usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5}
 
 		// Call logRequest with isStreaming=false (simulating non-streaming path)
-		logRequest(store, nil, nil, nil, "", nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false, "")
+		logRequest(store, nil, nil, nil, "", nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false, "", nil, "")
 
 		// Wait for the log to be written (logRequest may run in goroutine in production,
 		// but here we call it synchronously for test determinism).

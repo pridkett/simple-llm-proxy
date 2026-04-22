@@ -285,6 +285,26 @@ func (s *Storage) migrate(ctx context.Context) error {
 
 		// Migration 32: Recreate the index dropped with the table in migration 30.
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_subscription_id ON webhook_deliveries(subscription_id)`,
+
+		// Migration 33: Add pool_name column to usage_logs (nullable, empty string = no pool)
+		`ALTER TABLE usage_logs ADD COLUMN pool_name TEXT`,
+
+		// Migration 34: Add ttft_ms column to usage_logs (nullable INTEGER, nil = non-streaming)
+		`ALTER TABLE usage_logs ADD COLUMN ttft_ms INTEGER`,
+
+		// Migration 35: Add req_body_snippet column to usage_logs (nullable TEXT)
+		`ALTER TABLE usage_logs ADD COLUMN req_body_snippet TEXT`,
+
+		// Migration 36: Add resp_body_snippet column to usage_logs (nullable TEXT)
+		`ALTER TABLE usage_logs ADD COLUMN resp_body_snippet TEXT`,
+
+		// Migration 37: Composite index for provider+model time-series queries (Phase 16 filter API)
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_provider_model_time
+    ON usage_logs(provider, model, request_time DESC)`,
+
+		// Migration 38: Partial index on pool_name — WHERE NOT NULL saves space; most rows have no pool
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_pool_name
+    ON usage_logs(pool_name) WHERE pool_name IS NOT NULL`,
 	}
 
 	for i, sql := range migrations {
