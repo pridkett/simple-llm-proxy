@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -181,7 +182,9 @@ func handleNonStreamingResponse(
 
 	router.SetRouteHeaders(w, result)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result.Response)
+	if err := json.NewEncoder(w).Encode(result.Response); err != nil {
+		fmt.Fprintf(os.Stderr, "handleNonStreamingResponse: encode error (request_id=%s): %v\n", requestID, err)
+	}
 }
 
 func handleStreamingResponse(
@@ -337,7 +340,9 @@ func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costma
 		CacheWriteTokens: usage.CacheWriteTokens, // INSTR-04: 0 for non-Anthropic
 	}
 
-	store.LogRequest(ctx, log)
+	if err := store.LogRequest(ctx, log); err != nil {
+		fmt.Fprintf(os.Stderr, "logRequest: failed to write usage log (request_id=%s): %v\n", log.RequestID, err)
+	}
 
 	// Credit the spend accumulator after DB write.
 	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {
