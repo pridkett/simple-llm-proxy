@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -347,7 +348,7 @@ func handleStreamingResponseWithRouter(
 		}
 		if err != nil {
 			// STREAM-04: client disconnect is not a provider failure.
-			if err == context.Canceled || err == context.DeadlineExceeded {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
 			}
 			return err
