@@ -54,7 +54,7 @@ func BodyCapture(limitFn func() int) func(http.Handler) http.Handler {
 				raw, _ := io.ReadAll(io.LimitReader(r.Body, int64(limit)+1))
 				snippet := utf8Truncate(raw, limit)
 				// Reconstruct: prepend already-read bytes to the remaining (unread) stream.
-				// bodyWithClose preserves the original body's Close() — not a NopCloser.
+				// bodyWithClose preserves the original body's Close() for correct lifecycle.
 				r.Body = bodyWithClose{
 					Reader: io.MultiReader(bytes.NewReader(raw), r.Body),
 					Closer: r.Body,
