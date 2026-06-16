@@ -386,6 +386,39 @@ func TestLogRequestNewColumns(t *testing.T) {
 	}
 }
 
+// TestReqBodySnippetNullRoundTrip verifies nil *string → SQL NULL → nil *string round-trip.
+// This covers the body_snippet_limit=0 case where capture is disabled.
+func TestReqBodySnippetNullRoundTrip(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	log := &storage.RequestLog{
+		RequestID:      "test-null-snippet-001",
+		Model:          "gpt-4",
+		Provider:       "openai",
+		Endpoint:       "/v1/chat/completions",
+		StatusCode:     200,
+		LatencyMS:      50,
+		RequestTime:    time.Now().UTC().Round(time.Second),
+		ReqBodySnippet: nil, // nil → SQL NULL (capture disabled)
+	}
+	if err := s.LogRequest(ctx, log); err != nil {
+		t.Fatalf("LogRequest failed: %v", err)
+	}
+
+	var reqSnippet *string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT req_body_snippet FROM usage_logs WHERE request_id = ?",
+		log.RequestID,
+	).Scan(&reqSnippet)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if reqSnippet != nil {
+		t.Errorf("req_body_snippet: got %q, want nil (SQL NULL when capture disabled)", *reqSnippet)
+	}
+}
+
 // TestGetLogsProviderFilter verifies provider filter returns only matching rows.
 func TestGetLogsProviderFilter(t *testing.T) {
 	s := newTestStorage(t)
