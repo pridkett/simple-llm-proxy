@@ -354,7 +354,7 @@ func TestLogRequestNewColumns(t *testing.T) {
 		LatencyMS:       100,
 		RequestTime:     time.Now().UTC().Round(time.Second),
 		PoolName:        "my-pool",
-		ReqBodySnippet:  "hello request",
+		ReqBodySnippet:  func() *string { s := "hello request"; return &s }(),
 		RespBodySnippet: "hello response",
 		// TTFTMs left nil — non-streaming
 	}
@@ -362,7 +362,8 @@ func TestLogRequestNewColumns(t *testing.T) {
 		t.Fatalf("LogRequest failed: %v", err)
 	}
 
-	var poolName, reqSnippet, respSnippet string
+	var poolName, respSnippet string
+	var reqSnippet *string
 	var ttftMs *int64
 	err := s.db.QueryRowContext(ctx,
 		"SELECT pool_name, ttft_ms, req_body_snippet, resp_body_snippet FROM usage_logs WHERE request_id = ?",
@@ -377,8 +378,8 @@ func TestLogRequestNewColumns(t *testing.T) {
 	if ttftMs != nil {
 		t.Errorf("ttft_ms: got %v, want nil (non-streaming)", ttftMs)
 	}
-	if reqSnippet != "hello request" {
-		t.Errorf("req_body_snippet: got %q, want %q", reqSnippet, "hello request")
+	if reqSnippet == nil || *reqSnippet != "hello request" {
+		t.Errorf("req_body_snippet: got %v, want %q", reqSnippet, "hello request")
 	}
 	if respSnippet != "hello response" {
 		t.Errorf("resp_body_snippet: got %q, want %q", respSnippet, "hello response")

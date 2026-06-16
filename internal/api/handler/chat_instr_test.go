@@ -84,8 +84,24 @@ func TestLogRequestPoolName(t *testing.T) {
 	usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}
 
 	// Call logRequest directly with poolName="test-pool".
-	logRequest(store, nil, nil, nil, "test-pool", nil, deployment, "/v1/chat/completions",
-		usage, 200, time.Now(), false, "test-req-pool-001", nil, "")
+	logRequest(logRequestParams{
+		Store:           store,
+		SpendAcc:        nil,
+		CostMap:         nil,
+		Budget:          nil,
+		PoolName:        "test-pool",
+		APIKeyID:        nil,
+		Deployment:      deployment,
+		Endpoint:        "/v1/chat/completions",
+		Usage:           usage,
+		Status:          200,
+		StartTime:       time.Now(),
+		IsStreaming:     false,
+		RequestID:       "test-req-pool-001",
+		TTFTMs:          nil,
+		RespBodySnippet: "",
+		ReqBodySnippet:  nil,
+	})
 
 	// logRequest is synchronous when called directly (goroutine is only in production callers).
 	time.Sleep(20 * time.Millisecond)
@@ -241,8 +257,24 @@ func TestLogRequestCacheCost(t *testing.T) {
 	baseCost := float64(100)*0.000003 + float64(50)*0.000015 // 0.00075 + 0.0003 = 0.00105
 	cacheContrib := float64(100)*0.0000003 + float64(25)*0.00000375
 
-	logRequest(store, nil, cm, nil, "", nil, deployment, "/v1/chat/completions",
-		usage, 200, time.Now(), false, "cache-cost-test", nil, "")
+	logRequest(logRequestParams{
+		Store:           store,
+		SpendAcc:        nil,
+		CostMap:         cm,
+		Budget:          nil,
+		PoolName:        "",
+		APIKeyID:        nil,
+		Deployment:      deployment,
+		Endpoint:        "/v1/chat/completions",
+		Usage:           usage,
+		Status:          200,
+		StartTime:       time.Now(),
+		IsStreaming:     false,
+		RequestID:       "cache-cost-test",
+		TTFTMs:          nil,
+		RespBodySnippet: "",
+		ReqBodySnippet:  nil,
+	})
 
 	time.Sleep(20 * time.Millisecond)
 
