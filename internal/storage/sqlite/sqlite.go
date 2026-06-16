@@ -151,7 +151,7 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		       COALESCE(t.name, ''),
 		       COALESCE(ul.pool_name, ''),
 		       ul.ttft_ms,
-		       COALESCE(ul.req_body_snippet, ''),
+		       ul.req_body_snippet,
 		       COALESCE(ul.resp_body_snippet, ''),
 		       ul.cache_read_tokens,
 		       ul.cache_write_tokens
