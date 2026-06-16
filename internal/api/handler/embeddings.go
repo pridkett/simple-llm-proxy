@@ -22,6 +22,13 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		ctx := req.Context()
 		startTime := time.Now()
 
+		// Phase 14: capture request body snippet from BodyCapture middleware context.
+		// Embeddings handler does not receive cfg.BodySnippetLimit, so it always passes
+		// a non-nil pointer. Empty string stored as '' (not NULL) when body is empty.
+		// The NULL guarantee for limit=0 is enforced in chat.go via cfg.BodySnippetLimit.
+		s := middleware.ReqBodySnippetFromContext(req.Context())
+		reqBodySnippet := &s
+
 		var embReq model.EmbeddingsRequest
 		if err := json.NewDecoder(req.Body).Decode(&embReq); err != nil {
 			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
@@ -111,7 +118,24 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil && embResp.Usage != nil {
-			go logRequest(store, sa, cm, budget, result.PoolName, apiKeyID, result.DeploymentUsed, "/v1/embeddings", embResp.Usage, http.StatusOK, startTime, false, requestID, nil, "")
+			go logRequest(logRequestParams{
+				Store:           store,
+				SpendAcc:        sa,
+				CostMap:         cm,
+				Budget:          budget,
+				PoolName:        result.PoolName,
+				APIKeyID:        apiKeyID,
+				Deployment:      result.DeploymentUsed,
+				Endpoint:        "/v1/embeddings",
+				Usage:           embResp.Usage,
+				Status:          http.StatusOK,
+				StartTime:       startTime,
+				IsStreaming:     false,
+				RequestID:       requestID,
+				TTFTMs:          nil,
+				RespBodySnippet: "",
+				ReqBodySnippet:  reqBodySnippet,
+			})
 		}
 
 		router.SetRouteHeaders(w, result)

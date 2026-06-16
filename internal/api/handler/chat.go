@@ -29,6 +29,15 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		ctx := req.Context()
 		startTime := time.Now()
 
+		// Phase 14: capture request body snippet from BodyCapture middleware context.
+		// Use cfg.BodySnippetLimit to enforce nil (SQL NULL) when capture is disabled.
+		var reqBodySnippet *string
+		if cfg.BodySnippetLimit > 0 {
+			s := middleware.ReqBodySnippetFromContext(req.Context())
+			reqBodySnippet = &s
+		}
+		// reqBodySnippet is nil when cfg.BodySnippetLimit == 0 → stored as SQL NULL
+
 		var chatReq model.ChatCompletionRequest
 		if err := json.NewDecoder(req.Body).Decode(&chatReq); err != nil {
 			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
@@ -153,9 +162,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit)
+			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet)
 		} else {
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID)
+			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet)
 		}
 	}
 }
@@ -172,12 +181,30 @@ func handleNonStreamingResponse(
 	apiKeyID *int64,
 	startTime time.Time,
 	requestID string,
+	reqBodySnippet *string,
 ) {
 	r.ReportSuccess(result.DeploymentUsed)
 
 	// Log the request if storage is available
 	if store != nil && result.Response != nil && result.Response.Usage != nil {
-		go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", result.Response.Usage, http.StatusOK, startTime, false, requestID, nil, "")
+		go logRequest(logRequestParams{
+			Store:           store,
+			SpendAcc:        sa,
+			CostMap:         cm,
+			Budget:          budget,
+			PoolName:        poolName,
+			APIKeyID:        apiKeyID,
+			Deployment:      result.DeploymentUsed,
+			Endpoint:        "/v1/chat/completions",
+			Usage:           result.Response.Usage,
+			Status:          http.StatusOK,
+			StartTime:       startTime,
+			IsStreaming:     false,
+			RequestID:       requestID,
+			TTFTMs:          nil,
+			RespBodySnippet: "",
+			ReqBodySnippet:  reqBodySnippet,
+		})
 	}
 
 	router.SetRouteHeaders(w, result)
@@ -201,6 +228,7 @@ func handleStreamingResponse(
 	startTime time.Time,
 	requestID string,
 	bodySnippetLimit int,
+	reqBodySnippet *string,
 ) {
 	stream := result.Stream
 	defer stream.Close()
@@ -244,7 +272,24 @@ func handleStreamingResponse(
 				usage = &model.Usage{}
 			}
 			if store != nil {
-				go logRequest(store, sa, cm, budget, poolName, apiKeyID, result.DeploymentUsed, "/v1/chat/completions", usage, http.StatusOK, startTime, true, requestID, ttftMs, snippetBuilder.String())
+				go logRequest(logRequestParams{
+					Store:           store,
+					SpendAcc:        sa,
+					CostMap:         cm,
+					Budget:          budget,
+					PoolName:        poolName,
+					APIKeyID:        apiKeyID,
+					Deployment:      result.DeploymentUsed,
+					Endpoint:        "/v1/chat/completions",
+					Usage:           usage,
+					Status:          http.StatusOK,
+					StartTime:       startTime,
+					IsStreaming:     true,
+					RequestID:       requestID,
+					TTFTMs:          ttftMs,
+					RespBodySnippet: snippetBuilder.String(),
+					ReqBodySnippet:  reqBodySnippet,
+				})
 			}
 			return
 		}
@@ -296,6 +341,27 @@ func handleStreamingResponse(
 	}
 }
 
+// logRequestParams holds all parameters for logRequest, replacing the 15-param positional signature.
+// Phase 14 adds ReqBodySnippet as *string; nil means capture was disabled → SQL NULL.
+type logRequestParams struct {
+	Store           storage.Storage
+	SpendAcc        *keystore.SpendAccumulator
+	CostMap         *costmap.Manager
+	Budget          *router.PoolBudgetManager
+	PoolName        string
+	APIKeyID        *int64
+	Deployment      *provider.Deployment
+	Endpoint        string
+	Usage           *model.Usage
+	Status          int
+	StartTime       time.Time
+	IsStreaming     bool
+	RequestID       string
+	TTFTMs          *int64
+	RespBodySnippet string
+	ReqBodySnippet  *string // nil = disabled (limit=0) → SQL NULL; &"" = empty body; &"..." = captured snippet
+}
+
 // logRequest writes the request log to storage, credits the spend accumulator,
 // and credits the pool budget manager.
 // Called asynchronously (via goroutine) after each successful request.
@@ -305,53 +371,54 @@ func handleStreamingResponse(
 // isStreaming indicates whether this was a streaming or non-streaming request.
 // ttftMs is nil for non-streaming requests; set to time-to-first-token in ms for streaming.
 // respBodySnippet is empty for non-streaming requests; accumulated Delta.Content for streaming.
-// NOTE: signature has 15 params — a logRequestParams struct refactor is planned for a polish phase.
-func logRequest(store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, budget *router.PoolBudgetManager, poolName string, apiKeyID *int64, deployment *provider.Deployment, endpoint string, usage *model.Usage, status int, startTime time.Time, isStreaming bool, requestID string, ttftMs *int64, respBodySnippet string) {
+// reqBodySnippet is nil when capture is disabled (limit=0) → stored as SQL NULL.
+func logRequest(p logRequestParams) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var totalCost float64
-	if cm != nil && usage != nil {
-		spec := cm.GetEffectiveSpec(deployment.ModelName, []string{deployment.ActualModel})
-		totalCost = float64(usage.PromptTokens)*spec.Spec.InputCostPerToken +
-			float64(usage.CompletionTokens)*spec.Spec.OutputCostPerToken +
-			float64(usage.CacheReadTokens)*spec.Spec.CacheReadInputTokenCost +
-			float64(usage.CacheWriteTokens)*spec.Spec.CacheCreationInputTokenCost
+	if p.CostMap != nil && p.Usage != nil {
+		spec := p.CostMap.GetEffectiveSpec(p.Deployment.ModelName, []string{p.Deployment.ActualModel})
+		totalCost = float64(p.Usage.PromptTokens)*spec.Spec.InputCostPerToken +
+			float64(p.Usage.CompletionTokens)*spec.Spec.OutputCostPerToken +
+			float64(p.Usage.CacheReadTokens)*spec.Spec.CacheReadInputTokenCost +
+			float64(p.Usage.CacheWriteTokens)*spec.Spec.CacheCreationInputTokenCost
 	}
 
 	log := &storage.RequestLog{
-		RequestID:        requestID,
-		APIKeyID:         apiKeyID,
-		Model:            deployment.ModelName,
-		Provider:         deployment.ProviderName,
-		Endpoint:         endpoint,
-		InputTokens:      usage.PromptTokens,
-		OutputTokens:     usage.CompletionTokens,
+		RequestID:        p.RequestID,
+		APIKeyID:         p.APIKeyID,
+		Model:            p.Deployment.ModelName,
+		Provider:         p.Deployment.ProviderName,
+		Endpoint:         p.Endpoint,
+		InputTokens:      p.Usage.PromptTokens,
+		OutputTokens:     p.Usage.CompletionTokens,
 		TotalCost:        totalCost,
-		StatusCode:       status,
-		LatencyMS:        time.Since(startTime).Milliseconds(),
-		RequestTime:      startTime,
-		IsStreaming:      isStreaming,
-		DeploymentKey:    deployment.DeploymentKey(),
-		PoolName:         poolName,           // INSTR-02: wired from poolName param
-		TTFTMs:           ttftMs,             // INSTR-01: nil for non-streaming
-		RespBodySnippet:  respBodySnippet,    // INSTR-03: empty for non-streaming
-		CacheReadTokens:  usage.CacheReadTokens,  // INSTR-04: 0 for non-Anthropic
-		CacheWriteTokens: usage.CacheWriteTokens, // INSTR-04: 0 for non-Anthropic
+		StatusCode:       p.Status,
+		LatencyMS:        time.Since(p.StartTime).Milliseconds(),
+		RequestTime:      p.StartTime,
+		IsStreaming:      p.IsStreaming,
+		DeploymentKey:    p.Deployment.DeploymentKey(),
+		PoolName:         p.PoolName,           // INSTR-02: wired from poolName param
+		TTFTMs:           p.TTFTMs,             // INSTR-01: nil for non-streaming
+		RespBodySnippet:  p.RespBodySnippet,    // INSTR-03: empty for non-streaming
+		ReqBodySnippet:   p.ReqBodySnippet,     // Phase 14: nil *string → SQL NULL when disabled
+		CacheReadTokens:  p.Usage.CacheReadTokens,  // INSTR-04: 0 for non-Anthropic
+		CacheWriteTokens: p.Usage.CacheWriteTokens, // INSTR-04: 0 for non-Anthropic
 	}
 
-	if err := store.LogRequest(ctx, log); err != nil {
+	if err := p.Store.LogRequest(ctx, log); err != nil {
 		fmt.Fprintf(os.Stderr, "logRequest: failed to write usage log (request_id=%s): %v\n", log.RequestID, err)
 	}
 
 	// Credit the spend accumulator after DB write.
-	if apiKeyID != nil && sa != nil && log.TotalCost > 0 {
-		sa.Credit(*apiKeyID, log.TotalCost)
+	if p.APIKeyID != nil && p.SpendAcc != nil && log.TotalCost > 0 {
+		p.SpendAcc.Credit(*p.APIKeyID, log.TotalCost)
 	}
 
 	// Credit the pool budget accumulator after DB write (BUDGET-02).
-	if budget != nil && poolName != "" && totalCost > 0 {
-		budget.Credit(poolName, totalCost)
+	if p.Budget != nil && p.PoolName != "" && totalCost > 0 {
+		p.Budget.Credit(p.PoolName, totalCost)
 	}
 }
 

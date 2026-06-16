@@ -703,7 +703,24 @@ func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
 		usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5}
 
 		// Call logRequest with isStreaming=false (simulating non-streaming path)
-		logRequest(store, nil, nil, nil, "", nil, deployment, "/v1/chat/completions", usage, http.StatusOK, time.Now(), false, "", nil, "")
+		logRequest(logRequestParams{
+			Store:           store,
+			SpendAcc:        nil,
+			CostMap:         nil,
+			Budget:          nil,
+			PoolName:        "",
+			APIKeyID:        nil,
+			Deployment:      deployment,
+			Endpoint:        "/v1/chat/completions",
+			Usage:           usage,
+			Status:          http.StatusOK,
+			StartTime:       time.Now(),
+			IsStreaming:     false,
+			RequestID:       "",
+			TTFTMs:          nil,
+			RespBodySnippet: "",
+			ReqBodySnippet:  nil,
+		})
 
 		// Wait for the log to be written (logRequest may run in goroutine in production,
 		// but here we call it synchronously for test determinism).

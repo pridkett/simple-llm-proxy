@@ -54,6 +54,9 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 	// KeyAuth accepts both master key (bypass) and per-app keys (enforcement).
 	mux.Group(func(mux chi.Router) {
 		mux.Use(middleware.KeyAuth(reloader.Config().GeneralSettings.MasterKey, store, cache, rl, sa))
+		mux.Use(middleware.BodyCapture(func() int {
+			return reloader.Config().GeneralSettings.BodySnippetLimit
+		})) // Phase 14: capture req body snippet before json.NewDecoder; reload-aware getter
 
 		// OpenAI-compatible endpoints
 		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
