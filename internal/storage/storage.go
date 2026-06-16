@@ -320,7 +320,8 @@ type RequestLog struct {
 	// Phase 12 stores nil/zero defaults until those phases ship.
 	PoolName        string  // empty string = request not routed through a named pool
 	TTFTMs          *int64  // nil = non-streaming or TTFT not yet measured
-	ReqBodySnippet  string  // empty string until Phase 14 body capture middleware ships
+	ReqBodySnippet  *string // nil = capture disabled (body_snippet_limit: 0) → SQL NULL
+	                        // non-nil = captured snippet (empty string "" if body was empty)
 	RespBodySnippet string  // empty string until Phase 13 handler instrumentation ships
 	CacheReadTokens  int    // populated from usage.CacheReadTokens; 0 for non-Anthropic
 	CacheWriteTokens int    // populated from usage.CacheWriteTokens; 0 for non-Anthropic
