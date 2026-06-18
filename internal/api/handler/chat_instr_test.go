@@ -295,6 +295,54 @@ func TestLogRequestCacheCost(t *testing.T) {
 	}
 }
 
+// TestLogRequestReqBodySnippetEnabled (BODY-03, handler limit-guard):
+// verifies that logRequest stores a non-nil *string for ReqBodySnippet when
+// the caller passes a non-nil pointer. This exercises the enabled path
+// (BodySnippetLimit > 0) that all other test call sites skip by passing nil.
+//
+// This test will fail if:
+//   - logRequestParams.ReqBodySnippet field is removed or changed to bare string
+//   - logRequest body assigns nil instead of forwarding the pointer to storage
+//   - storage.RequestLog.ReqBodySnippet is changed back to bare string
+func TestLogRequestReqBodySnippetEnabled(t *testing.T) {
+	store := &captureStorage{}
+	deployment := makeTestDeployment(&streamingMockProvider{name: "openai"})
+	usage := &model.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}
+
+	capturedSnippet := `{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}`
+
+	logRequest(logRequestParams{
+		Store:           store,
+		SpendAcc:        nil,
+		CostMap:         nil,
+		Budget:          nil,
+		PoolName:        "test-pool",
+		APIKeyID:        nil,
+		Deployment:      deployment,
+		Endpoint:        "/v1/chat/completions",
+		Usage:           usage,
+		Status:          200,
+		StartTime:       time.Now(),
+		IsStreaming:     false,
+		RequestID:       "test-req-body-snippet-enabled",
+		TTFTMs:          nil,
+		RespBodySnippet: "",
+		ReqBodySnippet:  &capturedSnippet, // non-nil: enabled path (BodySnippetLimit > 0)
+	})
+
+	time.Sleep(20 * time.Millisecond)
+
+	if len(store.logs) == 0 {
+		t.Fatal("no log recorded")
+	}
+	// BODY-03: ReqBodySnippet must be stored as non-nil *string when limit > 0.
+	if store.logs[0].ReqBodySnippet == nil {
+		t.Error("ReqBodySnippet is nil; expected non-nil *string when capture is enabled")
+	} else if *store.logs[0].ReqBodySnippet != capturedSnippet {
+		t.Errorf("ReqBodySnippet: got %q, want %q", *store.logs[0].ReqBodySnippet, capturedSnippet)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Suppress unused import warnings.
 // ---------------------------------------------------------------------------
