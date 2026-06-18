@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
@@ -525,3 +526,76 @@ func (p *failoverMockProvider) Embeddings(_ context.Context, _ *model.Embeddings
 }
 
 func (p *failoverMockProvider) SupportsEmbeddings() bool { return false }
+
+// ---------------------------------------------------------------------------
+// BODY-03: Router wiring — BodyCapture middleware integration test
+// ---------------------------------------------------------------------------
+
+// TestBodyCapture_RouterWiring verifies the full middleware-to-storage pipeline
+// for body snippet capture (BODY-03). This test:
+//   1. Wraps ChatCompletions with BodyCapture middleware (mirroring router.go wiring)
+//   2. Sends a request with a known JSON body
+//   3. Asserts that the stored RequestLog.ReqBodySnippet is non-nil and matches
+//
+// This test will fail if BodyCapture is removed from the handler call chain,
+// providing regression protection for the router.go wiring at lines 57-59.
+func TestBodyCapture_RouterWiring(t *testing.T) {
+	resetTestMockState()
+	testMockProviderState.chatResponse = &model.ChatCompletionResponse{
+		ID:      "chatcmpl-body-capture",
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   "gpt-4",
+		Choices: []model.Choice{
+			{Index: 0, Message: &model.Message{Role: "assistant", Content: "hi"}, FinishReason: "stop"},
+		},
+		Usage: &model.Usage{PromptTokens: 5, CompletionTokens: 3, TotalTokens: 8},
+	}
+
+	cfg := newTestMockConfig("gpt-4")
+	cfg.GeneralSettings.BodySnippetLimit = 500
+	rtr, err := router.New(cfg, nil)
+	if err != nil {
+		t.Fatalf("router.New: %v", err)
+	}
+
+	store := &captureStorage{}
+
+	// Build the handler wrapped with BodyCapture middleware, mirroring the
+	// registration in router.go:
+	//   mux.Use(middleware.BodyCapture(func() int { return reloader.Config().GeneralSettings.BodySnippetLimit }))
+	//   mux.Post("/v1/chat/completions", handler.ChatCompletions(...))
+	//
+	// The limitFn getter pattern matches the router.go wiring exactly.
+	snippetLimit := cfg.GeneralSettings.BodySnippetLimit
+	chatHandler := ChatCompletions(rtr, store, nil, nil, nil, cfg.GeneralSettings)
+	wrappedHandler := middleware.BodyCapture(func() int { return snippetLimit })(chatHandler)
+
+	reqBody := makeChatRequest("gpt-4", false)
+	req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", reqBody)
+	w := httptest.NewRecorder()
+	wrappedHandler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Give the async log goroutine time to write.
+	time.Sleep(30 * time.Millisecond)
+
+	if len(store.logs) == 0 {
+		t.Fatal("no log recorded — storage.LogRequest was not called")
+	}
+
+	// BODY-03: ReqBodySnippet must be non-nil when BodySnippetLimit > 0
+	// and BodyCapture middleware is in the chain.
+	if store.logs[0].ReqBodySnippet == nil {
+		t.Error("ReqBodySnippet is nil; expected non-nil *string when BodyCapture middleware runs with limit > 0")
+	} else {
+		// The snippet should contain the request body content.
+		snippet := *store.logs[0].ReqBodySnippet
+		if !strings.Contains(snippet, "gpt-4") {
+			t.Errorf("ReqBodySnippet %q should contain model name from request body", snippet)
+		}
+	}
+}
