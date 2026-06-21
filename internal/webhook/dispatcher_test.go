@@ -102,6 +102,7 @@ func (m *mockStore) LogRequest(context.Context, *storage.RequestLog) error      
 func (m *mockStore) GetLogs(context.Context, int, int, storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	panic("not used")
 }
+func (m *mockStore) DeleteOldRequestLogs(context.Context, time.Time) (int64, error)  { panic("not used") }
 func (m *mockStore) UpsertCostMapKey(context.Context, string, string) error          { panic("not used") }
 func (m *mockStore) UpsertCustomCostSpec(context.Context, string, string) error      { panic("not used") }
 func (m *mockStore) GetCostOverride(context.Context, string) (*storage.CostOverride, error) {
