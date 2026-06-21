@@ -21,6 +21,11 @@ type Storage interface {
 	// The filters parameter allows optional filtering by model, team, or application.
 	GetLogs(ctx context.Context, limit, offset int, filters LogsFilter) ([]*RequestLog, int, error)
 
+	// DeleteOldRequestLogs removes usage_logs rows with request_time older than cutoff.
+	// Deletion is performed in batches of 1,000 rows to avoid holding the SQLite write lock.
+	// Returns the total number of rows deleted.
+	DeleteOldRequestLogs(ctx context.Context, cutoff time.Time) (int64, error)
+
 	// UpsertCostMapKey sets a cost map key override for the given proxy model name.
 	// Clears any existing CustomSpec for that model.
 	UpsertCostMapKey(ctx context.Context, modelName, costMapKey string) error
