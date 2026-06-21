@@ -156,6 +156,35 @@ func main() {
 		}()
 	}
 
+	// Start background goroutine for usage_log retention cleanup (runs every 6h).
+	// D-02: skip goroutine entirely when LogRetentionDays is 0 (retain indefinitely).
+	if store != nil && cfg.GeneralSettings.LogRetentionDays > 0 {
+		go func() {
+			// D-03: run one pass immediately to catch logs that aged out while proxy was offline.
+			cutoff := time.Now().AddDate(0, 0, -cfg.GeneralSettings.LogRetentionDays)
+			if n, err := store.DeleteOldRequestLogs(context.Background(), cutoff); err != nil {
+				log.Warn().Err(err).Msg("retention cleanup initial pass failed")
+			} else if n > 0 {
+				log.Info().Int64("deleted", n).Msg("retention cleanup initial pass")
+			}
+
+			// D-01: fire-and-forget — runs on 6h interval until process exit.
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					cutoff := time.Now().AddDate(0, 0, -cfg.GeneralSettings.LogRetentionDays)
+					if n, err := store.DeleteOldRequestLogs(context.Background(), cutoff); err != nil {
+						log.Warn().Err(err).Msg("retention cleanup failed")
+					} else if n > 0 {
+						log.Info().Int64("deleted", n).Msg("retention cleanup completed")
+					}
+				}
+			}
+		}()
+	}
+
 	// Build OpenAPI spec
 	spec := openapi.New()
 	if err := spec.Build(); err != nil {
