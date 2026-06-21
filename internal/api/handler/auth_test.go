@@ -62,6 +62,9 @@ func (m *mockAuthStore) LogRequest(_ context.Context, _ *storage.RequestLog) err
 func (m *mockAuthStore) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
+func (m *mockAuthStore) DeleteOldRequestLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockAuthStore) UpsertCostMapKey(_ context.Context, _, _ string) error { return nil }
 func (m *mockAuthStore) UpsertCustomCostSpec(_ context.Context, _, _ string) error { return nil }
 func (m *mockAuthStore) GetCostOverride(_ context.Context, _ string) (*storage.CostOverride, error) {

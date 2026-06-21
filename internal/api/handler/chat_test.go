@@ -101,6 +101,9 @@ func (s *captureStorage) Close() error                       { return nil }
 func (s *captureStorage) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
+func (s *captureStorage) DeleteOldRequestLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
 func (s *captureStorage) UpsertCostMapKey(_ context.Context, _, _ string) error { return nil }
 func (s *captureStorage) UpsertCustomCostSpec(_ context.Context, _, _ string) error {
 	return nil

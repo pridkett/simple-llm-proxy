@@ -43,6 +43,9 @@ func (m *mockSessionStorage) LogRequest(ctx context.Context, log *storage.Reques
 func (m *mockSessionStorage) GetLogs(ctx context.Context, limit, offset int, filters storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
+func (m *mockSessionStorage) DeleteOldRequestLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockSessionStorage) UpsertCostMapKey(ctx context.Context, modelName, costMapKey string) error {
 	return nil
 }

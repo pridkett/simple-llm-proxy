@@ -35,6 +35,9 @@ func (m *mockStorage) LogRequest(_ context.Context, _ *storage.RequestLog) error
 func (m *mockStorage) GetLogs(_ context.Context, _, _ int, _ storage.LogsFilter) ([]*storage.RequestLog, int, error) {
 	return nil, 0, nil
 }
+func (m *mockStorage) DeleteOldRequestLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockStorage) UpsertCostMapKey(_ context.Context, modelName, key string) error {
 	m.upsertedKeyModel = modelName
 	m.upsertedKey = key
