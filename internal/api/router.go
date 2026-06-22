@@ -78,6 +78,8 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Get("/admin/config", handler.AdminConfig(reloader.Config))
 		mux.Post("/admin/reload", handler.AdminReload(reloader, r))
 		mux.Get("/admin/logs", handler.AdminLogs(store))
+		mux.Get("/admin/logs/meta", handler.AdminLogsMeta(store))        // D-09: literal route MUST be before wildcard
+		mux.Get("/admin/logs/{requestID}", handler.AdminLogDetail(store)) // wildcard — registered second
 
 		// Cost map endpoints
 		mux.Get("/admin/costmap", handler.AdminCostMapStatus(cm))
