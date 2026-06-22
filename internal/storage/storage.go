@@ -26,6 +26,14 @@ type Storage interface {
 	// Returns the total number of rows deleted.
 	DeleteOldRequestLogs(ctx context.Context, cutoff time.Time) (int64, error)
 
+	// GetLogByID returns the full RequestLog for the given request_id.
+	// Returns (nil, nil) when no log exists with that request_id.
+	GetLogByID(ctx context.Context, requestID string) (*RequestLog, error)
+
+	// GetLogsMeta returns distinct values for all filter dimensions.
+	// Used to populate dashboard filter dropdowns.
+	GetLogsMeta(ctx context.Context) (*LogsMeta, error)
+
 	// UpsertCostMapKey sets a cost map key override for the given proxy model name.
 	// Clears any existing CustomSpec for that model.
 	UpsertCostMapKey(ctx context.Context, modelName, costMapKey string) error
@@ -351,6 +359,23 @@ type LogsFilter struct {
 	KeyID    *int64     // nil = no filter (same pattern as TeamID/AppID)
 	DateFrom *time.Time // nil = no lower bound on request_time
 	DateTo   *time.Time // nil = no upper bound on request_time
+}
+
+// LogsMeta holds distinct dimension values for filter dropdowns.
+// All slice fields are initialized to empty slices (not nil) to avoid JSON null.
+type LogsMeta struct {
+	Teams     []LogsMetaIDName `json:"teams"`
+	Apps      []LogsMetaIDName `json:"apps"`
+	Keys      []LogsMetaIDName `json:"keys"`
+	Providers []string         `json:"providers"`
+	Models    []string         `json:"models"`
+	Pools     []string         `json:"pools"`
+}
+
+// LogsMetaIDName is an id+name pair for ID-bearing filter dimensions (teams, apps, keys).
+type LogsMetaIDName struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 // SpendFilters optionally narrows a GetSpendSummary query to a specific team, application, or key.
