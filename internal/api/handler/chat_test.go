@@ -235,6 +235,12 @@ func (s *captureStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.API
 func (s *captureStorage) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
 	return nil, nil
 }
+func (s *captureStorage) GetLogByID(_ context.Context, _ string) (*storage.RequestLog, error) {
+	return nil, nil
+}
+func (s *captureStorage) GetLogsMeta(_ context.Context) (*storage.LogsMeta, error) {
+	return nil, nil
+}
 
 // ---------------------------------------------------------------------------
 // Mock provider that delegates stream creation to a function

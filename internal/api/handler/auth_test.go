@@ -160,6 +160,12 @@ func (m *mockAuthStore) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIK
 func (m *mockAuthStore) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
 	return nil, nil
 }
+func (m *mockAuthStore) GetLogByID(_ context.Context, _ string) (*storage.RequestLog, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) GetLogsMeta(_ context.Context) (*storage.LogsMeta, error) {
+	return nil, nil
+}
 
 // newTestSessionManager creates an in-memory SCS session manager for tests.
 func newTestSessionManager() *scs.SessionManager {
