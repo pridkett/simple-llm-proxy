@@ -205,6 +205,12 @@ func (m *mockStore) DeleteWebhookSubscription(context.Context, int64) error     
 func (m *mockStore) ListNotificationEvents(context.Context, int, int, string) ([]*storage.NotificationEvent, int, error) {
 	panic("not used")
 }
+func (m *mockStore) GetLogByID(context.Context, string) (*storage.RequestLog, error) {
+	panic("not used")
+}
+func (m *mockStore) GetLogsMeta(context.Context) (*storage.LogsMeta, error) {
+	panic("not used")
+}
 
 // --- Helper to get delivery updates ---
 

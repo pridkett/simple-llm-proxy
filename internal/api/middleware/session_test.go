@@ -189,6 +189,12 @@ func (m *mockSessionStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage
 func (m *mockSessionStorage) ListUserAccessibleKeys(_ context.Context, _ string) ([]*storage.AccessibleKey, error) {
 	return nil, nil
 }
+func (m *mockSessionStorage) GetLogByID(_ context.Context, _ string) (*storage.RequestLog, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) GetLogsMeta(_ context.Context) (*storage.LogsMeta, error) {
+	return nil, nil
+}
 
 // newTestSessionManager creates an SCS SessionManager with a no-op store for tests.
 func newTestSessionManager() *scs.SessionManager {
