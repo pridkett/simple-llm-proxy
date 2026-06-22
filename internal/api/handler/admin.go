@@ -196,6 +196,24 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 			}
 		}
 
+		// API-01: parse additional server-side filter params (per D-08)
+		filters.Provider = req.URL.Query().Get("provider")
+		filters.PoolName = req.URL.Query().Get("pool_name")
+		if v := req.URL.Query().Get("key_id"); v != "" {
+			filters.KeyID = parseOptionalInt64(v) // reuse from spend.go — handles "0" and non-numeric → nil
+		}
+		if v := req.URL.Query().Get("date_from"); v != "" {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				filters.DateFrom = &t
+			}
+			// parse error → filter silently not applied (D-08)
+		}
+		if v := req.URL.Query().Get("date_to"); v != "" {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				filters.DateTo = &t
+			}
+		}
+
 		logs, total, err := store.GetLogs(req.Context(), limit, offset, filters)
 		if err != nil {
 			http.Error(w, `{"error":{"message":"failed to fetch logs","type":"server_error"}}`, http.StatusInternalServerError)
