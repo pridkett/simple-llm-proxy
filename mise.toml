@@ -1,0 +1,14 @@
+# mise.toml — toolchain version pinning for Simple LLM Proxy (ADR 009)
+#
+# Install: curl https://mise.run | sh (or brew install mise)
+# Activate in fish: mise activate fish | source  (add to ~/.config/fish/config.fish)
+# Then run:  mise install
+#
+# golangci-lint is intentionally not pinned here (brew-installed today);
+# move it into mise if CI starts running the linter.
+
+[tools]
+go     = "1.25"
+node   = "22"
+dotnet = "10"   # required by Aspire.AppHost.Sdk 13.4.3 (apphost/ targets net10.0)
+just   = "latest"
