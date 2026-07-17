@@ -13,3 +13,7 @@ proxy.db-wal
 .planning/
 /node_modules
 /.claire
+apphost/bin/
+apphost/obj/
+coverage.out
+coverage.html

@@ -14,17 +14,24 @@ Simple LLM Proxy is a lightweight Go-based LLM proxy server that provides OpenAI
 
 ## Build & Test Commands
 
+Toolchain versions are pinned in `mise.toml` (`mise install` to bootstrap).
+The task runner is `just` (see `justfile`); there is no Makefile. See ADR 009.
+
 ```bash
 # Build
-make build                 # Build binary to bin/proxy
+just build                 # Build binary to bin/proxy
 go build ./...             # Verify compilation
 
 # Test
-make test                  # Run all tests
+just test                  # Run backend tests
+just frontend-test         # Run frontend tests
+just test-all              # Both
 go test ./... -v           # Verbose test output
 
 # Run
-make run                   # Build and run with config.yaml
+just up                    # Full dev stack (Go proxy + Vite) via Aspire AppHost,
+                           # secrets injected with op run; dashboard URL printed
+just run                   # Proxy only, with op-run secrets
 ./bin/proxy -config config.yaml
 ```
 
