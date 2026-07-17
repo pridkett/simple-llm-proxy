@@ -85,17 +85,37 @@ export const api = {
 
   /**
    * GET /admin/logs
-   * @param {{ limit?: number, offset?: number, model?: string, team_id?: number, app_id?: number }} params
+   * @param {{ limit?: number, offset?: number, model?: string, team_id?: number, app_id?: number,
+   *           provider?: string, pool_name?: string, key_id?: number,
+   *           date_from?: string, date_to?: string }} params
    */
   logs(params = {}) {
     const qs = new URLSearchParams()
     if (params.limit) qs.set('limit', String(params.limit))
-    if (params.offset) qs.set('offset', String(params.offset))
+    if (params.offset != null && params.offset !== '') qs.set('offset', String(params.offset))
     if (params.model) qs.set('model', params.model)
-    if (params.team_id) qs.set('team_id', String(params.team_id))
-    if (params.app_id) qs.set('app_id', String(params.app_id))
+    if (params.team_id > 0) qs.set('team_id', String(params.team_id))
+    if (params.app_id > 0) qs.set('app_id', String(params.app_id))
+    if (params.provider) qs.set('provider', params.provider)
+    if (params.pool_name) qs.set('pool_name', params.pool_name)
+    if (params.key_id > 0) qs.set('key_id', String(params.key_id))
+    if (params.date_from) qs.set('date_from', params.date_from)
+    if (params.date_to) qs.set('date_to', params.date_to)
     const query = qs.toString() ? `?${qs}` : ''
     return request(`/admin/logs${query}`)
+  },
+
+  /** GET /admin/logs/meta — returns distinct values for all filter dimensions */
+  logsMeta() {
+    return request('/admin/logs/meta')
+  },
+
+  /**
+   * GET /admin/logs/{requestId} — returns full log detail with body snippets and telemetry
+   * @param {string} requestId
+   */
+  logDetail(requestId) {
+    return request(`/admin/logs/${encodeURIComponent(requestId)}`)
   },
 
   /** GET /admin/models */
