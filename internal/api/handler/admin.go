@@ -143,6 +143,7 @@ type logEntry struct {
 	TotalCost     float64   `json:"total_cost"`
 	StatusCode    int       `json:"status_code"`
 	LatencyMS     int64     `json:"latency_ms"`
+	TTFTMs        *int64    `json:"ttft_ms"`
 	RequestTime   time.Time `json:"request_time"`
 	IsStreaming   bool      `json:"is_streaming"`
 	DeploymentKey string    `json:"deployment_key"`
@@ -233,6 +234,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 				TotalCost:     l.TotalCost,
 				StatusCode:    l.StatusCode,
 				LatencyMS:     l.LatencyMS,
+				TTFTMs:        l.TTFTMs,
 				RequestTime:   l.RequestTime,
 				IsStreaming:   l.IsStreaming,
 				DeploymentKey: l.DeploymentKey,
