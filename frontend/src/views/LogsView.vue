@@ -109,37 +109,110 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-50">
-              <tr v-for="log in logsData.logs" :key="log.request_id"
-                  class="hover:bg-gray-50 transition-colors cursor-pointer"
-                  @click="toggleRow(log.request_id)">
-                <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                  {{ formatDate(log.request_time) }}
-                </td>
-                <td class="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap" :title="log.request_id">
-                  {{ truncateID(log.request_id) }}
-                </td>
-                <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap" :title="formatKeyFull(log)">
-                  {{ formatKeyLabel(log) }}
-                </td>
-                <td class="px-4 py-3 font-medium">{{ log.model }}</td>
-                <td class="px-4 py-3 text-gray-600 capitalize">{{ log.provider }}</td>
-                <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ log.endpoint }}</td>
-                <td class="px-4 py-3 text-right text-gray-600">{{ (log.prompt_tokens || 0).toLocaleString() }}</td>
-                <td class="px-4 py-3 text-right text-gray-600">{{ (log.completion_tokens || 0).toLocaleString() }}</td>
-                <td class="px-4 py-3 text-right text-gray-600 font-mono text-xs">{{ formatCost(log.total_cost) }}</td>
-                <td class="px-4 py-3 text-right text-gray-600">{{ log.latency_ms }}ms</td>
-                <td class="px-4 py-3 text-right text-gray-600">
-                  {{ log.ttft_ms != null ? log.ttft_ms + 'ms' : '—' }}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    class="px-2 py-0.5 rounded text-xs font-medium"
-                    :class="log.status_code < 400 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
-                  >
-                    {{ log.status_code }}
-                  </span>
-                </td>
-              </tr>
+              <template v-for="log in logsData.logs" :key="log.request_id">
+                <tr @click="toggleRow(log.request_id)"
+                    class="hover:bg-gray-50 transition-colors cursor-pointer">
+                  <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                    {{ formatDate(log.request_time) }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap" :title="log.request_id">
+                    {{ truncateID(log.request_id) }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap" :title="formatKeyFull(log)">
+                    {{ formatKeyLabel(log) }}
+                  </td>
+                  <td class="px-4 py-3 font-medium">{{ log.model }}</td>
+                  <td class="px-4 py-3 text-gray-600 capitalize">{{ log.provider }}</td>
+                  <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ log.endpoint }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600">{{ (log.prompt_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600">{{ (log.completion_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 font-mono text-xs">{{ formatCost(log.total_cost) }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600">{{ log.latency_ms }}ms</td>
+                  <td class="px-4 py-3 text-right text-gray-600">
+                    {{ log.ttft_ms != null ? log.ttft_ms + 'ms' : '—' }}
+                  </td>
+                  <td class="px-4 py-3">
+                    <span
+                      class="px-2 py-0.5 rounded text-xs font-medium"
+                      :class="log.status_code < 400 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+                    >
+                      {{ log.status_code }}
+                    </span>
+                  </td>
+                </tr>
+                <!-- Accordion detail sub-row (UI-05) -->
+                <tr v-if="expandedRows.has(log.request_id)">
+                  <td colspan="12" class="bg-gray-50 px-4 py-4">
+                    <LoadingSpinner v-if="detailLoading.has(log.request_id)" />
+                    <ErrorAlert
+                      v-else-if="detailErrors.has(log.request_id)"
+                      title="Failed to load log detail"
+                      :message="detailErrors.get(log.request_id)"
+                    />
+                    <div
+                      v-else-if="detailCache.has(log.request_id)"
+                      class="grid grid-cols-2 gap-6"
+                    >
+                      <!-- LEFT COLUMN: Request body + Attribution -->
+                      <div>
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Request</p>
+                        <p class="text-xs text-gray-500 mb-1">Request Body</p>
+                        <pre
+                          v-if="detailCache.get(log.request_id).req_body_snippet"
+                          class="text-xs font-mono bg-white border border-gray-200 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700"
+                        >{{ detailCache.get(log.request_id).req_body_snippet }}</pre>
+                        <p v-else class="text-xs text-gray-400 italic">No request body captured.</p>
+
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2">Attribution</p>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span class="text-gray-500">Team</span>
+                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).team_name || '—' }}</span>
+                          <span class="text-gray-500">Application</span>
+                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).app_name || '—' }}</span>
+                          <span class="text-gray-500">Key</span>
+                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).key_name || '—' }}</span>
+                          <span class="text-gray-500">Pool</span>
+                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).pool_name || '—' }}</span>
+                        </div>
+                      </div>
+
+                      <!-- RIGHT COLUMN: Response body + Tokens & Cost -->
+                      <div>
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Response</p>
+                        <p class="text-xs text-gray-500 mb-1">
+                          {{ detailCache.get(log.request_id).status_code >= 400 &&
+                             detailCache.get(log.request_id).resp_body_snippet
+                             ? 'Error Response' : 'Response Body' }}
+                        </p>
+                        <pre
+                          v-if="detailCache.get(log.request_id).resp_body_snippet"
+                          class="text-xs font-mono bg-white border border-gray-200 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700"
+                        >{{ detailCache.get(log.request_id).resp_body_snippet }}</pre>
+                        <p v-else class="text-xs text-gray-400 italic">No response body captured.</p>
+
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2">Tokens &amp; Cost</p>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span class="text-gray-500">Input</span>
+                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).prompt_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500">Output</span>
+                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).completion_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500">Cache Read</span>
+                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).cache_read_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500">Cache Write</span>
+                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).cache_write_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500">TTFT</span>
+                          <span class="text-gray-800 font-bold">
+                            {{ detailCache.get(log.request_id).ttft_ms != null
+                               ? detailCache.get(log.request_id).ttft_ms + 'ms' : '—' }}
+                          </span>
+                          <span class="text-gray-500">Cost</span>
+                          <span class="text-gray-800 font-bold">{{ formatCost(detailCache.get(log.request_id).total_cost) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
               <tr v-if="!logsData.logs || !logsData.logs.length">
                 <td colspan="12" class="px-4 py-12 text-center text-gray-500">
                   <span v-if="hasActiveFilters">
@@ -334,8 +407,30 @@ function clearFilters() {
   // watch triggers load() automatically
 }
 
-function toggleRow(requestId) {
-  // Wave 3 (Plan 03) implements accordion expand/collapse
+async function toggleRow(requestId) {
+  if (expandedRows.value.has(requestId)) {
+    expandedRows.value.delete(requestId)
+    expandedRows.value = new Set(expandedRows.value)
+    return
+  }
+  expandedRows.value.add(requestId)
+  expandedRows.value = new Set(expandedRows.value)
+
+  if (!detailCache.value.has(requestId)) {
+    detailLoading.value.add(requestId)
+    detailLoading.value = new Set(detailLoading.value)
+    try {
+      const detail = await api.logDetail(requestId)
+      detailCache.value.set(requestId, detail)
+      detailCache.value = new Map(detailCache.value)
+    } catch (e) {
+      detailErrors.value.set(requestId, e.message || 'Unknown error')
+      detailErrors.value = new Map(detailErrors.value)
+    } finally {
+      detailLoading.value.delete(requestId)
+      detailLoading.value = new Set(detailLoading.value)
+    }
+  }
 }
 
 function prevPage() {
