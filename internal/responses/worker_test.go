@@ -130,6 +130,19 @@ func TestWorker_Run_ResumesPendingAndStopsOnCancel(t *testing.T) {
 	}
 }
 
+func TestWorker_PollOnce_ListPendingJobsError(t *testing.T) {
+	r, store, cm, sa := newWorkerTestFixture(t, "http://unused")
+
+	// Force ListPendingResponsesJobs to fail by closing the underlying connection.
+	if err := store.DB().Close(); err != nil {
+		t.Fatalf("closing db: %v", err)
+	}
+
+	w := NewWorker(r, store, cm, sa)
+	// Must not panic; the error is logged and pollOnce returns.
+	w.pollOnce(context.Background())
+}
+
 // flakyUpdateStore wraps a real storage.Storage and fails the Nth call to
 // UpdateResponsesJob, to exercise the worker's handling of a failed terminal write.
 type flakyUpdateStore struct {

@@ -92,6 +92,54 @@ func TestResponsesJobUpdate(t *testing.T) {
 	}
 }
 
+func TestResponsesJobCRUD_DBErrors(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	job := &storage.ResponsesJob{
+		ID: "resp_db_err", DeploymentKey: "openai:gpt-5:", ModelName: "gpt-5",
+		Status: "queued", RequestJSON: `{}`,
+	}
+	if err := s.CreateResponsesJob(ctx, job); err != nil {
+		t.Fatalf("CreateResponsesJob: %v", err)
+	}
+
+	// Close the underlying connection so every subsequent query fails, exercising
+	// each CRUD method's error-wrapping branch.
+	if err := s.db.Close(); err != nil {
+		t.Fatalf("closing db: %v", err)
+	}
+
+	if err := s.CreateResponsesJob(ctx, &storage.ResponsesJob{ID: "resp_after_close", RequestJSON: `{}`}); err == nil {
+		t.Error("expected CreateResponsesJob to fail after db close")
+	}
+	if _, err := s.GetResponsesJob(ctx, "resp_db_err"); err == nil {
+		t.Error("expected GetResponsesJob to fail after db close")
+	}
+	if err := s.UpdateResponsesJob(ctx, "resp_db_err", "completed", nil, nil, nil); err == nil {
+		t.Error("expected UpdateResponsesJob to fail after db close")
+	}
+	if _, err := s.ListPendingResponsesJobs(ctx); err == nil {
+		t.Error("expected ListPendingResponsesJobs to fail after db close")
+	}
+}
+
+func TestCreateResponsesJob_DuplicateIDFails(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+
+	job := &storage.ResponsesJob{
+		ID: "resp_dup", DeploymentKey: "openai:gpt-5:", ModelName: "gpt-5",
+		Status: "queued", RequestJSON: `{}`,
+	}
+	if err := s.CreateResponsesJob(ctx, job); err != nil {
+		t.Fatalf("first CreateResponsesJob: %v", err)
+	}
+	if err := s.CreateResponsesJob(ctx, job); err == nil {
+		t.Error("expected duplicate id CreateResponsesJob to fail on the primary key constraint")
+	}
+}
+
 func TestListPendingResponsesJobs(t *testing.T) {
 	s := newTestStorage(t)
 	ctx := context.Background()
