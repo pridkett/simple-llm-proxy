@@ -22,6 +22,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/logger"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
+	"github.com/pwagstro/simple_llm_proxy/internal/responses"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
@@ -242,6 +243,23 @@ func main() {
 		defer dispatcher.Close()
 	}
 
+	// Start the Responses API background job worker (ADR 010 D-04). It resumes
+	// any jobs left in flight from a prior run, then polls on an interval until
+	// responsesWorkerCancel fires during shutdown.
+	var responsesWorkerCancel context.CancelFunc
+	responsesWorkerDone := make(chan struct{})
+	if store != nil {
+		var workerCtx context.Context
+		workerCtx, responsesWorkerCancel = context.WithCancel(context.Background())
+		worker := responses.NewWorker(r, store, cm, sa)
+		go func() {
+			defer close(responsesWorkerDone)
+			worker.Run(workerCtx)
+		}()
+	} else {
+		close(responsesWorkerDone)
+	}
+
 	// Create HTTP router
 	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher)
 
@@ -308,6 +326,14 @@ func main() {
 	<-quit
 
 	log.Info().Msg("shutting down server")
+
+	// Stop the Responses API background worker; in-flight polls are allowed to
+	// finish since the ResponsesJob row is the source of truth a restarted
+	// worker will pick back up regardless (ADR 010 D-04).
+	if responsesWorkerCancel != nil {
+		responsesWorkerCancel()
+	}
+	<-responsesWorkerDone
 
 	// Signal spend flush loop to perform final flush and stop
 	close(shutdownFlush)

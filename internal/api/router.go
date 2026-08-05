@@ -63,6 +63,11 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
 		mux.Post("/v1/completions", handler.Completions())
 		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher))
+
+		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
+		mux.Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
+		mux.Get("/v1/responses/{id}", handler.GetResponseJob(store))
+		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store))
 		mux.Get("/v1/models", handler.Models(r))
 		mux.Get("/v1/models/{model}", handler.ModelDetail(r, cm))
 		mux.Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))

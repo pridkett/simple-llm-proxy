@@ -305,6 +305,26 @@ func (s *Storage) migrate(ctx context.Context) error {
 		// Migration 38: Partial index on pool_name — WHERE NOT NULL saves space; most rows have no pool
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_pool_name
     ON usage_logs(pool_name) WHERE pool_name IS NOT NULL`,
+
+		// Migration 39: responses_jobs — tracks OpenAI Responses API background jobs
+		// (ADR 010 D-03) so they survive process restarts and can be polled via
+		// GET /v1/responses/{id} without holding an upstream connection open.
+		`CREATE TABLE IF NOT EXISTS responses_jobs (
+    id              TEXT     PRIMARY KEY,
+    api_key_id      INTEGER,
+    deployment_key  TEXT     NOT NULL,
+    model_name      TEXT     NOT NULL,
+    status          TEXT     NOT NULL,
+    request_json    TEXT     NOT NULL,
+    response_json   TEXT,
+    error_json      TEXT,
+    created_at      DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at      DATETIME NOT NULL DEFAULT (datetime('now')),
+    completed_at    DATETIME
+)`,
+
+		// Migration 40: Index for the background worker's pending-job poll query.
+		`CREATE INDEX IF NOT EXISTS idx_responses_jobs_status ON responses_jobs(status)`,
 	}
 
 	for i, sql := range migrations {

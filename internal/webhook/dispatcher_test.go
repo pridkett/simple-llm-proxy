@@ -90,6 +90,22 @@ func (m *mockStore) UpdateWebhookDeliveryStatus(_ context.Context, id int64, sta
 	return nil
 }
 
+func (m *mockStore) CreateResponsesJob(_ context.Context, _ *storage.ResponsesJob) error {
+	return nil
+}
+
+func (m *mockStore) GetResponsesJob(_ context.Context, _ string) (*storage.ResponsesJob, error) {
+	return nil, nil
+}
+
+func (m *mockStore) UpdateResponsesJob(_ context.Context, _, _ string, _, _ *string, _ *time.Time) error {
+	return nil
+}
+
+func (m *mockStore) ListPendingResponsesJobs(_ context.Context) ([]*storage.ResponsesJob, error) {
+	return nil, nil
+}
+
 func (m *mockStore) DeleteOldNotificationEvents(_ context.Context, olderThan time.Time) (int64, error) {
 	return 0, nil
 }

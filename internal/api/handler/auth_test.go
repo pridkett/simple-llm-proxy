@@ -154,6 +154,18 @@ func (m *mockAuthStore) InsertWebhookDelivery(_ context.Context, _ *int64, _ int
 func (m *mockAuthStore) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (m *mockAuthStore) CreateResponsesJob(_ context.Context, _ *storage.ResponsesJob) error {
+	return nil
+}
+func (m *mockAuthStore) GetResponsesJob(_ context.Context, _ string) (*storage.ResponsesJob, error) {
+	return nil, nil
+}
+func (m *mockAuthStore) UpdateResponsesJob(_ context.Context, _, _ string, _, _ *string, _ *time.Time) error {
+	return nil
+}
+func (m *mockAuthStore) ListPendingResponsesJobs(_ context.Context) ([]*storage.ResponsesJob, error) {
+	return nil, nil
+}
 func (m *mockAuthStore) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
 	return nil, nil
 }

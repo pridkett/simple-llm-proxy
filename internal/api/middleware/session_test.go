@@ -183,6 +183,18 @@ func (m *mockSessionStorage) InsertWebhookDelivery(_ context.Context, _ *int64, 
 func (m *mockSessionStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (m *mockSessionStorage) CreateResponsesJob(_ context.Context, _ *storage.ResponsesJob) error {
+	return nil
+}
+func (m *mockSessionStorage) GetResponsesJob(_ context.Context, _ string) (*storage.ResponsesJob, error) {
+	return nil, nil
+}
+func (m *mockSessionStorage) UpdateResponsesJob(_ context.Context, _, _ string, _, _ *string, _ *time.Time) error {
+	return nil
+}
+func (m *mockSessionStorage) ListPendingResponsesJobs(_ context.Context) ([]*storage.ResponsesJob, error) {
+	return nil, nil
+}
 func (m *mockSessionStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
 	return nil, nil
 }

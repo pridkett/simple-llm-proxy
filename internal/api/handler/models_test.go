@@ -171,6 +171,18 @@ func (m *mockStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ int64
 func (m *mockStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (m *mockStorage) CreateResponsesJob(_ context.Context, _ *storage.ResponsesJob) error {
+	return nil
+}
+func (m *mockStorage) GetResponsesJob(_ context.Context, _ string) (*storage.ResponsesJob, error) {
+	return nil, nil
+}
+func (m *mockStorage) UpdateResponsesJob(_ context.Context, _, _ string, _, _ *string, _ *time.Time) error {
+	return nil
+}
+func (m *mockStorage) ListPendingResponsesJobs(_ context.Context) ([]*storage.ResponsesJob, error) {
+	return nil, nil
+}
 func (m *mockStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
 	return nil, nil
 }

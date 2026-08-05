@@ -229,6 +229,18 @@ func (s *captureStorage) InsertWebhookDelivery(_ context.Context, _ *int64, _ in
 func (s *captureStorage) UpdateWebhookDeliveryStatus(_ context.Context, _ int64, _ string, _ int, _ int) error {
 	return nil
 }
+func (s *captureStorage) CreateResponsesJob(_ context.Context, _ *storage.ResponsesJob) error {
+	return nil
+}
+func (s *captureStorage) GetResponsesJob(_ context.Context, _ string) (*storage.ResponsesJob, error) {
+	return nil, nil
+}
+func (s *captureStorage) UpdateResponsesJob(_ context.Context, _, _ string, _, _ *string, _ *time.Time) error {
+	return nil
+}
+func (s *captureStorage) ListPendingResponsesJobs(_ context.Context) ([]*storage.ResponsesJob, error) {
+	return nil, nil
+}
 func (s *captureStorage) GetAPIKeyByID(_ context.Context, _ int64) (*storage.APIKey, error) {
 	return nil, nil
 }

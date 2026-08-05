@@ -9,6 +9,7 @@ func buildSchemas() openapi3.Schemas {
 	return openapi3.Schemas{
 		// Request types
 		"ChatCompletionRequest":  chatCompletionRequestSchema(),
+		"ResponsesRequest":       responsesRequestSchema(),
 		"EmbeddingsRequest":      embeddingsRequestSchema(),
 		"Message":                messageSchema(),
 		"ContentPart":            contentPartSchema(),
@@ -19,6 +20,7 @@ func buildSchemas() openapi3.Schemas {
 
 		// Response types
 		"ChatCompletionResponse": chatCompletionResponseSchema(),
+		"ResponsesResponse":      responsesResponseSchema(),
 		"EmbeddingsResponse":     embeddingsResponseSchema(),
 		"ModelsResponse":         modelsResponseSchema(),
 		"HealthResponse":         healthResponseSchema(),
@@ -993,6 +995,66 @@ func costMapURLResponseSchema() *openapi3.SchemaRef {
 			Required: []string{"url"},
 			Properties: openapi3.Schemas{
 				"url": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "The updated source URL"}},
+			},
+		},
+	}
+}
+
+// responsesRequestSchema documents the OpenAI Responses API request body (ADR 010).
+// Only OpenAI-backed model_name entries support this endpoint.
+func responsesRequestSchema() *openapi3.SchemaRef {
+	return &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type:     &openapi3.Types{"object"},
+			Required: []string{"model", "input"},
+			Properties: openapi3.Schemas{
+				"model": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "ID of the model to use"}},
+				"input": {Value: &openapi3.Schema{Description: "A string or structured array of input items"}},
+				"instructions": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "System-level instructions for the model"}},
+				"previous_response_id": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "ID of a prior response to continue from", Nullable: true}},
+				"background": {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, the response is created asynchronously; poll GET /v1/responses/{id} for the result"}},
+				"stream":     {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, server-sent Responses API events are streamed"}},
+				"temperature": {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(2.0)}},
+				"top_p":       {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(1.0)}},
+				"max_output_tokens": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Min: ptr(1.0)}},
+				"tools":       {Value: &openapi3.Schema{Type: &openapi3.Types{"array"}, Items: &openapi3.SchemaRef{Ref: "#/components/schemas/Tool"}}},
+				"metadata": {Value: &openapi3.Schema{
+					Type:                 &openapi3.Types{"object"},
+					Description:          "Arbitrary string key/value metadata attached to the response",
+					AdditionalProperties: openapi3.AdditionalProperties{Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}}},
+				}},
+			},
+		},
+	}
+}
+
+// responsesResponseSchema documents the OpenAI Responses API response body,
+// returned both from synchronous creates and from GET /v1/responses/{id}.
+func responsesResponseSchema() *openapi3.SchemaRef {
+	return &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type:     &openapi3.Types{"object"},
+			Required: []string{"id", "status"},
+			Properties: openapi3.Schemas{
+				"id":     {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"object": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"model":  {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"status": {Value: &openapi3.Schema{
+					Type:        &openapi3.Types{"string"},
+					Description: "queued|in_progress|completed|failed|cancelled|incomplete",
+					Enum:        []any{"queued", "in_progress", "completed", "failed", "cancelled", "incomplete"},
+				}},
+				"created_at":   {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"completed_at": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Nullable: true}},
+				"background":   {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}}},
+				"output_text":  {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"output": {Value: &openapi3.Schema{
+					Type:        &openapi3.Types{"array"},
+					Description: "Output items; shape varies by type (message, function_call, reasoning, etc.)",
+					Items:       &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"object"}}},
+				}},
+				"usage": {Ref: "#/components/schemas/Usage"},
+				"error": {Ref: "#/components/schemas/ErrorDetail"},
 			},
 		},
 	}
