@@ -70,6 +70,10 @@ type GeneralSettings struct {
 	// LogRetentionDays is the number of days to retain usage_logs rows.
 	// The retention cleanup goroutine deletes rows older than this. Default: 30.
 	LogRetentionDays int `yaml:"log_retention_days"`
+	// FrontendDir is a directory containing the built SPA (frontend/dist).
+	// When set and the directory exists, the proxy serves it at "/" with an
+	// index.html fallback. When empty, "./frontend/dist" is used if it exists.
+	FrontendDir string `yaml:"frontend_dir"`
 }
 
 // ProviderPool defines a named group of model deployments with shared routing strategy
