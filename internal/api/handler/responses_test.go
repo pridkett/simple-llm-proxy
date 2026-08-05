@@ -344,6 +344,97 @@ func TestCancelResponseJob_ProviderWithoutResponsesSupport(t *testing.T) {
 	}
 }
 
+// failingGetJobStore always fails GetResponsesJob, to exercise the DB-error
+// branches in GetResponseJob/CancelResponseJob distinct from the "not found" path.
+type failingGetJobStore struct {
+	jobStore
+}
+
+func (s *failingGetJobStore) GetResponsesJob(context.Context, string) (*storage.ResponsesJob, error) {
+	return nil, fmt.Errorf("simulated db failure")
+}
+
+func TestCancelResponseJob_NilStore(t *testing.T) {
+	r := responsesRouterForTest(t, "http://unused")
+	h := CancelResponseJob(r, nil)
+	req := withIDParam(httptest.NewRequest(http.MethodDelete, "/v1/responses/resp_x", nil), "resp_x")
+	w := httptest.NewRecorder()
+	h(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestCancelResponseJob_GetJobError(t *testing.T) {
+	r := responsesRouterForTest(t, "http://unused")
+	store := &failingGetJobStore{jobStore: *newJobStore()}
+	h := CancelResponseJob(r, store)
+	req := withIDParam(httptest.NewRequest(http.MethodDelete, "/v1/responses/resp_x", nil), "resp_x")
+	w := httptest.NewRecorder()
+	h(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetResponseJob_GetJobError(t *testing.T) {
+	store := &failingGetJobStore{jobStore: *newJobStore()}
+	h := GetResponseJob(store)
+	req := withIDParam(httptest.NewRequest(http.MethodGet, "/v1/responses/resp_x", nil), "resp_x")
+	w := httptest.NewRecorder()
+	h(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCancelResponseJob_DeploymentNotFound(t *testing.T) {
+	r := responsesRouterForTest(t, "http://unused")
+	store := newJobStore()
+	store.jobs["resp_missing_dep"] = &storage.ResponsesJob{
+		ID: "resp_missing_dep", ModelName: "test-model", DeploymentKey: "responsestest:missing:", Status: "queued",
+	}
+
+	h := CancelResponseJob(r, store)
+	req := withIDParam(httptest.NewRequest(http.MethodDelete, "/v1/responses/resp_missing_dep", nil), "resp_missing_dep")
+	w := httptest.NewRecorder()
+	h(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCancelResponseJob_UpstreamError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "upstream cancel failed"}})
+	}))
+	defer ts.Close()
+
+	r := responsesRouterForTest(t, ts.URL)
+	store := newJobStore()
+	d, err := r.GetDeployment("test-model")
+	if err != nil {
+		t.Fatalf("GetDeployment: %v", err)
+	}
+	store.jobs["resp_upstream_err"] = &storage.ResponsesJob{
+		ID: "resp_upstream_err", ModelName: "test-model", DeploymentKey: d.DeploymentKey(), Status: "queued",
+	}
+
+	h := CancelResponseJob(r, store)
+	req := withIDParam(httptest.NewRequest(http.MethodDelete, "/v1/responses/resp_upstream_err", nil), "resp_upstream_err")
+	w := httptest.NewRecorder()
+	h(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want 502, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func TestGetResponseJob_ScopedToOwningAPIKey(t *testing.T) {
 	store := newJobStore()
 	otherKeyID := int64(99)
