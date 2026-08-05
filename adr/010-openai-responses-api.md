@@ -23,20 +23,25 @@ Only OpenAI implements the Responses API. No other provider in this repo (Anthro
 
 Adding `CreateResponse`/`GetResponse`/`CancelResponse` methods directly to the `provider.Provider` interface (`internal/provider/provider.go:15`) would force all eight existing provider implementations (OpenAI, Anthropic, OpenRouter, Ollama, vLLM, MiniMax, Gemini, plus any test doubles) to grow no-op stub methods for a capability only one of them has.
 
-Instead, a separate interface is added to `internal/provider/provider.go`:
+Instead, a separate interface is added to `internal/provider/provider.go`. Note `CreateResponseStream` returns a new `ResponsesStream` type, not `provider.Stream` — the existing `Stream.Recv() (*model.StreamChunk, error)` is hard-coded to the chat-completions delta shape and cannot carry the Responses API's typed SSE events (`response.created`, `response.output_text.delta`, `response.completed`, ...):
 
 ```go
 type ResponsesProvider interface {
     CreateResponse(ctx context.Context, req *model.ResponsesRequest) (*model.ResponsesResponse, error)
-    CreateResponseStream(ctx context.Context, req *model.ResponsesRequest) (Stream, error)
+    CreateResponseStream(ctx context.Context, req *model.ResponsesRequest) (ResponsesStream, error)
     GetResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error)
     CancelResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error)
+}
+
+type ResponsesStream interface {
+    Recv() (*model.ResponsesStreamEvent, error) // io.EOF when done
+    Close() error
 }
 ```
 
 The `/v1/responses` handler and the background worker resolve a deployment via the router exactly as `chat.go` does, then type-assert `deployment.Provider.(provider.ResponsesProvider)`. If the assertion fails (any non-OpenAI provider is routed for a `model_name` mapped to Responses-incapable backend), the handler returns a `400` with a clear "model does not support the Responses API" error — the same shape as the existing model-allowlist rejection path in `chat.go:59-72`.
 
-`internal/provider/openai/openai.go` implements `ResponsesProvider` directly (new methods on the existing `openai` struct, calling `https://api.openai.com/v1/responses` and `/v1/responses/{id}`), bypassing `openaicompat.BaseProvider` since no other provider shares this schema.
+`internal/provider/openai/openai.go`'s existing `New()` returns `*openaicompat.BaseProvider` directly, with no package-local type to attach new methods to. Implementing `ResponsesProvider` therefore requires introducing a thin `openai.Provider` wrapper struct that embeds `*openaicompat.BaseProvider` (inheriting all chat-completions/embeddings HTTP, streaming, and error-handling logic unchanged) and adds `CreateResponse`/`CreateResponseStream`/`GetResponse`/`CancelResponse` directly against `https://api.openai.com/v1/responses` and `/v1/responses/{id}`, bypassing `BaseProvider` for these calls since no other provider shares this schema. `New()` is updated to return `*Provider` instead of `*openaicompat.BaseProvider`. This keeps the capability check in the previous paragraph sound: only `openai.Provider` implements `ResponsesProvider`, so other OpenAI-compatible providers built on the shared `BaseProvider` (OpenRouter, Ollama, vLLM, MiniMax) do not silently satisfy the interface.
 
 ### D-02: New model types in `internal/model/responses.go`
 
@@ -55,13 +60,16 @@ A background job must survive a proxy restart (the client may poll `GET /v1/resp
 
 ```sql
 CREATE TABLE responses_jobs (
-    id TEXT PRIMARY KEY,              -- OpenAI's response_id, used directly as our primary key
-    api_key_id TEXT,                  -- for cost attribution / access control on GET
-    deployment_key TEXT NOT NULL,     -- provider:model:api_base, so polling re-resolves the same deployment
+    id TEXT PRIMARY KEY,               -- OpenAI's response_id, used directly as our primary key
+    api_key_id INTEGER,                -- REFERENCES api_keys(id); nil for master-key requests, matching
+                                        -- RequestLog.APIKeyID *int64 and every other cost-attribution table
+    deployment_key TEXT NOT NULL,      -- provider:model:api_base, so polling re-resolves the same deployment
     model_name TEXT NOT NULL,
-    status TEXT NOT NULL,             -- queued|in_progress|completed|failed|cancelled|incomplete
+    pool_name TEXT,                    -- empty/NULL = not routed through a named pool; lets the worker credit
+                                        -- PoolBudgetManager on completion the same way chat.go's logRequest does
+    status TEXT NOT NULL,              -- queued|in_progress|completed|failed|cancelled|incomplete
     request_json TEXT NOT NULL,
-    response_json TEXT,               -- last known full response body, updated on each poll
+    response_json TEXT,                -- last known full response body, updated on each poll
     error_json TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -79,8 +87,8 @@ CREATE INDEX idx_responses_jobs_status ON responses_jobs(status);
 OpenAI's Responses API does not push completion webhooks to third parties; the only way to learn a background job finished is to poll `GET {base}/responses/{id}`. A new package `internal/responses` provides a `Worker` with a `Run(ctx)` loop, started in `cmd/proxy/main.go` alongside the existing retention/session-cleanup tickers (`main.go:144-186`):
 
 - On startup, calls `store.ListPendingResponsesJobs()` to resume polling jobs that were in flight when the process last stopped (handles proxy restarts mid-job).
-- On a short interval (default 2s, configurable), polls each pending job's deployment via `GetResponse`, and on status transition to a terminal state (`completed`/`failed`/`cancelled`/`incomplete`) writes the final row and — mirroring `chat.go`'s `logRequest` pattern — logs cost/usage to `usage_logs` via the existing `costmap`/`keystore` accumulators, since a completed background job has real token usage to bill just like a synchronous one.
-- Applies the same success/failure reporting to the router (`ReportSuccess`/`ReportFailure`) as `chat.go` does, per the ADR-006 precedent that failures should affect cooldown/backoff state.
+- On a short interval (default 2s, configurable), polls each pending job's deployment via `GetResponse`, and on status transition to a terminal state (`completed`/`failed`/`cancelled`/`incomplete`) writes the final row and — mirroring `chat.go`'s `logRequest` pattern — logs cost/usage to `usage_logs` via the existing `costmap`/`keystore` accumulators and credits `PoolBudgetManager` when the job has a `pool_name`, since a completed background job has real token usage/budget impact to bill just like a synchronous one. If the terminal-state `UpdateResponsesJob` write itself fails, the worker returns without crediting anything — the job's row is still non-terminal, so the next poll retries the whole transition rather than double-crediting a job that was logged once already but never marked terminal.
+- Applies the same success/failure reporting to the router (`ReportSuccess`/`ReportFailure`) as `chat.go` does, per the ADR-006 precedent that failures should affect cooldown/backoff state. A `*provider.RateLimitError` from `GetResponse` is reported via `ReportRateLimit` (full-jitter backoff), exactly as the synchronous path does on a 429 — without this, a rate-limited deployment would be polled again on every tick instead of backing off.
 - On shutdown, `cmd/proxy/main.go` drains the worker the same way it drains the existing `shutdownFlush` channel (`main.go:260-295, 312-314`) — in-flight polls are allowed to finish (bounded by a shutdown timeout) rather than being abandoned mid-write, since the SQLite row is the source of truth a restarted worker will pick back up regardless.
 
 Polling interval and backoff-on-repeated-errors reuse the router's existing `BackoffManager` concepts conceptually but operate on a per-job timer, not per-deployment — a slow/stuck job does not throttle unrelated jobs.
@@ -89,7 +97,7 @@ Polling interval and backoff-on-repeated-errors reuse the router's existing `Bac
 
 Three new routes registered in the existing `/v1/*` KeyAuth group (`internal/api/router.go:56-71`), following the same `handler.X(r, store, sa, cm, dispatcher, cfg.GeneralSettings)` constructor-closure pattern as `ChatCompletions`:
 
-- `POST /v1/responses` — non-streaming: blocks for a synchronous result exactly like `chat.go`'s non-streaming path. Streaming (`stream: true`): SSE loop mirroring `chat.go:217-342`, forwarding the Responses API's typed events. Background (`background: true`): creates the upstream job, inserts a `queued` row via `CreateResponsesJob`, returns the `queued` response body immediately (HTTP 200, matching OpenAI's own behavior) without waiting for completion.
+- `POST /v1/responses` — non-streaming: blocks for a synchronous result exactly like `chat.go`'s non-streaming path; `ReportSuccess` fires only on this path (and the background-create path below), never before a stream has actually finished. Streaming (`stream: true`): SSE loop mirroring `chat.go:217-342`, forwarding the Responses API's typed events — each event is written as an `event: <type>` line followed by `data: <json>`, since (unlike chat-completion chunks, which are all the same shape) OpenAI's own SDK dispatches on the `event:` line to distinguish `response.created` from `response.output_text.delta` from `response.completed`, etc. `ReportSuccess`/`ReportFailure` for the streaming path fire only after the stream actually completes or fails (ADR-006 STREAM-01), not when it merely opens. Background (`background: true`): creates the upstream job, inserts a `queued` row via `CreateResponsesJob` *before* responding — if that insert fails, the handler returns a 5xx rather than handing the client a `response_id` that no stored row backs (which would 404 forever on every subsequent poll) — then returns the `queued` response body (HTTP 200, matching OpenAI's own behavior) without waiting for completion.
 - `GET /v1/responses/{id}` — reads from `responses_jobs`; 404 if the ID is unknown or belongs to a different API key (access-controlled the same way `GetLogByID` scopes by key).
 - `DELETE /v1/responses/{id}` — cancels: calls `CancelResponse` upstream, updates the row to `cancelled`.
 
