@@ -158,6 +158,23 @@ func (r *Router) GetDeploymentWithRetry(modelName string, tried map[*provider.De
 	return r.strategy.Select(healthy), nil
 }
 
+// GetDeploymentByKey returns the deployment for modelName whose DeploymentKey()
+// matches deploymentKey, regardless of cooldown/backoff state. Used by the
+// Responses API poll/cancel/background-worker paths (ADR 010) to re-resolve
+// the exact deployment a background job was originally routed to.
+func (r *Router) GetDeploymentByKey(modelName, deploymentKey string) (*provider.Deployment, error) {
+	r.mu.RLock()
+	deployments := r.deployments[modelName]
+	r.mu.RUnlock()
+
+	for _, d := range deployments {
+		if d.DeploymentKey() == deploymentKey {
+			return d, nil
+		}
+	}
+	return nil, fmt.Errorf("no deployment found for model %q with key %q", modelName, deploymentKey)
+}
+
 // ReportSuccess reports a successful request.
 // Resets both cooldown and backoff state for the deployment.
 func (r *Router) ReportSuccess(d *provider.Deployment) {

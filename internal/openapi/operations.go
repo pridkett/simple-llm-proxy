@@ -12,6 +12,8 @@ func buildPaths() *openapi3.Paths {
 
 	paths.Set("/health", healthPath())
 	paths.Set("/v1/chat/completions", chatCompletionsPath())
+	paths.Set("/v1/responses", responsesPath())
+	paths.Set("/v1/responses/{id}", responseByIDPath())
 	paths.Set("/v1/embeddings", embeddingsPath())
 	paths.Set("/v1/models", modelsPath())
 	paths.Set("/v1/completions", completionsPath())
@@ -94,6 +96,110 @@ func chatCompletionsPath() *openapi3.PathItem {
 				openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Model not found")),
 				openapi3.WithStatus(http.StatusBadGateway, errorResponseRef("Provider error")),
 				openapi3.WithStatus(http.StatusServiceUnavailable, errorResponseRef("No healthy deployment available")),
+			),
+		},
+	}
+}
+
+// responsesPath documents POST /v1/responses (ADR 010): synchronous, streaming,
+// and background create. Only OpenAI-backed model_name entries support it today.
+func responsesPath() *openapi3.PathItem {
+	return &openapi3.PathItem{
+		Post: &openapi3.Operation{
+			Tags:        []string{"Responses"},
+			Summary:     "Create a response",
+			Description: "Creates a model response via the OpenAI Responses API. Supports streaming (stream=true) and background/long-running requests (background=true, poll GET /v1/responses/{id} for the result). Only model_name entries backed by an OpenAI deployment support this endpoint.",
+			OperationID: "createResponse",
+			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
+			RequestBody: &openapi3.RequestBodyRef{
+				Value: &openapi3.RequestBody{
+					Required: true,
+					Content: openapi3.Content{
+						"application/json": &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/ResponsesRequest"},
+						},
+					},
+				},
+			},
+			Responses: openapi3.NewResponses(
+				openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{
+					Value: &openapi3.Response{
+						Description: strPtr("Successful response. When background=true, returns immediately with status=queued. When stream=true, returns Server-Sent Events with typed Responses API events."),
+						Content: openapi3.Content{
+							"application/json": &openapi3.MediaType{
+								Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/ResponsesResponse"},
+							},
+						},
+					},
+				}),
+				openapi3.WithStatus(http.StatusBadRequest, errorResponseRef("Invalid request, or model does not support the Responses API")),
+				openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication failed")),
+				openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Model not found")),
+				openapi3.WithStatus(http.StatusBadGateway, errorResponseRef("Provider error")),
+				openapi3.WithStatus(http.StatusServiceUnavailable, errorResponseRef("No healthy deployment available")),
+			),
+		},
+	}
+}
+
+// responseByIDPath documents GET/DELETE /v1/responses/{id}: polling and
+// cancelling a background job (ADR 010).
+func responseByIDPath() *openapi3.PathItem {
+	idParam := &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:        "id",
+			In:          "path",
+			Required:    true,
+			Description: "The response ID returned from a prior create call",
+			Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+		},
+	}
+
+	return &openapi3.PathItem{
+		Get: &openapi3.Operation{
+			Tags:        []string{"Responses"},
+			Summary:     "Retrieve a response",
+			Description: "Returns the last known state of a response, including in-progress background jobs. Reads from local storage — does not make an upstream call.",
+			OperationID: "getResponse",
+			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
+			Parameters:  openapi3.Parameters{idParam},
+			Responses: openapi3.NewResponses(
+				openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{
+					Value: &openapi3.Response{
+						Description: strPtr("The response's last known state"),
+						Content: openapi3.Content{
+							"application/json": &openapi3.MediaType{
+								Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/ResponsesResponse"},
+							},
+						},
+					},
+				}),
+				openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication failed")),
+				openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Response not found")),
+			),
+		},
+		Delete: &openapi3.Operation{
+			Tags:        []string{"Responses"},
+			Summary:     "Cancel a background response",
+			Description: "Cancels an in-progress background response. A no-op that returns the current state if the response has already reached a terminal status.",
+			OperationID: "cancelResponse",
+			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
+			Parameters:  openapi3.Parameters{idParam},
+			Responses: openapi3.NewResponses(
+				openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{
+					Value: &openapi3.Response{
+						Description: strPtr("The response's state after cancellation"),
+						Content: openapi3.Content{
+							"application/json": &openapi3.MediaType{
+								Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/ResponsesResponse"},
+							},
+						},
+					},
+				}),
+				openapi3.WithStatus(http.StatusBadRequest, errorResponseRef("Model does not support the Responses API")),
+				openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication failed")),
+				openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Response not found")),
+				openapi3.WithStatus(http.StatusBadGateway, errorResponseRef("Provider error")),
 			),
 		},
 	}

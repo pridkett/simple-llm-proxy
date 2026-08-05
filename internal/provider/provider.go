@@ -30,6 +30,35 @@ type Provider interface {
 	SupportsEmbeddings() bool
 }
 
+// ResponsesProvider is implemented by providers that support the OpenAI
+// Responses API (POST /responses, GET /responses/{id}). Unlike Provider,
+// this is not required of every provider — only OpenAI implements it today.
+// Callers type-assert a Deployment's Provider against this interface.
+type ResponsesProvider interface {
+	// CreateResponse performs a non-streaming Responses API call. When req.Background
+	// is true, the returned response has Status "queued" and the caller must poll
+	// GetResponse for the final result.
+	CreateResponse(ctx context.Context, req *model.ResponsesRequest) (*model.ResponsesResponse, error)
+
+	// CreateResponseStream performs a streaming Responses API call.
+	CreateResponseStream(ctx context.Context, req *model.ResponsesRequest) (ResponsesStream, error)
+
+	// GetResponse retrieves the current state of a previously created response by ID.
+	GetResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error)
+
+	// CancelResponse cancels an in-progress background response.
+	CancelResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error)
+}
+
+// ResponsesStream represents a streaming Responses API response.
+type ResponsesStream interface {
+	// Recv receives the next typed SSE event. Returns io.EOF when done.
+	Recv() (*model.ResponsesStreamEvent, error)
+
+	// Close closes the stream.
+	Close() error
+}
+
 // Stream represents a streaming response.
 type Stream interface {
 	// Recv receives the next chunk. Returns io.EOF when done.
@@ -147,6 +176,44 @@ func (s *streamAdapter) Recv() (*model.StreamChunk, error) {
 }
 
 func (s *streamAdapter) Close() error {
+	if s.closer != nil {
+		s.closer()
+	}
+	return nil
+}
+
+// responsesStreamAdapter wraps a channel-based Responses API event stream.
+type responsesStreamAdapter struct {
+	events <-chan *model.ResponsesStreamEvent
+	errs   <-chan error
+	closer func()
+}
+
+// NewResponsesStream builds a ResponsesStream from channels, mirroring NewStream.
+func NewResponsesStream(events <-chan *model.ResponsesStreamEvent, errs <-chan error, closer func()) ResponsesStream {
+	return &responsesStreamAdapter{
+		events: events,
+		errs:   errs,
+		closer: closer,
+	}
+}
+
+func (s *responsesStreamAdapter) Recv() (*model.ResponsesStreamEvent, error) {
+	select {
+	case event, ok := <-s.events:
+		if !ok {
+			return nil, io.EOF
+		}
+		return event, nil
+	case err := <-s.errs:
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	}
+}
+
+func (s *responsesStreamAdapter) Close() error {
 	if s.closer != nil {
 		s.closer()
 	}

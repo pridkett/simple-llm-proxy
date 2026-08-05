@@ -230,6 +230,23 @@ type Storage interface {
 
 	// UpdateWebhookDeliveryStatus updates status, response_code, attempt_count, and sets last_attempt_at to now.
 	UpdateWebhookDeliveryStatus(ctx context.Context, id int64, status string, responseCode int, attemptCount int) error
+
+	// --- Responses API Background Jobs (ADR 010) ---
+
+	// CreateResponsesJob inserts a new background job row.
+	CreateResponsesJob(ctx context.Context, job *ResponsesJob) error
+
+	// GetResponsesJob returns the job with the given id (the upstream response_id).
+	// Returns (nil, nil) if no job exists with that id.
+	GetResponsesJob(ctx context.Context, id string) (*ResponsesJob, error)
+
+	// UpdateResponsesJob updates a job's status, response, and error state.
+	// completedAt is nil unless status is terminal.
+	UpdateResponsesJob(ctx context.Context, id, status string, responseJSON, errorJSON *string, completedAt *time.Time) error
+
+	// ListPendingResponsesJobs returns all jobs not yet in a terminal status,
+	// used by the background worker to resume polling after a restart.
+	ListPendingResponsesJobs(ctx context.Context) ([]*ResponsesJob, error)
 }
 
 // User represents a proxy user populated from OIDC claims.
@@ -442,6 +459,24 @@ type WebhookSubscription struct {
 	Secret    string    `json:"-"`          // never serialize to API response
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// ResponsesJob represents a background OpenAI Responses API job tracked in
+// responses_jobs (ADR 010 D-03). ID is the upstream response_id, used directly
+// as the primary key. RequestJSON/ResponseJSON/ErrorJSON are raw JSON blobs —
+// the proxy stores/forwards the upstream shape rather than fully modeling it.
+type ResponsesJob struct {
+	ID             string
+	APIKeyID       *int64 // nil when authenticated via master key
+	DeploymentKey  string // provider:model:api_base — re-resolves the deployment for polling
+	ModelName      string
+	Status         string // queued|in_progress|completed|failed|cancelled|incomplete
+	RequestJSON    string
+	ResponseJSON   *string
+	ErrorJSON      *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	CompletedAt    *time.Time
 }
 
 // NotificationEvent represents a routing event in the notification feed.
