@@ -63,6 +63,23 @@ frontend-test: frontend-install
 # Run all tests (backend + frontend)
 test-all: test frontend-test
 
+# Build the all-in-one Docker image (Go proxy + built frontend SPA)
+docker-build:
+    docker build -t simple-llm-proxy:latest .
+
+# Run the Docker image: mounts config.yaml + ./data for the SQLite DB,
+# injects secrets from 1Password into the container environment.
+# Point database_url at /data/proxy.db in your config for persistence.
+docker-run: docker-build
+    mkdir -p data
+    op run --env-file op.env --no-masking -- docker run --rm -it \
+        -p 8080:8080 \
+        -v ./config.yaml:/app/config.yaml:ro \
+        -v ./data:/data \
+        -e PROXY_MASTER_KEY -e OPENAI_API_KEY -e ANTHROPIC_API_KEY \
+        -e OPENROUTER_API_KEY -e OIDC_CLIENT_ID -e OIDC_CLIENT_SECRET \
+        simple-llm-proxy:latest
+
 # Cross-compile release binaries
 build-all:
     GOOS=linux GOARCH=amd64 go build -o bin/proxy-linux-amd64 ./cmd/proxy

@@ -1,0 +1,29 @@
+# Secrets and local data — must NEVER enter the build context
+op.env
+*.op.env
+config.yaml
+proxy.db
+proxy.db-shm
+proxy.db-wal
+
+# Build artifacts and dependencies (rebuilt inside the image)
+bin/
+frontend/node_modules/
+frontend/dist/
+apphost/
+coverage.out
+coverage.html
+
+# VCS, planning, editor
+.git/
+.planning/
+.claude/
+.claire/
+backlog/
+adr/
+*.md
+!frontend/**/*.md
+node_modules/
+package.json
+package-lock.json
+.mcp.json

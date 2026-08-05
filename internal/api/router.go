@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -96,6 +97,17 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Identity and key management CRUD routes
 		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)
 	})
+
+	// SPA static serving (production / Docker): serve the built frontend at "/"
+	// when a dist directory is available. Explicit config wins; otherwise fall
+	// back to ./frontend/dist if present. Dev keeps using Vite on :5173.
+	frontendDir := reloader.Config().GeneralSettings.FrontendDir
+	if frontendDir == "" {
+		frontendDir = "./frontend/dist"
+	}
+	if info, err := os.Stat(frontendDir); err == nil && info.IsDir() {
+		mux.NotFound(handler.SPA(frontendDir))
+	}
 
 	return mux
 }
