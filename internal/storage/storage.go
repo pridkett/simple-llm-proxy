@@ -470,6 +470,7 @@ type ResponsesJob struct {
 	APIKeyID       *int64 // nil when authenticated via master key
 	DeploymentKey  string // provider:model:api_base — re-resolves the deployment for polling
 	ModelName      string
+	PoolName       string // empty string = request not routed through a named pool
 	Status         string // queued|in_progress|completed|failed|cancelled|incomplete
 	RequestJSON    string
 	ResponseJSON   *string

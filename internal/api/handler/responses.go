@@ -130,16 +130,25 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		}
 
 		budget := r.BudgetManager()
-		r.ReportSuccess(result.DeploymentUsed)
 
+		// STREAM-01 (ADR 006): success is reported only after the stream fully
+		// completes (see handleResponsesStream's EOF branch), not at stream-open —
+		// a mid-stream failure must still count as a deployment failure.
 		if respReq.Stream {
 			handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet)
 			return
 		}
+		r.ReportSuccess(result.DeploymentUsed)
 
 		if respReq.Background && respResult.Status != "completed" && respResult.Status != "failed" {
 			if store != nil {
-				persistResponsesJob(store, respResult, result.DeploymentUsed, apiKeyID, &respReq)
+				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq); err != nil {
+					// The upstream job was already created — the client must not receive a
+					// response_id that GET /v1/responses/{id} can never resolve.
+					fmt.Fprintf(os.Stderr, "Responses: failed to persist background job %s (request_id=%s): %v\n", respResult.ID, requestID, err)
+					model.WriteError(w, model.ErrInternal("background job created upstream but failed to persist; retry may create a duplicate job"))
+					return
+				}
 			}
 			router.SetRouteHeaders(w, result)
 			w.Header().Set("Content-Type", "application/json")
@@ -251,27 +260,35 @@ func handleResponsesStream(
 		if err != nil {
 			return
 		}
+		// The Responses API's SSE contract pairs each data line with an `event:`
+		// line naming the event type (response.created, response.completed, ...);
+		// OpenAI's own SDK dispatches on it. event.Type mirrors it exactly since
+		// it's parsed from the same upstream payload's "type" field.
+		if event.Type != "" {
+			fmt.Fprintf(w, "event: %s\n", event.Type)
+		}
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
 	}
 }
 
 // persistResponsesJob inserts a responses_jobs row for a newly-created background job.
-// Uses a detached context (not the request's) since the write must complete even
-// after the HTTP handler has already returned the "queued" response to the client.
-func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, apiKeyID *int64, req *model.ResponsesRequest) {
+// Runs synchronously, before the "queued" response is returned to the client — a
+// client must never receive a response_id that has no matching row, since every
+// subsequent GET /v1/responses/{id} would 404 with no visible error. Uses a
+// detached 5s context (not the request's) so the write isn't aborted by a client
+// disconnect racing the insert.
+func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	reqJSON, err := json.Marshal(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "persistResponsesJob: marshal request failed for %s: %v\n", resp.ID, err)
-		return
+		return fmt.Errorf("marshaling request: %w", err)
 	}
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "persistResponsesJob: marshal response failed for %s: %v\n", resp.ID, err)
-		return
+		return fmt.Errorf("marshaling response: %w", err)
 	}
 	respJSONStr := string(respJSON)
 
@@ -280,13 +297,15 @@ func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d
 		APIKeyID:      apiKeyID,
 		DeploymentKey: d.DeploymentKey(),
 		ModelName:     d.ModelName,
+		PoolName:      poolName,
 		Status:        resp.Status,
 		RequestJSON:   string(reqJSON),
 		ResponseJSON:  &respJSONStr,
 	}
 	if err := store.CreateResponsesJob(ctx, job); err != nil {
-		fmt.Fprintf(os.Stderr, "persistResponsesJob: create failed for %s: %v\n", resp.ID, err)
+		return fmt.Errorf("creating responses job: %w", err)
 	}
+	return nil
 }
 
 // GetResponseJob handles GET /v1/responses/{id}: returns the last known state
