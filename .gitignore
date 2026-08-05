@@ -7,6 +7,7 @@ frontend/node_modules/
 frontend/dist/
 *.op.env
 op.env
+.mcp.json
 proxy.db
 proxy.db-shm
 proxy.db-wal
