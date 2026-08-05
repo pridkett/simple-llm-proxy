@@ -314,6 +314,7 @@ func (s *Storage) migrate(ctx context.Context) error {
     api_key_id      INTEGER,
     deployment_key  TEXT     NOT NULL,
     model_name      TEXT     NOT NULL,
+    pool_name       TEXT,
     status          TEXT     NOT NULL,
     request_json    TEXT     NOT NULL,
     response_json   TEXT,

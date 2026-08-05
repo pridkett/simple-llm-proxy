@@ -9,6 +9,7 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -98,6 +99,13 @@ func (w *Worker) pollJob(ctx context.Context, job *storage.ResponsesJob) {
 
 	resp, err := rp.GetResponse(ctx, job.ID)
 	if err != nil {
+		var rlErr *provider.RateLimitError
+		if errors.As(err, &rlErr) {
+			// Same signal the synchronous path acts on (route.go's routePool/routeLegacy):
+			// back the deployment off so the next tick's poll skips it instead of
+			// hammering an upstream that just told us to slow down.
+			w.Router.ReportRateLimit(d, rlErr.RetryAfter)
+		}
 		log.Warn().Err(err).Str("job_id", job.ID).Msg("responses worker: poll failed")
 		return
 	}
@@ -126,7 +134,12 @@ func (w *Worker) pollJob(ctx context.Context, job *storage.ResponsesJob) {
 
 	now := time.Now().UTC()
 	if updErr := w.Store.UpdateResponsesJob(ctx, job.ID, resp.Status, &respJSONStr, errorJSON, &now); updErr != nil {
-		log.Warn().Err(updErr).Str("job_id", job.ID).Msg("responses worker: failed to update terminal job")
+		// The job's row is still non-terminal in storage, so the next poll will see
+		// this same upstream terminal status again. Returning here (instead of
+		// falling through to logCompletion) is what prevents that retry from
+		// double-crediting the spend accumulator for one job.
+		log.Warn().Err(updErr).Str("job_id", job.ID).Msg("responses worker: failed to update terminal job; will retry on next poll")
+		return
 	}
 
 	if resp.Status == "completed" {
@@ -163,19 +176,20 @@ func (w *Worker) logCompletion(job *storage.ResponsesJob, d *provider.Deployment
 	defer cancel()
 
 	logEntry := &storage.RequestLog{
-		RequestID:     fmt.Sprintf("responses-%s", job.ID),
-		APIKeyID:      job.APIKeyID,
-		Model:         job.ModelName,
-		Provider:      d.ProviderName,
-		Endpoint:      "/v1/responses",
-		InputTokens:   resp.Usage.PromptTokens,
-		OutputTokens:  resp.Usage.CompletionTokens,
-		TotalCost:     totalCost,
-		StatusCode:    status,
-		LatencyMS:     time.Since(job.CreatedAt).Milliseconds(),
-		RequestTime:   job.CreatedAt,
-		IsStreaming:   false,
-		DeploymentKey: d.DeploymentKey(),
+		RequestID:        fmt.Sprintf("responses-%s", job.ID),
+		APIKeyID:         job.APIKeyID,
+		Model:            job.ModelName,
+		Provider:         d.ProviderName,
+		Endpoint:         "/v1/responses",
+		InputTokens:      resp.Usage.PromptTokens,
+		OutputTokens:     resp.Usage.CompletionTokens,
+		TotalCost:        totalCost,
+		StatusCode:       status,
+		LatencyMS:        time.Since(job.CreatedAt).Milliseconds(),
+		RequestTime:      job.CreatedAt,
+		IsStreaming:      false,
+		DeploymentKey:    d.DeploymentKey(),
+		PoolName:         job.PoolName,
 		CacheReadTokens:  resp.Usage.CacheReadTokens,
 		CacheWriteTokens: resp.Usage.CacheWriteTokens,
 	}
@@ -186,5 +200,11 @@ func (w *Worker) logCompletion(job *storage.ResponsesJob, d *provider.Deployment
 
 	if job.APIKeyID != nil && w.SpendAcc != nil && totalCost > 0 {
 		w.SpendAcc.Credit(*job.APIKeyID, totalCost)
+	}
+
+	// Mirror chat.go's logRequest: a background job's cost counts against its
+	// pool's daily budget cap exactly like a synchronous request's would.
+	if job.PoolName != "" && totalCost > 0 {
+		w.Router.BudgetManager().Credit(job.PoolName, totalCost)
 	}
 }
