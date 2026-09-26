@@ -31,6 +31,30 @@ const spendWithAlerts = {
   from: '2026-03-19', to: '2026-03-26',
 }
 
+const spendWithModels = {
+  rows: [
+    { key_id: 1, key_name: 'test-key', app_id: 1, app_name: 'test-app', team_id: 1, team_name: 'test-team',
+      total_spend: 1.5, max_budget: 10.0, soft_budget: null }
+  ],
+  model_rows: [
+    { model: 'claude-sonnet', total_spend: 1.25, request_count: 1200,
+      input_tokens: 150000, output_tokens: 40000, cache_read_tokens: 2000000, cache_write_tokens: 50000 },
+    { model: 'gpt-4o', total_spend: 0.25, request_count: 300,
+      input_tokens: 90000, output_tokens: 10000, cache_read_tokens: 0, cache_write_tokens: 0 },
+  ],
+  daily_rows: [],
+  alerts: [],
+  from: '2026-03-19', to: '2026-03-26',
+}
+
+async function mountByModel(data) {
+  api.spend.mockResolvedValue(data)
+  const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
+  await flushPromises()
+  await wrapper.findAll('button').find(b => b.text() === 'By Model').trigger('click')
+  return wrapper
+}
+
 describe('CostView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -114,5 +138,75 @@ describe('CostView', () => {
 
     // api.spend should have been called again (server-driven refetch, not client-side filter)
     expect(api.spend.mock.calls.length).toBeGreaterThan(initialCallCount)
+  })
+
+  describe('By Model breakdown (ADR 012)', () => {
+    it('renders token columns with grouped counts for each model', async () => {
+      const wrapper = await mountByModel(spendWithModels)
+      const headers = wrapper.findAll('th').map(th => th.text())
+      expect(headers).toEqual(expect.arrayContaining(
+        ['Model', 'Requests', 'Input Tokens', 'Output Tokens', 'Cache Read', 'Cache Write', 'Est. Spend']))
+      const rows = wrapper.findAll('[data-testid="model-row"]')
+      expect(rows).toHaveLength(2)
+      const cells = rows[0].findAll('td').map(td => td.text())
+      expect(cells).toEqual([
+        'claude-sonnet',
+        (1200).toLocaleString(),
+        (150000).toLocaleString(),
+        (40000).toLocaleString(),
+        (2000000).toLocaleString(),
+        (50000).toLocaleString(),
+        '~$1.2500',
+      ])
+    })
+
+    it('renders a totals row summing every column', async () => {
+      const wrapper = await mountByModel(spendWithModels)
+      const cells = wrapper.find('[data-testid="model-totals"]').findAll('td').map(td => td.text())
+      expect(cells).toEqual([
+        'Total',
+        (1500).toLocaleString(),
+        (240000).toLocaleString(),
+        (50000).toLocaleString(),
+        (2000000).toLocaleString(),
+        (50000).toLocaleString(),
+        '~$1.5000',
+      ])
+    })
+
+    it('treats missing token fields as zero', async () => {
+      const wrapper = await mountByModel({
+        ...spendWithModels,
+        model_rows: [{ model: 'legacy', total_spend: 0.1, request_count: 2 }],
+      })
+      const cells = wrapper.find('[data-testid="model-row"]').findAll('td').map(td => td.text())
+      expect(cells.slice(2, 6)).toEqual(['0', '0', '0', '0'])
+    })
+
+    it('omits the totals row when there is no model data', async () => {
+      const wrapper = await mountByModel({ ...spendWithModels, model_rows: [] })
+      expect(wrapper.text()).toContain('No model data')
+      expect(wrapper.find('[data-testid="model-totals"]').exists()).toBe(false)
+    })
+  })
+
+  describe('estimated cost labeling (ADR 012 D-04)', () => {
+    it('prefixes spend with ~ but leaves budget caps exact', async () => {
+      api.spend.mockResolvedValue(spendWithModels)
+      const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
+      await flushPromises()
+      const text = wrapper.text()
+      expect(text).toContain('Est. Spend')
+      expect(text).toContain('~$1.5000')
+      expect(text).toContain('$10.00')
+      expect(text).not.toContain('~$10.00')
+    })
+
+    it('shows the estimate explanation note', async () => {
+      api.spend.mockResolvedValue(spendWithModels)
+      const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="estimate-note"]').text()).toContain('Costs are estimates')
+    })
   })
 })

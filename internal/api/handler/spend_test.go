@@ -19,6 +19,7 @@ type mockSpendStorage struct {
 	lastFilters storage.SpendFilters
 	lastFrom    time.Time
 	lastTo      time.Time
+	modelRows   []storage.ModelSpendRow
 }
 
 func (m *mockSpendStorage) GetSpendSummary(_ context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.SpendRow, error) {
@@ -27,10 +28,46 @@ func (m *mockSpendStorage) GetSpendSummary(_ context.Context, from, to time.Time
 	m.lastFilters = filters
 	return m.spendRows, m.spendErr
 }
-func (m *mockSpendStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) { return nil, nil }
+func (m *mockSpendStorage) GetModelSpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.ModelSpendRow, error) {
+	return m.modelRows, nil
+}
 func (m *mockSpendStorage) GetDailySpend(_ context.Context, _, _ time.Time, _ storage.SpendFilters) ([]storage.DailySpendRow, error) { return nil, nil }
 
 func TestAdminSpend(t *testing.T) {
+	t.Run("model_rows include per-model token totals", func(t *testing.T) {
+		store := &mockSpendStorage{
+			spendRows: []storage.SpendRow{},
+			modelRows: []storage.ModelSpendRow{
+				{Model: "claude-sonnet", TotalSpend: 0.5, RequestCount: 2,
+					InputTokens: 140, OutputTokens: 60, CacheReadTokens: 1500, CacheWriteTokens: 200},
+			},
+		}
+		req := newRequestWithUser(http.MethodGet, "/admin/spend", adminUser())
+		w := httptest.NewRecorder()
+		AdminSpend(store)(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var raw struct {
+			ModelRows []map[string]any `json:"model_rows"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(raw.ModelRows) != 1 {
+			t.Fatalf("expected 1 model row, got %d", len(raw.ModelRows))
+		}
+		want := map[string]float64{
+			"input_tokens": 140, "output_tokens": 60,
+			"cache_read_tokens": 1500, "cache_write_tokens": 200,
+		}
+		for field, v := range want {
+			if got, ok := raw.ModelRows[0][field].(float64); !ok || got != v {
+				t.Errorf("model_rows[0].%s = %v, want %v", field, raw.ModelRows[0][field], v)
+			}
+		}
+	})
+
 	t.Run("returns 200 with aggregated spend rows for default 7d range", func(t *testing.T) {
 		store := &mockSpendStorage{spendRows: []storage.SpendRow{}}
 		req := newRequestWithUser(http.MethodGet, "/admin/spend", adminUser())

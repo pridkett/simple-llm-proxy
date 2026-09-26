@@ -408,11 +408,17 @@ type SpendFilters struct {
 	KeyID  *int64
 }
 
-// ModelSpendRow is one row from GetModelSpend: spend totals per model name.
+// ModelSpendRow is one row from GetModelSpend: spend and token totals per model name.
+// Token semantics follow the provider: Anthropic input_tokens exclude cached tokens and
+// the cache columns are populated; other providers report zero cache tokens (ADR 012 D-02).
 type ModelSpendRow struct {
-	Model        string  `json:"model"`
-	TotalSpend   float64 `json:"total_spend"`
-	RequestCount int64   `json:"request_count"`
+	Model            string  `json:"model"`
+	TotalSpend       float64 `json:"total_spend"`
+	RequestCount     int64   `json:"request_count"`
+	InputTokens      int64   `json:"input_tokens"`
+	OutputTokens     int64   `json:"output_tokens"`
+	CacheReadTokens  int64   `json:"cache_read_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
 }
 
 // DailySpendRow is one row from GetDailySpend: daily spend totals for time-series charts.
