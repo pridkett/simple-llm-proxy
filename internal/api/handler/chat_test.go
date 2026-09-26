@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,13 +87,38 @@ func (r *spyRouter) NumRetries() int { return 0 }
 // captureStorage captures LogRequest calls for assertions
 // ---------------------------------------------------------------------------
 
+// logs is written by the async logRequest goroutine, so every access goes
+// through mu; tests read it via waitForLogs rather than sleeping.
 type captureStorage struct {
+	mu   sync.Mutex
 	logs []*storage.RequestLog
 }
 
 func (s *captureStorage) LogRequest(_ context.Context, log *storage.RequestLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.logs = append(s.logs, log)
 	return nil
+}
+
+// waitForLogs blocks until at least n logs have been recorded and returns a
+// snapshot, failing the test if they do not arrive within a second.
+func (s *captureStorage) waitForLogs(t *testing.T, n int) []*storage.RequestLog {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		s.mu.Lock()
+		if len(s.logs) >= n {
+			logs := append([]*storage.RequestLog(nil), s.logs...)
+			s.mu.Unlock()
+			return logs
+		}
+		s.mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatalf("expected %d request log(s), storage.LogRequest was not called in time", n)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // Remaining storage.Storage methods — minimal stubs for interface compliance.
@@ -642,14 +668,9 @@ func TestStreamUsageFromChunks(t *testing.T) {
 		t.Fatalf("handleStreamingResponseWithRouter returned error: %v", err)
 	}
 
-	// Give the goroutine a moment to write the log.
-	time.Sleep(20 * time.Millisecond)
+	logs := store.waitForLogs(t, 1)
 
-	if len(store.logs) == 0 {
-		t.Fatal("no log was written to storage")
-	}
-
-	log := store.logs[0]
+	log := logs[0]
 
 	if log.InputTokens != 42 {
 		t.Errorf("InputTokens: got %d, want 42", log.InputTokens)
@@ -706,13 +727,8 @@ func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Wait for async log goroutine
-		time.Sleep(20 * time.Millisecond)
-
-		if len(store.logs) == 0 {
-			t.Fatal("no log recorded")
-		}
-		if !store.logs[0].IsStreaming {
+		logs := store.waitForLogs(t, 1)
+		if !logs[0].IsStreaming {
 			t.Errorf("IsStreaming = false, want true for streaming request")
 		}
 	})
@@ -743,14 +759,8 @@ func TestStreamIsStreamingFlag_STREAM05(t *testing.T) {
 			ReqBodySnippet:  nil,
 		})
 
-		// Wait for the log to be written (logRequest may run in goroutine in production,
-		// but here we call it synchronously for test determinism).
-		time.Sleep(20 * time.Millisecond)
-
-		if len(store.logs) == 0 {
-			t.Fatal("no log recorded")
-		}
-		if store.logs[0].IsStreaming {
+		logs := store.waitForLogs(t, 1)
+		if logs[0].IsStreaming {
 			t.Errorf("IsStreaming = true, want false for non-streaming request")
 		}
 	})

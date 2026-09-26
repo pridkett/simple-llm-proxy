@@ -580,20 +580,15 @@ func TestBodyCapture_RouterWiring(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// Give the async log goroutine time to write.
-	time.Sleep(30 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded — storage.LogRequest was not called")
-	}
+	logs := store.waitForLogs(t, 1)
 
 	// BODY-03: ReqBodySnippet must be non-nil when BodySnippetLimit > 0
 	// and BodyCapture middleware is in the chain.
-	if store.logs[0].ReqBodySnippet == nil {
+	if logs[0].ReqBodySnippet == nil {
 		t.Error("ReqBodySnippet is nil; expected non-nil *string when BodyCapture middleware runs with limit > 0")
 	} else {
 		// The snippet should contain the request body content.
-		snippet := *store.logs[0].ReqBodySnippet
+		snippet := *logs[0].ReqBodySnippet
 		if !strings.Contains(snippet, "gpt-4") {
 			t.Errorf("ReqBodySnippet %q should contain model name from request body", snippet)
 		}
