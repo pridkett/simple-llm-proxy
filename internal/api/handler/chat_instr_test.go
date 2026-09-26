@@ -62,17 +62,12 @@ func TestStreamTTFT(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Give the goroutine time to write the log.
-	time.Sleep(30 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded")
-	}
+	logs := store.waitForLogs(t, 1)
 	// INSTR-01: TTFTMs must be non-nil and >= 0 for streaming requests.
-	if store.logs[0].TTFTMs == nil {
+	if logs[0].TTFTMs == nil {
 		t.Error("TTFTMs should be non-nil after streaming")
-	} else if *store.logs[0].TTFTMs < 0 {
-		t.Errorf("TTFTMs should be >= 0, got %d", *store.logs[0].TTFTMs)
+	} else if *logs[0].TTFTMs < 0 {
+		t.Errorf("TTFTMs should be >= 0, got %d", *logs[0].TTFTMs)
 	}
 }
 
@@ -103,15 +98,10 @@ func TestLogRequestPoolName(t *testing.T) {
 		ReqBodySnippet:  nil,
 	})
 
-	// logRequest is synchronous when called directly (goroutine is only in production callers).
-	time.Sleep(20 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log was written to storage")
-	}
+	logs := store.waitForLogs(t, 1)
 	// INSTR-02: PoolName must be "test-pool".
-	if store.logs[0].PoolName != "test-pool" {
-		t.Errorf("PoolName: got %q, want %q", store.logs[0].PoolName, "test-pool")
+	if logs[0].PoolName != "test-pool" {
+		t.Errorf("PoolName: got %q, want %q", logs[0].PoolName, "test-pool")
 	}
 }
 
@@ -156,17 +146,13 @@ func TestStreamRespSnippet(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	time.Sleep(30 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded")
-	}
+	logs := store.waitForLogs(t, 1)
 	// INSTR-03: snippet must be non-empty and not exceed the limit.
-	if store.logs[0].RespBodySnippet == "" {
+	if logs[0].RespBodySnippet == "" {
 		t.Error("RespBodySnippet should be non-empty")
 	}
-	if len(store.logs[0].RespBodySnippet) > 10 {
-		t.Errorf("RespBodySnippet exceeded limit: %q (len=%d)", store.logs[0].RespBodySnippet, len(store.logs[0].RespBodySnippet))
+	if len(logs[0].RespBodySnippet) > 10 {
+		t.Errorf("RespBodySnippet exceeded limit: %q (len=%d)", logs[0].RespBodySnippet, len(logs[0].RespBodySnippet))
 	}
 }
 
@@ -211,14 +197,10 @@ func TestStreamRespSnippetDisabled(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	time.Sleep(30 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded")
-	}
+	logs := store.waitForLogs(t, 1)
 	// INSTR-03: RespBodySnippet must be empty when limit=0.
-	if store.logs[0].RespBodySnippet != "" {
-		t.Errorf("RespBodySnippet should be empty when disabled, got %q", store.logs[0].RespBodySnippet)
+	if logs[0].RespBodySnippet != "" {
+		t.Errorf("RespBodySnippet should be empty when disabled, got %q", logs[0].RespBodySnippet)
 	}
 }
 
@@ -276,22 +258,18 @@ func TestLogRequestCacheCost(t *testing.T) {
 		ReqBodySnippet:  nil,
 	})
 
-	time.Sleep(20 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded")
-	}
+	logs := store.waitForLogs(t, 1)
 	// INSTR-04: TotalCost must include cache token contribution.
-	if store.logs[0].TotalCost <= baseCost {
+	if logs[0].TotalCost <= baseCost {
 		t.Errorf("TotalCost should include cache cost; got %.8f, baseCost=%.8f, cacheContrib=%.8f",
-			store.logs[0].TotalCost, baseCost, cacheContrib)
+			logs[0].TotalCost, baseCost, cacheContrib)
 	}
 	// CacheReadTokens and CacheWriteTokens must be stored.
-	if store.logs[0].CacheReadTokens != 100 {
-		t.Errorf("CacheReadTokens: got %d, want 100", store.logs[0].CacheReadTokens)
+	if logs[0].CacheReadTokens != 100 {
+		t.Errorf("CacheReadTokens: got %d, want 100", logs[0].CacheReadTokens)
 	}
-	if store.logs[0].CacheWriteTokens != 25 {
-		t.Errorf("CacheWriteTokens: got %d, want 25", store.logs[0].CacheWriteTokens)
+	if logs[0].CacheWriteTokens != 25 {
+		t.Errorf("CacheWriteTokens: got %d, want 25", logs[0].CacheWriteTokens)
 	}
 }
 
@@ -330,16 +308,12 @@ func TestLogRequestReqBodySnippetEnabled(t *testing.T) {
 		ReqBodySnippet:  &capturedSnippet, // non-nil: enabled path (BodySnippetLimit > 0)
 	})
 
-	time.Sleep(20 * time.Millisecond)
-
-	if len(store.logs) == 0 {
-		t.Fatal("no log recorded")
-	}
+	logs := store.waitForLogs(t, 1)
 	// BODY-03: ReqBodySnippet must be stored as non-nil *string when limit > 0.
-	if store.logs[0].ReqBodySnippet == nil {
+	if logs[0].ReqBodySnippet == nil {
 		t.Error("ReqBodySnippet is nil; expected non-nil *string when capture is enabled")
-	} else if *store.logs[0].ReqBodySnippet != capturedSnippet {
-		t.Errorf("ReqBodySnippet: got %q, want %q", *store.logs[0].ReqBodySnippet, capturedSnippet)
+	} else if *logs[0].ReqBodySnippet != capturedSnippet {
+		t.Errorf("ReqBodySnippet: got %q, want %q", *logs[0].ReqBodySnippet, capturedSnippet)
 	}
 }
 
