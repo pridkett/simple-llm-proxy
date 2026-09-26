@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -393,6 +394,96 @@ func TestGetSpendSummary(t *testing.T) {
 		// Revoked key must not appear
 		if len(rows) != 0 {
 			t.Errorf("expected 0 rows for inactive key, got %d", len(rows))
+		}
+	})
+}
+
+// insertUsageLogTokens inserts a usage_log row with explicit token counts for model-spend tests.
+func insertUsageLogTokens(t *testing.T, s *Storage, keyID int64, model string, cost float64, requestTime time.Time, in, out, cacheRead, cacheWrite int) {
+	t.Helper()
+	_, err := s.db.ExecContext(context.Background(), `
+		INSERT INTO usage_logs (request_id, api_key_id, model, provider, endpoint, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_cost, status_code, latency_ms, request_time)
+		VALUES (?, ?, ?, 'anthropic', '/v1/chat/completions', ?, ?, ?, ?, ?, 200, 100, ?)
+	`, fmt.Sprintf("req-%s-%d-%d", model, keyID, requestTime.UnixNano()+int64(in)), keyID, model, in, out, cacheRead, cacheWrite, cost, requestTime)
+	if err != nil {
+		t.Fatalf("insert usage_log: %v", err)
+	}
+}
+
+func TestGetModelSpend(t *testing.T) {
+	now := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	from := now.AddDate(0, 0, -7)
+	to := now
+	withinRange := now.AddDate(0, 0, -1)
+
+	t.Run("aggregates token totals per model and excludes flush rows", func(t *testing.T) {
+		s := newTestStorage(t)
+		ctx := context.Background()
+
+		team, _ := s.CreateTeam(ctx, "team-m")
+		app, _ := s.CreateApplication(ctx, team.ID, "app-m")
+		key, err := s.CreateAPIKey(ctx, app.ID, "key-m", "mmmmmmmm", "hashmmmm", nil, nil, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("create key: %v", err)
+		}
+
+		insertUsageLogTokens(t, s, key.ID, "claude-sonnet", 0.30, withinRange, 100, 50, 1000, 200)
+		insertUsageLogTokens(t, s, key.ID, "claude-sonnet", 0.20, withinRange, 40, 10, 500, 0)
+		insertUsageLogTokens(t, s, key.ID, "gpt-4o", 0.05, withinRange, 300, 30, 0, 0)
+		insertUsageLogTokens(t, s, key.ID, "_flush", 99.0, withinRange, 9999, 9999, 9999, 9999)
+		// Outside the date range — must not count.
+		insertUsageLogTokens(t, s, key.ID, "gpt-4o", 1.00, now.AddDate(0, 0, -30), 7777, 7777, 0, 0)
+
+		rows, err := s.GetModelSpend(ctx, from, to, storage.SpendFilters{})
+		if err != nil {
+			t.Fatalf("GetModelSpend: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("expected 2 model rows, got %d: %+v", len(rows), rows)
+		}
+
+		// Ordered by spend descending.
+		want := []storage.ModelSpendRow{
+			{Model: "claude-sonnet", TotalSpend: 0.50, RequestCount: 2, InputTokens: 140, OutputTokens: 60, CacheReadTokens: 1500, CacheWriteTokens: 200},
+			{Model: "gpt-4o", TotalSpend: 0.05, RequestCount: 1, InputTokens: 300, OutputTokens: 30},
+		}
+		for i, w := range want {
+			got := rows[i]
+			if got.Model != w.Model || got.RequestCount != w.RequestCount ||
+				got.InputTokens != w.InputTokens || got.OutputTokens != w.OutputTokens ||
+				got.CacheReadTokens != w.CacheReadTokens || got.CacheWriteTokens != w.CacheWriteTokens {
+				t.Errorf("row %d: got %+v, want %+v", i, got, w)
+			}
+			if diff := got.TotalSpend - w.TotalSpend; diff > 1e-9 || diff < -1e-9 {
+				t.Errorf("row %d: TotalSpend got %v, want %v", i, got.TotalSpend, w.TotalSpend)
+			}
+		}
+	})
+
+	t.Run("token totals respect team filter", func(t *testing.T) {
+		s := newTestStorage(t)
+		ctx := context.Background()
+
+		team1, _ := s.CreateTeam(ctx, "team-n1")
+		team2, _ := s.CreateTeam(ctx, "team-n2")
+		app1, _ := s.CreateApplication(ctx, team1.ID, "app-n1")
+		app2, _ := s.CreateApplication(ctx, team2.ID, "app-n2")
+		key1, _ := s.CreateAPIKey(ctx, app1.ID, "key-n1", "nnnnnn01", "hashnn01", nil, nil, nil, nil, nil)
+		key2, _ := s.CreateAPIKey(ctx, app2.ID, "key-n2", "nnnnnn02", "hashnn02", nil, nil, nil, nil, nil)
+
+		insertUsageLogTokens(t, s, key1.ID, "claude-sonnet", 0.10, withinRange, 10, 20, 30, 40)
+		insertUsageLogTokens(t, s, key2.ID, "claude-sonnet", 0.90, withinRange, 1000, 2000, 3000, 4000)
+
+		rows, err := s.GetModelSpend(ctx, from, to, storage.SpendFilters{TeamID: &team1.ID})
+		if err != nil {
+			t.Fatalf("GetModelSpend: %v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("expected 1 row, got %d", len(rows))
+		}
+		r := rows[0]
+		if r.InputTokens != 10 || r.OutputTokens != 20 || r.CacheReadTokens != 30 || r.CacheWriteTokens != 40 {
+			t.Errorf("team filter not applied to token totals: %+v", r)
 		}
 	})
 }

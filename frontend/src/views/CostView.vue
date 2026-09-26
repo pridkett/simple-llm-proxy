@@ -146,70 +146,97 @@
           </div>
         </div>
 
-        <!-- By Key table (default) -->
-        <table v-if="breakdownMode === 'by-key'" class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-100">
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Spend</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">% Budget</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!spendData?.rows?.length">
-              <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">
-                <div class="font-medium text-gray-700 mb-1">No spend data</div>
-                <div v-if="hasNonDefaultFilter">No spend data matches the selected filters. Try clearing the team or application filter.</div>
-                <div v-else>No requests were recorded in this date range. Try expanding the date range or checking that requests are being proxied.</div>
-              </td>
-            </tr>
-            <tr
-              v-for="row in spendData?.rows ?? []"
-              :key="row.key_id"
-              class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-            >
-              <td class="px-6 py-3 text-sm font-medium text-gray-900">
-                {{ row.key_name }}
-                <span class="ml-1 text-xs text-gray-400">{{ row.app_name }}</span>
-              </td>
-              <td class="px-6 py-3 text-sm text-gray-900">{{ formatSpend(row.total_spend) }}</td>
-              <td class="px-6 py-3 text-sm text-gray-500">{{ formatBudget(row) }}</td>
-              <td class="px-6 py-3 text-sm text-gray-500">{{ formatPctBudget(row) }}</td>
-              <td class="px-6 py-3"><StatusBadge :status="rowStatus(row)" /></td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <!-- By Key table (default) -->
+          <table v-if="breakdownMode === 'by-key'" class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-100">
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. Spend</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">% Budget</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!spendData?.rows?.length">
+                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">
+                  <div class="font-medium text-gray-700 mb-1">No spend data</div>
+                  <div v-if="hasNonDefaultFilter">No spend data matches the selected filters. Try clearing the team or application filter.</div>
+                  <div v-else>No requests were recorded in this date range. Try expanding the date range or checking that requests are being proxied.</div>
+                </td>
+              </tr>
+              <tr
+                v-for="row in spendData?.rows ?? []"
+                :key="row.key_id"
+                class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+              >
+                <td class="px-6 py-3 text-sm font-medium text-gray-900">
+                  {{ row.key_name }}
+                  <span class="ml-1 text-xs text-gray-400">{{ row.app_name }}</span>
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-900">{{ formatSpend(row.total_spend) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500">{{ formatBudget(row) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500">{{ formatPctBudget(row) }}</td>
+                <td class="px-6 py-3"><StatusBadge :status="rowStatus(row)" /></td>
+              </tr>
+            </tbody>
+          </table>
 
-        <!-- By Model table -->
-        <table v-else class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-100">
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Model</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Spend</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Requests</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!spendData?.model_rows?.length">
-              <td colspan="3" class="px-6 py-12 text-center text-sm text-gray-500">
-                <div class="font-medium text-gray-700 mb-1">No model data</div>
-                <div v-if="hasNonDefaultFilter">No model data matches the selected filters.</div>
-                <div v-else>No requests were recorded in this date range.</div>
-              </td>
-            </tr>
-            <tr
-              v-for="row in spendData?.model_rows ?? []"
-              :key="row.model"
-              class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-            >
-              <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ row.model }}</td>
-              <td class="px-6 py-3 text-sm text-gray-900">{{ formatSpend(row.total_spend) }}</td>
-              <td class="px-6 py-3 text-sm text-gray-500">{{ row.request_count.toLocaleString() }}</td>
-            </tr>
-          </tbody>
-        </table>
+          <!-- By Model table: per-model token and cost breakdown (ADR 012) -->
+          <table v-else class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-100">
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Model</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Requests</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Input Tokens</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Output Tokens</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Cache Read</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Cache Write</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. Spend</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!spendData?.model_rows?.length">
+                <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500">
+                  <div class="font-medium text-gray-700 mb-1">No model data</div>
+                  <div v-if="hasNonDefaultFilter">No model data matches the selected filters.</div>
+                  <div v-else>No requests were recorded in this date range.</div>
+                </td>
+              </tr>
+              <tr
+                v-for="row in spendData?.model_rows ?? []"
+                :key="row.model"
+                data-testid="model-row"
+                class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+              >
+                <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ row.model }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.request_count) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.input_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.output_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.cache_read_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.cache_write_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatSpend(row.total_spend) }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="spendData?.model_rows?.length">
+              <tr data-testid="model-totals" class="border-t border-gray-200 bg-gray-50 font-semibold">
+                <td class="px-6 py-3 text-sm text-gray-900">Total</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.request_count) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.input_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.output_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.cache_read_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.cache_write_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatSpend(modelTotals.total_spend) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p data-testid="estimate-note" class="px-6 py-3 text-xs text-gray-500 border-t border-gray-100">
+          Costs are estimates calculated from the proxy's model price map when each request completed,
+          including prompt-cache read/write pricing where the provider reports it. They may differ from
+          provider invoices.
+        </p>
       </div>
 
     </template>
@@ -364,7 +391,7 @@ const chartOptions = computed(() => ({
   xaxis: { categories: chartLabels.value, labels: { style: { colors: '#6B7280' } } },
   yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
   grid: { borderColor: '#E5E7EB' },
-  tooltip: { y: { formatter: (v) => `$${v.toFixed(4)}` } },
+  tooltip: { y: { formatter: (v) => formatSpend(v) } },
   dataLabels: { enabled: false },
   noData: { text: 'No spend data for this period.' },
 }))
@@ -386,7 +413,7 @@ const overTimeChartOptions = computed(() => ({
   },
   yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
   grid: { borderColor: '#E5E7EB' },
-  tooltip: { y: { formatter: (v) => `$${v.toFixed(4)}` } },
+  tooltip: { y: { formatter: (v) => formatSpend(v) } },
   dataLabels: { enabled: false },
   noData: { text: 'No spend data for this period.' },
 }))
@@ -443,13 +470,25 @@ function onCustomDateChange() {
 }
 watch([customFrom, customTo], onCustomDateChange)
 
+// Column totals for the By Model table footer — sums the rows currently shown.
+const modelTotals = computed(() => {
+  const totals = { request_count: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, total_spend: 0 }
+  for (const r of spendData.value?.model_rows ?? []) {
+    for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0
+  }
+  return totals
+})
+
 // Row helper functions
 function rowStatus(row) {
   if (row.max_budget != null && row.total_spend >= row.max_budget) return 'over'
   if (row.soft_budget != null && row.total_spend >= row.soft_budget) return 'warning'
   return 'ok'
 }
-function formatSpend(v) { return `$${v.toFixed(4)}` }
+// Spend values are estimates computed from the cost map at request time (ADR 012 D-04);
+// budget caps are exact configured values and use formatBudget instead.
+function formatSpend(v) { return `~$${(v ?? 0).toFixed(4)}` }
+function formatCount(v) { return (v ?? 0).toLocaleString() }
 function formatBudget(row) {
   if (row.max_budget == null) return '—'
   return `$${row.max_budget.toFixed(2)}`

@@ -22,8 +22,12 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
 	const q = `
         SELECT
             ul.model,
-            COALESCE(SUM(ul.total_cost), 0) AS total_spend,
-            COUNT(*)                         AS request_count
+            COALESCE(SUM(ul.total_cost), 0)         AS total_spend,
+            COUNT(*)                                 AS request_count,
+            COALESCE(SUM(ul.input_tokens), 0)       AS input_tokens,
+            COALESCE(SUM(ul.output_tokens), 0)      AS output_tokens,
+            COALESCE(SUM(ul.cache_read_tokens), 0)  AS cache_read_tokens,
+            COALESCE(SUM(ul.cache_write_tokens), 0) AS cache_write_tokens
         FROM usage_logs ul
         JOIN api_keys k    ON k.id = ul.api_key_id
         JOIN applications a ON a.id = k.application_id
@@ -53,7 +57,8 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
 	result := make([]storage.ModelSpendRow, 0)
 	for rows.Next() {
 		var r storage.ModelSpendRow
-		if err := rows.Scan(&r.Model, &r.TotalSpend, &r.RequestCount); err != nil {
+		if err := rows.Scan(&r.Model, &r.TotalSpend, &r.RequestCount,
+			&r.InputTokens, &r.OutputTokens, &r.CacheReadTokens, &r.CacheWriteTokens); err != nil {
 			return nil, fmt.Errorf("get model spend scan: %w", err)
 		}
 		result = append(result, r)
