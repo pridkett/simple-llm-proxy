@@ -9,8 +9,24 @@ type Config struct {
 	GeneralSettings GeneralSettings `yaml:"general_settings"`
 	LogSettings     LogSettings     `yaml:"log_settings"`
 	OIDCSettings    OIDCSettings    `yaml:"oidc_settings"`
+	OTelSettings    OTelSettings    `yaml:"otel_settings"`
 	ProviderPools   []ProviderPool  `yaml:"provider_pools"`
 	Webhooks        []WebhookConfig `yaml:"webhooks"`
+}
+
+// OTelSettings configures optional OTLP trace export.
+type OTelSettings struct {
+	Enabled       bool         `yaml:"enabled"`
+	ServiceName   string       `yaml:"service_name"`
+	Exporter      OTelExporter `yaml:"exporter"`
+	SamplingRatio float64      `yaml:"sampling_ratio"`
+}
+
+type OTelExporter struct {
+	Protocol string            `yaml:"protocol"` // http or grpc
+	Endpoint string            `yaml:"endpoint"`
+	Insecure bool              `yaml:"insecure"`
+	Headers  map[string]string `yaml:"headers"`
 }
 
 // OIDCSettings configures the OIDC provider (PocketID).
@@ -44,11 +60,11 @@ type ModelConfig struct {
 
 // LiteLLMParams contains provider-specific parameters.
 type LiteLLMParams struct {
-	Model        string            `yaml:"model"`                    // provider/model format
-	APIKey       string            `yaml:"api_key"`                  // supports os.environ/VAR
+	Model        string            `yaml:"model"`   // provider/model format
+	APIKey       string            `yaml:"api_key"` // supports os.environ/VAR
 	APIBase      string            `yaml:"api_base,omitempty"`
-	ExtraHeaders map[string]string `yaml:"extra_headers,omitempty"`  // additional HTTP headers (e.g., OpenRouter HTTP-Referer)
-	ExtraParams  map[string]any    `yaml:"extra_params,omitempty"`   // provider-specific config (e.g., Gemini safety_settings, MiniMax xml_tool_calls)
+	ExtraHeaders map[string]string `yaml:"extra_headers,omitempty"` // additional HTTP headers (e.g., OpenRouter HTTP-Referer)
+	ExtraParams  map[string]any    `yaml:"extra_params,omitempty"`  // provider-specific config (e.g., Gemini safety_settings, MiniMax xml_tool_calls)
 }
 
 // RouterSettings contains load balancing configuration.
@@ -124,6 +140,11 @@ func Defaults() *Config {
 		},
 		OIDCSettings: OIDCSettings{
 			AdminGroup: "admin",
+		},
+		OTelSettings: OTelSettings{
+			ServiceName:   "simple-llm-proxy",
+			Exporter:      OTelExporter{Protocol: "http"},
+			SamplingRatio: 1,
 		},
 	}
 }

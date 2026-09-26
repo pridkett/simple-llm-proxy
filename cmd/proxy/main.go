@@ -21,12 +21,14 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/logger"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
+	proxyotel "github.com/pwagstro/simple_llm_proxy/internal/otel"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider/openrouter"
 	"github.com/pwagstro/simple_llm_proxy/internal/responses"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/trace"
 
 	// Register providers — blank imports trigger init() to self-register with the provider registry.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
@@ -90,6 +92,14 @@ func main() {
 		}
 		store = sqliteStore
 		defer store.Close()
+	}
+	otelProvider, err := proxyotel.NewProvider(cfg.OTelSettings)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize tracing")
+	}
+	var otelTracer trace.Tracer
+	if otelProvider.Enabled() {
+		otelTracer = otelProvider.Tracer()
 	}
 
 	// Initialize router with storage for sticky session persistence
@@ -261,7 +271,7 @@ func main() {
 	}
 
 	// Create HTTP router
-	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher)
+	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher, otelTracer)
 
 	// Create server
 	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)
@@ -344,7 +354,10 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("server forced to shutdown")
+		log.Error().Err(err).Msg("server forced to shutdown")
+	}
+	if err := otelProvider.Shutdown(); err != nil {
+		log.Error().Err(err).Msg("failed to flush traces on shutdown")
 	}
 
 	log.Info().Msg("server exited")

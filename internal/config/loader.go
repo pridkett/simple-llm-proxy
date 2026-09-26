@@ -133,6 +133,47 @@ func Parse(data []byte) (*Config, error) {
 	}
 
 	// Process provider_pools
+	if os, ok := raw["otel_settings"].(map[string]any); ok {
+		if v, ok := os["enabled"].(bool); ok {
+			cfg.OTelSettings.Enabled = v
+		}
+		if v, ok := os["service_name"].(string); ok {
+			cfg.OTelSettings.ServiceName = v
+		}
+		if v, exists := os["sampling_ratio"]; exists {
+			switch n := v.(type) {
+			case float64:
+				cfg.OTelSettings.SamplingRatio = n
+			case int:
+				cfg.OTelSettings.SamplingRatio = float64(n)
+			default:
+				return nil, fmt.Errorf("otel_settings.sampling_ratio must be a number")
+			}
+		}
+		if e, ok := os["exporter"].(map[string]any); ok {
+			if v, ok := e["protocol"].(string); ok {
+				cfg.OTelSettings.Exporter.Protocol = v
+			}
+			if v, ok := e["endpoint"].(string); ok {
+				cfg.OTelSettings.Exporter.Endpoint = expandEnvVar(v)
+			}
+			if v, ok := e["insecure"].(bool); ok {
+				cfg.OTelSettings.Exporter.Insecure = v
+			}
+			if headers, ok := e["headers"].(map[string]any); ok {
+				cfg.OTelSettings.Exporter.Headers = make(map[string]string, len(headers))
+				for key, value := range headers {
+					v, ok := value.(string)
+					if !ok {
+						return nil, fmt.Errorf("otel_settings.exporter.headers.%s must be a string", key)
+					}
+					cfg.OTelSettings.Exporter.Headers[key] = expandEnvVar(v)
+				}
+			}
+		}
+	}
+
+	// Process provider_pools
 	if pools, ok := raw["provider_pools"].([]any); ok {
 		cfg.ProviderPools = make([]ProviderPool, 0, len(pools))
 		for i, item := range pools {

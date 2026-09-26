@@ -14,10 +14,15 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Embeddings handles POST /v1/embeddings requests.
-func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher) http.HandlerFunc {
+func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, tracers ...trace.Tracer) http.HandlerFunc {
+	var tracer trace.Tracer
+	if len(tracers) > 0 {
+		tracer = tracers[0]
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -74,6 +79,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
+		ctx, operation := beginOperation(ctx, tracer, "embeddings", embReq.Model, false)
+		defer operation.end()
 
 		// Route() owns all retry/failover logic. Use a closure variable to
 		// capture the embeddings response since RouteCallback returns
@@ -81,12 +88,15 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		var embResp *model.EmbeddingsResponse
 		result := r.Route(ctx, embReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
 			if !d.Provider.SupportsEmbeddings() {
-				return nil, nil, fmt.Errorf("provider does not support embeddings")
+				err := fmt.Errorf("provider does not support embeddings")
+				operation.failedAttempt(d, err)
+				return nil, nil, err
 			}
 			providerReq := embReq
 			providerReq.Model = d.ActualModel
 			resp, err := d.Provider.Embeddings(ctx, &providerReq)
 			if err != nil {
+				operation.failedAttempt(d, err)
 				return nil, nil, err
 			}
 			embResp = resp
@@ -98,6 +108,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		emitRoutingEvents(dispatcher, r, result, embReq.Model, requestID)
 
 		if result.Error != nil {
+			operation.finish(result, nil, 0)
+			operation.fail(result.Error)
 			// Check for budget exhaustion specifically (BUDGET-04).
 			for _, reason := range result.FailoverReasons {
 				if reason == router.FailoverBudgetExhausted {
@@ -115,6 +127,12 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 
 		budget := r.BudgetManager()
 		r.ReportSuccess(result.DeploymentUsed)
+		var usage *model.Usage
+		if embResp != nil {
+			usage = embResp.Usage
+		}
+		cost := computeCost(cm, result.DeploymentUsed, usage)
+		operation.finish(result, usage, cost)
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil && embResp.Usage != nil {
@@ -122,6 +140,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 				Store:           store,
 				SpendAcc:        sa,
 				CostMap:         cm,
+				TotalCost:       cost,
+				CostKnown:       true,
 				Budget:          budget,
 				PoolName:        result.PoolName,
 				APIKeyID:        apiKeyID,

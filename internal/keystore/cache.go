@@ -16,6 +16,8 @@ const defaultCacheTTL = 60 * time.Second
 type CachedKey struct {
 	Key           *storage.APIKey
 	AllowedModels []string // empty slice = all models allowed
+	TeamName      string
+	AppName       string
 }
 
 type cacheEntry struct {
@@ -70,7 +72,7 @@ func (c *Cache) Get(ctx context.Context, token string, store storage.Storage) (*
 		return nil, err
 	}
 
-	ck := CachedKey{Key: key, AllowedModels: models}
+	ck := CachedKey{Key: key, AllowedModels: models, TeamName: key.TeamName, AppName: key.AppName}
 	c.store.Store(hash, &cacheEntry{
 		value:     ck,
 		expiresAt: time.Now().Add(c.ttl),

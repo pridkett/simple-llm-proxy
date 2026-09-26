@@ -109,6 +109,37 @@ general_settings:
 	}
 }
 
+func TestOTelSettingsAndHeaderExpansion(t *testing.T) {
+	t.Setenv("TEST_OTEL_AUTH", "Basic expanded-secret")
+	cfg, err := Parse([]byte(`
+otel_settings:
+  enabled: true
+  service_name: test-proxy
+  sampling_ratio: 0.25
+  exporter:
+    protocol: grpc
+    endpoint: https://collector.example.com:4317
+    headers:
+      Authorization: os.environ/TEST_OTEL_AUTH
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OTelSettings.Enabled || cfg.OTelSettings.SamplingRatio != 0.25 || cfg.OTelSettings.Exporter.Protocol != "grpc" {
+		t.Fatalf("incorrect OTEL settings: %+v", cfg.OTelSettings)
+	}
+	if got := cfg.OTelSettings.Exporter.Headers["Authorization"]; got != "Basic expanded-secret" {
+		t.Fatalf("header = %q", got)
+	}
+	defaultCfg, err := Parse([]byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultCfg.OTelSettings.Enabled || defaultCfg.OTelSettings.SamplingRatio != 1 || defaultCfg.OTelSettings.ServiceName != "simple-llm-proxy" {
+		t.Fatalf("incorrect defaults: %+v", defaultCfg.OTelSettings)
+	}
+}
+
 func TestParseModelString(t *testing.T) {
 	tests := []struct {
 		input    string
