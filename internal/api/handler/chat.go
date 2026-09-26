@@ -21,10 +21,15 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ChatCompletions handles POST /v1/chat/completions requests.
-func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings) http.HandlerFunc {
+func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings, tracers ...trace.Tracer) http.HandlerFunc {
+	var tracer trace.Tracer
+	if len(tracers) > 0 {
+		tracer = tracers[0]
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -123,6 +128,8 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
+		ctx, operation := beginOperation(ctx, tracer, "chat", chatReq.Model, chatReq.Stream)
+		defer operation.end()
 
 		// Route() owns all retry/failover logic. The callback performs the
 		// actual provider call; Route selects deployments and handles failover.
@@ -131,9 +138,11 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			providerReq.Model = d.ActualModel
 			if chatReq.Stream {
 				stream, err := d.Provider.ChatCompletionStream(ctx, &providerReq)
+				operation.failedAttempt(d, err)
 				return nil, stream, err
 			}
 			resp, err := d.Provider.ChatCompletion(ctx, &providerReq)
+			operation.failedAttempt(d, err)
 			return resp, nil, err
 		})
 
@@ -143,6 +152,8 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		emitRoutingEvents(dispatcher, r, result, chatReq.Model, requestID)
 
 		if result.Error != nil {
+			operation.finish(result, nil, 0)
+			operation.fail(result.Error)
 			// Check for budget exhaustion specifically (BUDGET-04).
 			for _, reason := range result.FailoverReasons {
 				if reason == router.FailoverBudgetExhausted {
@@ -162,9 +173,17 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet)
+			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet)
+			operation.finish(result, usage, cost)
+			operation.fail(err)
 		} else {
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet)
+			var usage *model.Usage
+			if result.Response != nil {
+				usage = result.Response.Usage
+			}
+			cost := computeCost(cm, result.DeploymentUsed, usage)
+			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost)
+			operation.finish(result, usage, cost)
 		}
 	}
 }
@@ -182,6 +201,7 @@ func handleNonStreamingResponse(
 	startTime time.Time,
 	requestID string,
 	reqBodySnippet *string,
+	cost float64,
 ) {
 	r.ReportSuccess(result.DeploymentUsed)
 
@@ -191,6 +211,8 @@ func handleNonStreamingResponse(
 			Store:           store,
 			SpendAcc:        sa,
 			CostMap:         cm,
+			TotalCost:       cost,
+			CostKnown:       true,
 			Budget:          budget,
 			PoolName:        poolName,
 			APIKeyID:        apiKeyID,
@@ -229,7 +251,7 @@ func handleStreamingResponse(
 	requestID string,
 	bodySnippetLimit int,
 	reqBodySnippet *string,
-) {
+) (*model.Usage, float64, error) {
 	stream := result.Stream
 	defer stream.Close()
 
@@ -248,12 +270,12 @@ func handleStreamingResponse(
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return
+		return nil, 0, fmt.Errorf("streaming response writer does not support flushing")
 	}
 
-	var streamUsage *model.Usage  // accumulated from chunks that carry Usage (Anthropic message_delta)
-	var ttftMs *int64             // INSTR-01: nil until first successful Recv()
-	var ttftSet bool              // set to true after first Recv() success
+	var streamUsage *model.Usage       // accumulated from chunks that carry Usage (Anthropic message_delta)
+	var ttftMs *int64                  // INSTR-01: nil until first successful Recv()
+	var ttftSet bool                   // set to true after first Recv() success
 	var snippetBuilder strings.Builder // INSTR-03: accumulates Delta.Content up to bodySnippetLimit
 
 	for {
@@ -271,11 +293,14 @@ func handleStreamingResponse(
 			if usage == nil {
 				usage = &model.Usage{}
 			}
+			cost := computeCost(cm, result.DeploymentUsed, usage)
 			if store != nil {
 				go logRequest(logRequestParams{
 					Store:           store,
 					SpendAcc:        sa,
 					CostMap:         cm,
+					TotalCost:       cost,
+					CostKnown:       true,
 					Budget:          budget,
 					PoolName:        poolName,
 					APIKeyID:        apiKeyID,
@@ -291,17 +316,17 @@ func handleStreamingResponse(
 					ReqBodySnippet:  reqBodySnippet,
 				})
 			}
-			return
+			return usage, cost, nil
 		}
 		if err != nil {
 			// STREAM-04: client disconnect is not a provider failure.
 			// Return without calling ReportFailure.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return
+				return nil, 0, err
 			}
 			// Mid-stream error from provider — report failure.
 			r.ReportFailure(result.DeploymentUsed)
-			return
+			return nil, 0, err
 		}
 
 		// INSTR-01: Record TTFT at first successful stream.Recv(), NOT at Flush().
@@ -333,7 +358,7 @@ func handleStreamingResponse(
 
 		data, err := json.Marshal(chunk)
 		if err != nil {
-			return
+			return nil, 0, err
 		}
 
 		fmt.Fprintf(w, "data: %s\n\n", data)
@@ -347,6 +372,8 @@ type logRequestParams struct {
 	Store           storage.Storage
 	SpendAcc        *keystore.SpendAccumulator
 	CostMap         *costmap.Manager
+	TotalCost       float64
+	CostKnown       bool
 	Budget          *router.PoolBudgetManager
 	PoolName        string
 	APIKeyID        *int64
@@ -376,13 +403,9 @@ func logRequest(p logRequestParams) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var totalCost float64
-	if p.CostMap != nil && p.Usage != nil {
-		spec := p.CostMap.GetEffectiveSpec(p.Deployment.ModelName, []string{p.Deployment.ActualModel})
-		totalCost = float64(p.Usage.PromptTokens)*spec.Spec.InputCostPerToken +
-			float64(p.Usage.CompletionTokens)*spec.Spec.OutputCostPerToken +
-			float64(p.Usage.CacheReadTokens)*spec.Spec.CacheReadInputTokenCost +
-			float64(p.Usage.CacheWriteTokens)*spec.Spec.CacheCreationInputTokenCost
+	totalCost := p.TotalCost
+	if !p.CostKnown {
+		totalCost = computeCost(p.CostMap, p.Deployment, p.Usage)
 	}
 
 	log := &storage.RequestLog{
@@ -399,10 +422,10 @@ func logRequest(p logRequestParams) {
 		RequestTime:      p.StartTime,
 		IsStreaming:      p.IsStreaming,
 		DeploymentKey:    p.Deployment.DeploymentKey(),
-		PoolName:         p.PoolName,           // INSTR-02: wired from poolName param
-		TTFTMs:           p.TTFTMs,             // INSTR-01: nil for non-streaming
-		RespBodySnippet:  p.RespBodySnippet,    // INSTR-03: empty for non-streaming
-		ReqBodySnippet:   p.ReqBodySnippet,     // Phase 14: nil *string → SQL NULL when disabled
+		PoolName:         p.PoolName,               // INSTR-02: wired from poolName param
+		TTFTMs:           p.TTFTMs,                 // INSTR-01: nil for non-streaming
+		RespBodySnippet:  p.RespBodySnippet,        // INSTR-03: empty for non-streaming
+		ReqBodySnippet:   p.ReqBodySnippet,         // Phase 14: nil *string → SQL NULL when disabled
 		CacheReadTokens:  p.Usage.CacheReadTokens,  // INSTR-04: 0 for non-Anthropic
 		CacheWriteTokens: p.Usage.CacheWriteTokens, // INSTR-04: 0 for non-Anthropic
 	}
@@ -420,6 +443,18 @@ func logRequest(p logRequestParams) {
 	if p.Budget != nil && p.PoolName != "" && totalCost > 0 {
 		p.Budget.Credit(p.PoolName, totalCost)
 	}
+}
+
+// computeCost is an in-memory lookup; it must complete before a request span ends.
+func computeCost(cm *costmap.Manager, deployment *provider.Deployment, usage *model.Usage) float64 {
+	if cm == nil || deployment == nil || usage == nil {
+		return 0
+	}
+	spec := cm.GetEffectiveSpec(deployment.ModelName, []string{deployment.ActualModel})
+	return float64(usage.PromptTokens)*spec.Spec.InputCostPerToken +
+		float64(usage.CompletionTokens)*spec.Spec.OutputCostPerToken +
+		float64(usage.CacheReadTokens)*spec.Spec.CacheReadInputTokenCost +
+		float64(usage.CacheWriteTokens)*spec.Spec.CacheCreationInputTokenCost
 }
 
 // emitRoutingEvents inspects a RouteResult and emits webhook events for

@@ -21,6 +21,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // errNotResponsesProvider signals that the routed deployment does not implement
@@ -29,7 +30,11 @@ var errNotResponsesProvider = errors.New("model does not support the Responses A
 
 // Responses handles POST /v1/responses requests: synchronous, streaming, and
 // background (async) creation, per ADR 010.
-func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings) http.HandlerFunc {
+func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings, tracers ...trace.Tracer) http.HandlerFunc {
+	var tracer trace.Tracer
+	if len(tracers) > 0 {
+		tracer = tracers[0]
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		startTime := time.Now()
@@ -79,12 +84,15 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
+		ctx, operation := beginOperation(ctx, tracer, "generate_content", respReq.Model, respReq.Stream)
+		defer operation.end()
 
 		var respResult *model.ResponsesResponse
 		var respStream provider.ResponsesStream
 		result := r.Route(ctx, respReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
 			rp, ok := d.Provider.(provider.ResponsesProvider)
 			if !ok {
+				operation.failedAttempt(d, errNotResponsesProvider)
 				return nil, nil, errNotResponsesProvider
 			}
 			providerReq := respReq
@@ -93,6 +101,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			if respReq.Stream {
 				stream, err := rp.CreateResponseStream(ctx, &providerReq)
 				if err != nil {
+					operation.failedAttempt(d, err)
 					return nil, nil, err
 				}
 				respStream = stream
@@ -101,6 +110,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 
 			resp, err := rp.CreateResponse(ctx, &providerReq)
 			if err != nil {
+				operation.failedAttempt(d, err)
 				return nil, nil, err
 			}
 			respResult = resp
@@ -111,6 +121,8 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		emitRoutingEvents(dispatcher, r, result, respReq.Model, requestID)
 
 		if result.Error != nil {
+			operation.finish(result, nil, 0)
+			operation.fail(result.Error)
 			if errors.Is(result.Error, errNotResponsesProvider) {
 				model.WriteError(w, model.ErrBadRequest(errNotResponsesProvider.Error()+": "+respReq.Model))
 				return
@@ -135,7 +147,9 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		// completes (see handleResponsesStream's EOF branch), not at stream-open —
 		// a mid-stream failure must still count as a deployment failure.
 		if respReq.Stream {
-			handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet)
+			usage, cost, err := handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet)
+			operation.finish(result, usage, cost)
+			operation.fail(err)
 			return
 		}
 		r.ReportSuccess(result.DeploymentUsed)
@@ -143,6 +157,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		if respReq.Background && respResult.Status != "completed" && respResult.Status != "failed" {
 			if store != nil {
 				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq); err != nil {
+					operation.fail(err)
 					// The upstream job was already created — the client must not receive a
 					// response_id that GET /v1/responses/{id} can never resolve.
 					fmt.Fprintf(os.Stderr, "Responses: failed to persist background job %s (request_id=%s): %v\n", respResult.ID, requestID, err)
@@ -150,17 +165,22 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 					return
 				}
 			}
+			operation.finish(result, nil, 0)
 			router.SetRouteHeaders(w, result)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(respResult)
 			return
 		}
 
+		cost := computeCost(cm, result.DeploymentUsed, respResult.Usage)
+		operation.finish(result, respResult.Usage, cost)
 		if store != nil && respResult.Usage != nil {
 			go logRequest(logRequestParams{
 				Store:           store,
 				SpendAcc:        sa,
 				CostMap:         cm,
+				TotalCost:       cost,
+				CostKnown:       true,
 				Budget:          budget,
 				PoolName:        result.PoolName,
 				APIKeyID:        apiKeyID,
@@ -198,7 +218,7 @@ func handleResponsesStream(
 	apiKeyID *int64,
 	startTime time.Time,
 	reqBodySnippet *string,
-) {
+) (*model.Usage, float64, error) {
 	defer stream.Close()
 
 	router.SetRouteHeaders(w, result)
@@ -209,7 +229,7 @@ func handleResponsesStream(
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return
+		return nil, 0, fmt.Errorf("streaming response writer does not support flushing")
 	}
 
 	var finalUsage *model.Usage
@@ -218,15 +238,18 @@ func handleResponsesStream(
 		event, err := stream.Recv()
 		if err == io.EOF {
 			r.ReportSuccess(result.DeploymentUsed)
+			usage := finalUsage
+			if usage == nil {
+				usage = &model.Usage{}
+			}
+			cost := computeCost(cm, result.DeploymentUsed, usage)
 			if store != nil {
-				usage := finalUsage
-				if usage == nil {
-					usage = &model.Usage{}
-				}
 				go logRequest(logRequestParams{
 					Store:           store,
 					SpendAcc:        sa,
 					CostMap:         cm,
+					TotalCost:       cost,
+					CostKnown:       true,
 					Budget:          budget,
 					PoolName:        result.PoolName,
 					APIKeyID:        apiKeyID,
@@ -242,14 +265,14 @@ func handleResponsesStream(
 					ReqBodySnippet:  reqBodySnippet,
 				})
 			}
-			return
+			return usage, cost, nil
 		}
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return
+				return nil, 0, err
 			}
 			r.ReportFailure(result.DeploymentUsed)
-			return
+			return nil, 0, err
 		}
 
 		if event.Response != nil && event.Response.Usage != nil {
@@ -258,7 +281,7 @@ func handleResponsesStream(
 
 		data, err := json.Marshal(event)
 		if err != nil {
-			return
+			return nil, 0, err
 		}
 		// The Responses API's SSE contract pairs each data line with an `event:`
 		// line naming the event type (response.created, response.completed, ...);

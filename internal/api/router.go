@@ -17,18 +17,24 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // NewRouter creates a new HTTP router with all routes configured.
 // sm is the SCS session manager (must not be nil).
 // oidcProvider may be nil when OIDC is not configured — auth routes will return 503.
 // cache, rl, sa are the keystore enforcement objects created at startup.
-func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloader, cm *costmap.Manager, startTime time.Time, spec *openapi.Spec, sm *scs.SessionManager, oidcProvider *auth.OIDCProvider, cache *keystore.Cache, rl *keystore.RateLimiter, sa *keystore.SpendAccumulator, dispatcher *webhook.WebhookDispatcher) *chi.Mux {
+func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloader, cm *costmap.Manager, startTime time.Time, spec *openapi.Spec, sm *scs.SessionManager, oidcProvider *auth.OIDCProvider, cache *keystore.Cache, rl *keystore.RateLimiter, sa *keystore.SpendAccumulator, dispatcher *webhook.WebhookDispatcher, tracers ...trace.Tracer) *chi.Mux {
 	mux := chi.NewRouter()
+	var tracer trace.Tracer
+	if len(tracers) > 0 {
+		tracer = tracers[0]
+	}
 
 	// Global middleware
 	mux.Use(middleware.Recovery())
 	mux.Use(middleware.RequestID())
+	mux.Use(middleware.OTel(tracer))
 	mux.Use(middleware.Logging())
 	mux.Use(middleware.CORS([]string{
 		"http://localhost:5173",
@@ -60,12 +66,12 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		})) // Phase 14: capture req body snippet before json.NewDecoder; reload-aware getter
 
 		// OpenAI-compatible endpoints
-		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
+		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/v1/completions", handler.Completions())
-		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher))
+		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
 		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
-		mux.Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
+		mux.Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Get("/v1/responses/{id}", handler.GetResponseJob(store))
 		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store))
 		mux.Get("/v1/models", handler.Models(r))
@@ -84,7 +90,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Get("/admin/config", handler.AdminConfig(reloader.Config))
 		mux.Post("/admin/reload", handler.AdminReload(reloader, r))
 		mux.Get("/admin/logs", handler.AdminLogs(store))
-		mux.Get("/admin/logs/meta", handler.AdminLogsMeta(store))        // D-09: literal route MUST be before wildcard
+		mux.Get("/admin/logs/meta", handler.AdminLogsMeta(store))         // D-09: literal route MUST be before wildcard
 		mux.Get("/admin/logs/{requestID}", handler.AdminLogDetail(store)) // wildcard — registered second
 
 		// Cost map endpoints
@@ -96,8 +102,8 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Model endpoints mirrored for session-auth browser clients
 		mux.Get("/admin/models", handler.Models(r))
 		mux.Get("/admin/models/{model}", handler.ModelDetail(r, cm))
-		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings))
-		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher))
+		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
 		// Identity and key management CRUD routes
 		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)

@@ -292,6 +292,8 @@ type Application struct {
 type APIKey struct {
 	ID            int64    `json:"id"`
 	ApplicationID int64    `json:"application_id"`
+	AppName       string   `json:"-"` // populated on key-cache lookup
+	TeamName      string   `json:"-"` // populated on key-cache lookup
 	Name          string   `json:"name"`
 	KeyPrefix     string   `json:"key_prefix"` // first 8 chars after "sk-app-"
 	KeyHash       string   `json:"-"`          // SHA-256 hex — never serialized to JSON

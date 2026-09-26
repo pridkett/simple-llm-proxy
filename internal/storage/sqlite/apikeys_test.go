@@ -100,6 +100,9 @@ func TestGetAPIKeyByHash(t *testing.T) {
 	if found.KeyHash != "hashvalue1" {
 		t.Errorf("hash: got %q, want %q", found.KeyHash, "hashvalue1")
 	}
+	if found.AppName != "app1" || found.TeamName != "team1" {
+		t.Errorf("cache-fill names: app=%q team=%q", found.AppName, found.TeamName)
+	}
 
 	// Not found case — must return (nil, nil)
 	notFound, err := s.GetAPIKeyByHash(ctx, "nonexistent")

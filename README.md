@@ -114,6 +114,30 @@ api_key: os.environ/OPENAI_API_KEY
 master_key: os.environ/PROXY_MASTER_KEY
 ```
 
+### OpenTelemetry traces
+
+Tracing is disabled by default. To export HTTP and LLM operation spans to an
+OTLP collector, add:
+
+```yaml
+otel_settings:
+  enabled: true
+  service_name: simple-llm-proxy
+  sampling_ratio: 1.0                 # 0.0–1.0; parent-based sampling
+  exporter:
+    protocol: http                    # http or grpc
+    endpoint: https://collector.example.com:4318
+    headers:
+      Authorization: os.environ/OTEL_AUTH_HEADER
+```
+
+For OTLP/HTTP, a bare host endpoint sends to `/v1/traces`; an endpoint with a
+path uses that path as-is. OTLP/gRPC endpoints use a host URL without a path.
+For a local plaintext collector, use an `http://` endpoint and set
+`insecure: true`. Header values support `os.environ/VAR_NAME` expansion.
+The child LLM span covers retries and records failed attempts as events;
+request bodies, API key values, and key hashes are never attached to spans.
+
 ### Multiple Deployments
 
 You can configure multiple deployments for the same model name for load balancing:
