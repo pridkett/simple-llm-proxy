@@ -154,7 +154,7 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		       ul.req_body_snippet,
 		       COALESCE(ul.resp_body_snippet, ''),
 		       ul.cache_read_tokens,
-		       ul.cache_write_tokens
+		       ul.cache_write_tokens, ul.usage_known
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
@@ -184,8 +184,9 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 			&ttftNull,
 			&entry.ReqBodySnippet,
 			&entry.RespBodySnippet,
-			&entry.CacheReadTokens,   // plain int — NOT NULL DEFAULT 0 in DB
-			&entry.CacheWriteTokens,  // plain int — NOT NULL DEFAULT 0 in DB
+			&entry.CacheReadTokens,  // plain int — NOT NULL DEFAULT 0 in DB
+			&entry.CacheWriteTokens, // plain int — NOT NULL DEFAULT 0 in DB
+			&entry.UsageKnown,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning log: %w", err)
 		}
@@ -211,8 +212,8 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 			status_code, latency_ms, request_time,
 			is_streaming, deployment_key,
 			pool_name, ttft_ms, req_body_snippet, resp_body_snippet,
-			cache_read_tokens, cache_write_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			cache_read_tokens, cache_write_tokens, usage_known
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		log.RequestID,
 		log.APIKeyID,
@@ -233,6 +234,7 @@ func (s *Storage) LogRequest(ctx context.Context, log *storage.RequestLog) error
 		log.RespBodySnippet,
 		log.CacheReadTokens,
 		log.CacheWriteTokens,
+		log.UsageKnown,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting log: %w", err)

@@ -21,6 +21,7 @@ type logDetailEntry struct {
 	InputTokens   int       `json:"prompt_tokens"`
 	OutputTokens  int       `json:"completion_tokens"`
 	TotalTokens   int       `json:"total_tokens"`
+	UsageKnown    bool      `json:"usage_known"`
 	TotalCost     float64   `json:"total_cost"`
 	StatusCode    int       `json:"status_code"`
 	LatencyMS     int64     `json:"latency_ms"`
@@ -68,6 +69,7 @@ func AdminLogDetail(store storage.Storage) http.HandlerFunc {
 			OutputTokens:     log.OutputTokens,
 			TotalTokens:      log.InputTokens + log.OutputTokens,
 			TotalCost:        log.TotalCost,
+			UsageKnown:       log.UsageKnown,
 			StatusCode:       log.StatusCode,
 			LatencyMS:        log.LatencyMS,
 			RequestTime:      log.RequestTime,

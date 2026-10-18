@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
@@ -24,7 +25,7 @@ const (
 // for downstream response headers (X-Provider-Used, X-Providers-Tried).
 type RouteResult struct {
 	Response         *model.ChatCompletionResponse
-	Stream           provider.Stream  // nil for non-streaming
+	Stream           provider.Stream // nil for non-streaming
 	DeploymentUsed   *provider.Deployment
 	DeploymentsTried []*provider.Deployment
 	FailoverReasons  []FailoverReason
@@ -44,7 +45,7 @@ type RouteCallback func(d *provider.Deployment) (*model.ChatCompletionResponse, 
 // that performs the actual provider call. Route does NOT call ReportSuccess — the
 // handler calls it after confirming the full response was delivered (for streaming,
 // at EOF per STREAM-01).
-func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, cb RouteCallback) *RouteResult {
+func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, cb RouteCallback, opts ...RouteOptions) *RouteResult {
 	result := &RouteResult{}
 
 	// Check context cancellation before starting.
@@ -59,7 +60,7 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 	r.mu.RUnlock()
 
 	if hasPool {
-		result = r.routePool(ctx, pool, stickyKey, cb, result)
+		result = r.routePool(ctx, pool, stickyKey, cb, result, opts...)
 		if result.Error == nil {
 			return result
 		}
@@ -85,7 +86,7 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 				altResult := &RouteResult{
 					FailoverReasons: result.FailoverReasons, // carry forward
 				}
-				altResult = r.routePool(ctx, altPool, stickyKey, cb, altResult)
+				altResult = r.routePool(ctx, altPool, stickyKey, cb, altResult, opts...)
 				if altResult.Error == nil {
 					return altResult
 				}
@@ -104,14 +105,14 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 		}
 		return result
 	}
-	return r.routeLegacy(ctx, modelName, cb, result)
+	return r.routeLegacy(ctx, modelName, cb, result, opts...)
 }
 
 // routePool routes through a pool's member deployments, trying each healthy
 // member in the order determined by the pool's strategy until one succeeds.
 // If stickyKey is non-empty and a cached mapping exists, the sticky deployment
 // is tried first. On success, the sticky mapping is updated (or created).
-func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb RouteCallback, result *RouteResult) *RouteResult {
+func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb RouteCallback, result *RouteResult, opts ...RouteOptions) *RouteResult {
 	// Set pool name on result for handler budget crediting.
 	result.PoolName = pool.Name
 
@@ -131,6 +132,8 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 		}
 	}
 
+	var lastErr error
+
 	// --- Sticky session: try cached deployment first ---
 	if stickyKey != "" && r.sticky != nil {
 		if cachedKey := r.sticky.Get(stickyKey, pool.Name); cachedKey != "" {
@@ -143,7 +146,7 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 					return result
 				}
 
-				resp, stream, err := cb(stickyDep)
+				resp, stream, err := r.invoke(stickyDep, cb, opts...)
 				if err == nil {
 					result.Response = resp
 					result.Stream = stream
@@ -151,10 +154,17 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 					return result
 				}
 
+				if provider.IsInvalidRequest(err) {
+					result.Error = err
+					return result
+				}
 				// Sticky deployment failed — report and remove from healthy list.
+				lastErr = err
 				var rlErr *provider.RateLimitError
 				if errors.As(err, &rlErr) {
-					r.ReportRateLimit(stickyDep, rlErr.RetryAfter)
+					if !rlErr.Local {
+						r.ReportRateLimit(stickyDep, rlErr.RetryAfter)
+					}
 					result.FailoverReasons = append(result.FailoverReasons, FailoverRateLimited)
 				} else {
 					r.ReportFailure(stickyDep)
@@ -168,11 +178,6 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 	}
 
 	// --- Strategy-based selection with failover ---
-	var lastErr error
-	if len(result.FailoverReasons) > 0 {
-		// Carry forward the error from sticky attempt.
-		lastErr = result.Error
-	}
 
 	for len(healthy) > 0 {
 		deployment := pool.Strategy.Select(healthy)
@@ -188,7 +193,7 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 			return result
 		}
 
-		resp, stream, err := cb(deployment)
+		resp, stream, err := r.invoke(deployment, cb, opts...)
 		if err == nil {
 			result.Response = resp
 			result.Stream = stream
@@ -202,10 +207,16 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 		}
 
 		lastErr = err
+		if provider.IsInvalidRequest(err) {
+			result.Error = err
+			return result
+		}
 
 		var rlErr *provider.RateLimitError
 		if errors.As(err, &rlErr) {
-			r.ReportRateLimit(deployment, rlErr.RetryAfter)
+			if !rlErr.Local {
+				r.ReportRateLimit(deployment, rlErr.RetryAfter)
+			}
 			result.FailoverReasons = append(result.FailoverReasons, FailoverRateLimited)
 		} else {
 			r.ReportFailure(deployment)
@@ -217,6 +228,9 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 	}
 
 	// All pool members exhausted.
+	if lastErr == nil {
+		lastErr = r.unavailable(pool.Members)
+	}
 	result.Error = lastErr
 	return result
 }
@@ -233,7 +247,7 @@ func findDeploymentByKey(deployments []*provider.Deployment, key string) *provid
 
 // routeLegacy routes using the pre-pool GetDeploymentWithRetry path for
 // backward compatibility with models not assigned to any pool.
-func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCallback, result *RouteResult) *RouteResult {
+func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCallback, result *RouteResult, opts ...RouteOptions) *RouteResult {
 	tried := make(map[*provider.Deployment]bool)
 	var lastErr error
 
@@ -242,7 +256,14 @@ func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCall
 		if err != nil {
 			if attempt == 0 {
 				// First attempt — model doesn't exist.
-				result.Error = fmt.Errorf("model not found: %s", modelName)
+				r.mu.RLock()
+				deps, exists := r.deployments[modelName]
+				r.mu.RUnlock()
+				if !exists {
+					result.Error = model.ErrModelNotFound(modelName)
+				} else {
+					result.Error = r.unavailable(deps)
+				}
 				return result
 			}
 			// All deployments tried.
@@ -258,7 +279,7 @@ func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCall
 			return result
 		}
 
-		resp, stream, err := cb(d)
+		resp, stream, err := r.invoke(d, cb, opts...)
 		if err == nil {
 			result.Response = resp
 			result.Stream = stream
@@ -267,10 +288,16 @@ func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCall
 		}
 
 		lastErr = err
+		if provider.IsInvalidRequest(err) {
+			result.Error = err
+			return result
+		}
 
 		var rlErr *provider.RateLimitError
 		if errors.As(err, &rlErr) {
-			r.ReportRateLimit(d, rlErr.RetryAfter)
+			if !rlErr.Local {
+				r.ReportRateLimit(d, rlErr.RetryAfter)
+			}
 			result.FailoverReasons = append(result.FailoverReasons, FailoverRateLimited)
 		} else {
 			r.ReportFailure(d)
@@ -292,4 +319,22 @@ func removeDeployment(ds []*provider.Deployment, target *provider.Deployment) []
 		}
 	}
 	return out
+}
+
+// No eligible deployment is a temporary capacity failure, not an unknown model.
+func (r *Router) unavailable(deps []*provider.Deployment) error {
+	var retry time.Duration
+	for _, d := range deps {
+		if wait := r.backoff.RetryAfter(d.DeploymentKey()); wait > 0 && (retry == 0 || wait < retry) {
+			retry = wait
+		}
+	}
+	if retry > 0 {
+		return &provider.RateLimitError{Provider: "all deployments", RetryAfter: retry}
+	}
+	name := "configured model"
+	if len(deps) > 0 {
+		name = deps[0].ModelName
+	}
+	return model.ErrNoDeploymentAvailable(name)
 }

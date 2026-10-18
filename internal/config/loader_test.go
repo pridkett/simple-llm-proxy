@@ -501,3 +501,37 @@ general_settings:
 		t.Errorf("LogRetentionDays: got %d, want 7", cfg.GeneralSettings.LogRetentionDays)
 	}
 }
+
+func TestPoolEnabledParsing(t *testing.T) {
+	for _, value := range []string{"false", "true", "\"invalid\""} {
+		t.Run(value, func(t *testing.T) {
+			cfg, err := Parse([]byte("model_list:\n  - model_name: test\n    litellm_params:\n      model: openai/test\n      api_key: dummy\nprovider_pools:\n  - name: pool\n    enabled: " + value + "\n    members:\n      - model_name: test\n"))
+			if value == "\"invalid\"" {
+				if err == nil {
+					t.Fatal("invalid boolean accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.ProviderPools[0].Enabled == nil || *cfg.ProviderPools[0].Enabled != (value == "true") {
+				t.Fatal("enabled flag lost")
+			}
+		})
+	}
+}
+
+func TestDeploymentEnvironmentExpansion(t *testing.T) {
+	t.Setenv("PILOT_DB", "/data/proxy.db")
+	t.Setenv("PILOT_ISSUER", "https://idp.example")
+	t.Setenv("PILOT_REDIRECT", "http://localhost:5173/auth/callback")
+	t.Setenv("PILOT_FRONTEND", "/app/frontend/dist")
+	cfg, err := Parse([]byte("model_list:\n - model_name: test\n   litellm_params:\n     model: openai/test\n     api_key: unused\ngeneral_settings:\n database_url: os.environ/PILOT_DB\n frontend_dir: os.environ/PILOT_FRONTEND\noidc_settings:\n issuer_url: os.environ/PILOT_ISSUER\n client_id: test\n client_secret: test\n redirect_url: os.environ/PILOT_REDIRECT\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GeneralSettings.DatabaseURL != "/data/proxy.db" || cfg.GeneralSettings.FrontendDir != "/app/frontend/dist" || cfg.OIDCSettings.IssuerURL != "https://idp.example" || cfg.OIDCSettings.RedirectURL != "http://localhost:5173/auth/callback" {
+		t.Fatal("deployment environment expansion failed")
+	}
+}

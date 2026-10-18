@@ -96,8 +96,9 @@ type GeneralSettings struct {
 // and optional daily budget cap. Configured via the provider_pools: YAML section.
 type ProviderPool struct {
 	Name           string       `yaml:"name"`
-	Strategy       string       `yaml:"strategy"`         // weighted-round-robin | round-robin | shuffle; default: inherits router_settings
-	BudgetCapDaily float64      `yaml:"budget_cap_daily"` // 0 = unlimited
+	Enabled        *bool        `yaml:"enabled,omitempty"` // omitted = enabled, for existing configurations
+	Strategy       string       `yaml:"strategy"`          // weighted-round-robin | round-robin | shuffle; default: inherits router_settings
+	BudgetCapDaily float64      `yaml:"budget_cap_daily"`  // 0 = unlimited
 	Members        []PoolMember `yaml:"members"`
 }
 

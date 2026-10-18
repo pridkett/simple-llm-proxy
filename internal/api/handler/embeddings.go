@@ -100,8 +100,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 				return nil, nil, err
 			}
 			embResp = resp
-			return nil, nil, nil // signal success via nil error
-		})
+			return &model.ChatCompletionResponse{Usage: resp.Usage}, nil, nil // internal usage for capacity reconciliation
+		}, router.RouteOptions{EstimatedTokens: embReq.EstimatedTokens()})
 
 		// Emit routing events to webhook dispatcher.
 		requestID := middleware.RequestIDFromContext(ctx)
@@ -117,11 +117,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 					return
 				}
 			}
-			if len(result.DeploymentsTried) == 0 {
-				model.WriteError(w, model.ErrModelNotFound(embReq.Model))
-			} else {
-				model.WriteError(w, model.ErrProviderError("all providers", result.Error))
-			}
+			model.WriteError(w, model.ErrProviderError("all providers", result.Error))
 			return
 		}
 
@@ -135,7 +131,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		operation.finish(result, usage, cost)
 
 		// Log the request if storage is available
-		if store != nil && embResp != nil && embResp.Usage != nil {
+		if store != nil && embResp != nil {
 			go logRequest(logRequestParams{
 				Store:           store,
 				SpendAcc:        sa,

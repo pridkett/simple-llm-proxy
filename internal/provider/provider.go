@@ -114,8 +114,10 @@ type SafetySetting struct {
 // Callers (router, handler) check for this type with errors.As to apply backoff
 // rather than treating the response as a hard failure.
 type RateLimitError struct {
-	Provider   string
-	RetryAfter time.Duration
+	Local        bool // capacity admission rejection, not an upstream 429
+	ResponseBody []byte
+	Provider     string
+	RetryAfter   time.Duration
 }
 
 func (e *RateLimitError) Error() string {
@@ -164,6 +166,15 @@ func (s *streamAdapter) Recv() (*model.StreamChunk, error) {
 	select {
 	case chunk, ok := <-s.chunks:
 		if !ok {
+			// A buffered transport error must win over a simultaneously closed
+			// data channel, otherwise truncated streams look successful.
+			select {
+			case err := <-s.errs:
+				if err != nil {
+					return nil, err
+				}
+			default:
+			}
 			return nil, io.EOF
 		}
 		return chunk, nil
@@ -202,6 +213,15 @@ func (s *responsesStreamAdapter) Recv() (*model.ResponsesStreamEvent, error) {
 	select {
 	case event, ok := <-s.events:
 		if !ok {
+			// A buffered transport error must win over a simultaneously closed
+			// data channel, otherwise truncated streams look successful.
+			select {
+			case err := <-s.errs:
+				if err != nil {
+					return nil, err
+				}
+			default:
+			}
 			return nil, io.EOF
 		}
 		return event, nil

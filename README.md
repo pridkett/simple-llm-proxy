@@ -1,18 +1,20 @@
 # Simple LLM Proxy
 
-A lightweight Go-based LLM proxy server inspired by LiteLLM, providing OpenAI-compatible endpoints with multi-provider support.
+A Go proxy for apps using OpenAI-compatible chat completions. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
+
+For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
 
 ## Features
 
-- **OpenAI-compatible API** - Drop-in replacement for OpenAI API clients
-- **Multi-provider support** - Route requests to OpenAI or Anthropic
+- **OpenAI-compatible API** - Chat completions, streamed tools, and embeddings
+- **Multi-provider support** - Route requests to OpenAI, OpenRouter, Anthropic, and Ollama
 - **Automatic message translation** - Converts OpenAI format to Anthropic format transparently
 - **Streaming support** - Full SSE streaming for both providers
 - **Load balancing** - Simple shuffle or round-robin routing strategies
 - **Failover & retries** - Automatic retry with cooldown for failed deployments
 - **LiteLLM-compatible config** - Uses familiar `model_list` YAML format with `os.environ/` expansion
 - **Usage logging** - SQLite-based request tracking
-- **Master key auth** - Simple bearer token authentication
+- **App keys** - Per-app keys with model restrictions, revocation, and usage attribution; OIDC protects administration
 - **OpenAPI specification** - Dynamic OpenAPI 3.0 spec available at `/openapi.json`
 
 ## Installation
@@ -20,14 +22,14 @@ A lightweight Go-based LLM proxy server inspired by LiteLLM, providing OpenAI-co
 ### From Source
 
 ```bash
-git clone https://github.com/pwagstro/simple_llm_proxy.git
-cd simple_llm_proxy
-make build
+git clone https://github.com/pridkett/simple-llm-proxy.git
+cd simple-llm-proxy
+just build
 ```
 
 ### Dependencies
 
-- Go 1.21+
+- Go 1.25.4+
 - No CGO required (uses pure Go SQLite)
 
 ## Quick Start
@@ -49,7 +51,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 3. **Run the proxy:**
 
 ```bash
-make run
+just run
 # or
 ./bin/proxy -config config.yaml
 ```
@@ -75,7 +77,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 
 ## Configuration
 
-The proxy uses a LiteLLM-compatible YAML configuration format:
+The proxy uses a subset of LiteLLM’s YAML configuration format. Configure explicit client-facing model aliases; this does not import every LiteLLM feature or wildcard route:
 
 ```yaml
 model_list:
@@ -163,14 +165,14 @@ model_list:
 | GET | `/openapi.json` | OpenAPI 3.0 specification (no auth required) |
 | GET | `/v1/models` | List available models |
 | POST | `/v1/chat/completions` | Chat completions (streaming supported) |
-| POST | `/v1/embeddings` | Generate embeddings (OpenAI only) |
+| POST | `/v1/embeddings` | Generate embeddings (compatible providers) |
 
 ### Authentication
 
 All `/v1/*` endpoints require authentication via bearer token:
 
 ```bash
-curl -H "Authorization: Bearer your-master-key" http://localhost:8080/v1/models
+curl -H "Authorization: Bearer your-app-key" http://localhost:8080/v1/models
 ```
 
 ### Streaming
@@ -196,20 +198,20 @@ The proxy serves a dynamic OpenAPI 3.0 specification at `/openapi.json`:
 curl http://localhost:8080/openapi.json | jq .
 ```
 
-The spec documents all endpoints, request/response schemas, and authentication requirements. You can use it with tools like Swagger UI or import it into API clients.
+The spec describes the API surface; consult the pilot guide for compatibility boundaries. You can use it with tools like Swagger UI or import it into API clients.
 
 ## Supported Providers
 
 ### OpenAI
 
-Full support for:
+Supported paths:
 - Chat completions (`/v1/chat/completions`)
 - Embeddings (`/v1/embeddings`)
 - Streaming
 
 ### Anthropic
 
-Full support for:
+Supported paths:
 - Chat completions (automatically translated from OpenAI format)
 - Streaming
 - Tool/function calling
@@ -220,6 +222,8 @@ The proxy automatically:
 - Translates tool calls between formats
 - Converts stop reasons (`end_turn` → `stop`, etc.)
 
+OpenRouter and Ollama use their OpenAI-compatible endpoints. Ollama `api_base` must include `/v1`. Anthropic requests are translated: common chat and tools are supported, but arbitrary provider-specific options are not passed through.
+
 ## Load Balancing
 
 ### Routing Strategies
@@ -227,6 +231,8 @@ The proxy automatically:
 **simple-shuffle** (default): Randomly selects from healthy deployments.
 
 **round-robin**: Cycles through deployments in order.
+
+Deployment `rpm` limits count upstream attempts in a process-local minute window. Chat and embedding `tpm` limits reserve estimated input plus maximum output and reconcile reported usage. Estimates are conservative for text and are not tokenizer or multimodal accounting. Quotas are not shared across proxy replicas; Responses TPM reservations are not covered by this migration.
 
 ### Cooldown
 
@@ -236,16 +242,16 @@ When a deployment fails `allowed_fails` times, it enters cooldown for `cooldown_
 
 ```bash
 # Run tests
-make test
+just test
 
 # Run tests with coverage
-make test-coverage
+just test-coverage
 
 # Format code
-make fmt
+just fmt
 
 # Build for all platforms
-make build-all
+just build-all
 ```
 
 ## Project Structure
@@ -267,7 +273,7 @@ simple_llm_proxy/
 │   ├── router/                 # Load balancing logic
 │   └── storage/sqlite/         # SQLite storage
 ├── config.yaml.example
-├── Makefile
+├── justfile
 └── go.mod
 ```
 

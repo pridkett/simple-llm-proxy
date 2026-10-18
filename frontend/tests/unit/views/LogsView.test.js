@@ -150,3 +150,13 @@ describe('LogsView', () => {
     expect(api.logDetail.mock.calls.length).toBe(callCountAfterExpand)
   })
 })
+
+it('shows unknown usage without presenting a zero cost', async () => {
+  setupMocks()
+  api.logs.mockResolvedValue({ ...mockLogsData, logs: [{ ...mockLogsData.logs[0], usage_known: false, prompt_tokens: 0, completion_tokens: 0, total_cost: 0 }] })
+  const wrapper = mount(LogsView, { global: { plugins: [makeRouter()] } })
+  await flushPromises()
+  expect(wrapper.find('tbody').text()).toContain('Unknown')
+  expect(wrapper.find('tbody').text()).not.toContain('$0.000000')
+  wrapper.unmount()
+})

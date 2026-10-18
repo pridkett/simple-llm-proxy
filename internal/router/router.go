@@ -23,6 +23,7 @@ type Router struct {
 	pools       map[string]*Pool // pool name -> Pool
 	modelToPool map[string]*Pool // model name -> Pool (for Route() lookup)
 	sticky      *StickySessionManager
+	capacity    *capacityLimiter
 	budget      *PoolBudgetManager
 }
 
@@ -38,6 +39,7 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(store),
 		budget:      NewPoolBudgetManager(),
+		capacity:    newCapacityLimiter(),
 	}
 
 	// Initialize strategy
@@ -503,6 +505,9 @@ func buildPools(
 	modelToPool := make(map[string]*Pool)
 
 	for _, pc := range poolConfigs {
+		if pc.Enabled != nil && !*pc.Enabled {
+			continue
+		}
 		// Collect member deployments and build weights map.
 		var members []*provider.Deployment
 		weights := make(map[string]int)

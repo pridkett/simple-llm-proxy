@@ -1,0 +1,39 @@
+# Start only the proxy first; the OpenWebUI override is a separate cutover step.
+name: docker-services
+services:
+  simple-llm-proxy:
+    image: ${PROXY_IMAGE:-simple-llm-proxy:pilot}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-8088}:8080"
+    environment:
+      PROXY_MASTER_KEY: ${PROXY_MASTER_KEY:?Inject the proxy master key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Inject the upstream OpenAI key}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Inject the upstream Anthropic key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Inject the upstream OpenRouter key}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?Set the OIDC issuer URL}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?Inject the OIDC client ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Inject the OIDC client secret}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-http://localhost:5173/auth/callback}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434/v1}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - proxy-data:/data
+    networks:
+      - proxy-network
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 256m
+networks:
+  proxy-network:
+    external: true
+    name: ${PROXY_NETWORK:-proxy-network}
+volumes:
+  proxy-data:
+    name: simple-llm-proxy-data

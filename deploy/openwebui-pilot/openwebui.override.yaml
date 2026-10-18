@@ -1,0 +1,9 @@
+# Apply alongside the existing OpenWebUI compose files after the proxy passes UAT.
+# This changes only the OpenAI-compatible upstream, retaining the existing data,
+# OAuth, service, and network configuration from the original compose files.
+services:
+  openwebui:
+    environment:
+      OPENAI_API_BASE_URLS: http://simple-llm-proxy:8080/v1
+      OPENAI_API_KEYS: ${OPENWEBUI_PROXY_API_KEY:?Inject the dedicated OpenWebUI proxy key}
+      ENABLE_PERSISTENT_CONFIG: "false"

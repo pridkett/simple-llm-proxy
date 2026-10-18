@@ -96,13 +96,12 @@ func TestMigrationIdempotency(t *testing.T) {
 		t.Fatalf("second migrate() call failed (not idempotent): %v", err)
 	}
 
-	// schema_migrations should have exactly 45 rows (43 prior + 2 new ADR-010
-	// migrations: responses_jobs table and its status index).
+	// Prior schema plus the usage availability column and historical-row backfill.
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 45 {
-		t.Errorf("expected 45 rows in schema_migrations, got %d", count)
+	if count != 47 {
+		t.Errorf("expected 47 rows in schema_migrations, got %d", count)
 	}
 }

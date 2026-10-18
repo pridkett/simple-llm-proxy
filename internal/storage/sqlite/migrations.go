@@ -326,6 +326,9 @@ func (s *Storage) migrate(ctx context.Context) error {
 
 		// Migration 40: Index for the background worker's pending-job poll query.
 		`CREATE INDEX IF NOT EXISTS idx_responses_jobs_status ON responses_jobs(status)`,
+		// Preserve the distinction between unavailable usage and a measured zero.
+		`ALTER TABLE usage_logs ADD COLUMN usage_known BOOLEAN NOT NULL DEFAULT FALSE`,
+		`UPDATE usage_logs SET usage_known = TRUE WHERE input_tokens > 0 OR output_tokens > 0`,
 	}
 
 	for i, sql := range migrations {

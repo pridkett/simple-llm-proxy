@@ -124,9 +124,9 @@
                   <td class="px-4 py-3 font-medium">{{ log.model }}</td>
                   <td class="px-4 py-3 text-gray-600 capitalize">{{ log.provider }}</td>
                   <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ log.endpoint }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ (log.prompt_tokens || 0).toLocaleString() }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ (log.completion_tokens || 0).toLocaleString() }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600 font-mono text-xs">{{ formatCost(log.total_cost) }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600">{{ log.usage_known === false ? '—' : (log.prompt_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600">{{ log.usage_known === false ? '—' : (log.completion_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 font-mono text-xs">{{ log.usage_known === false ? 'Unknown' : formatCost(log.total_cost) }}</td>
                   <td class="px-4 py-3 text-right text-gray-600">{{ log.latency_ms }}ms</td>
                   <td class="px-4 py-3 text-right text-gray-600">
                     {{ log.ttft_ms != null ? log.ttft_ms + 'ms' : '—' }}
@@ -206,7 +206,7 @@
                                ? detailCache.get(log.request_id).ttft_ms + 'ms' : '—' }}
                           </span>
                           <span class="text-gray-500">Cost</span>
-                          <span class="text-gray-800 font-bold">{{ formatCost(detailCache.get(log.request_id).total_cost) }}</span>
+                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).usage_known === false ? 'Unknown' : formatCost(detailCache.get(log.request_id).total_cost) }}</span>
                         </div>
                       </div>
                     </div>

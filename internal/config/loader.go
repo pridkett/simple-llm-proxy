@@ -72,7 +72,7 @@ func Parse(data []byte) (*Config, error) {
 			cfg.GeneralSettings.MasterKey = expandEnvVar(v)
 		}
 		if v, ok := gs["database_url"].(string); ok {
-			cfg.GeneralSettings.DatabaseURL = v
+			cfg.GeneralSettings.DatabaseURL = expandEnvVar(v)
 		}
 		if v, ok := gs["port"].(int); ok {
 			cfg.GeneralSettings.Port = v
@@ -82,6 +82,12 @@ func Parse(data []byte) (*Config, error) {
 		}
 		if v, ok := gs["log_retention_days"].(int); ok {
 			cfg.GeneralSettings.LogRetentionDays = v
+		}
+	}
+
+	if gs, ok := raw["general_settings"].(map[string]any); ok {
+		if v, ok := gs["frontend_dir"].(string); ok {
+			cfg.GeneralSettings.FrontendDir = expandEnvVar(v)
 		}
 	}
 
@@ -113,7 +119,7 @@ func Parse(data []byte) (*Config, error) {
 	// Process oidc_settings
 	if os, ok := raw["oidc_settings"].(map[string]any); ok {
 		if v, ok := os["issuer_url"].(string); ok {
-			cfg.OIDCSettings.IssuerURL = v
+			cfg.OIDCSettings.IssuerURL = expandEnvVar(v)
 		}
 		if v, ok := os["client_id"].(string); ok {
 			cfg.OIDCSettings.ClientID = expandEnvVar(v)
@@ -122,7 +128,7 @@ func Parse(data []byte) (*Config, error) {
 			cfg.OIDCSettings.ClientSecret = expandEnvVar(v)
 		}
 		if v, ok := os["redirect_url"].(string); ok {
-			cfg.OIDCSettings.RedirectURL = v
+			cfg.OIDCSettings.RedirectURL = expandEnvVar(v)
 		}
 		if v, ok := os["admin_group"].(string); ok {
 			cfg.OIDCSettings.AdminGroup = v
@@ -261,6 +267,13 @@ func parseProviderPool(item any) (ProviderPool, error) {
 	}
 
 	pool := ProviderPool{}
+	if v, exists := m["enabled"]; exists {
+		enabled, ok := v.(bool)
+		if !ok {
+			return pool, fmt.Errorf("enabled must be a boolean")
+		}
+		pool.Enabled = &enabled
+	}
 
 	if v, ok := m["name"].(string); ok {
 		pool.Name = v

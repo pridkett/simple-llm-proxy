@@ -252,3 +252,20 @@ func TestPoolInit_ReloadRebuilds(t *testing.T) {
 		t.Error("expected modelToPool to NOT contain gpt-4-primary after reload")
 	}
 }
+
+func TestDisabledPoolLeavesModelsDirect(t *testing.T) {
+	enabled := false
+	cfg := makeMockConfigWithPools([]string{"one", "two"}, "round-robin", []config.ProviderPool{{Name: "disabled", Enabled: &enabled, Members: []config.PoolMember{{ModelName: "one"}, {ModelName: "two"}}}})
+	r, err := New(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if len(r.Pools()) != 0 || r.GetPoolForModel("one") != nil {
+		t.Fatal("disabled pool participates in routing")
+	}
+	d, err := r.GetDeploymentWithRetry("one", nil)
+	if err != nil || d.ModelName != "one" {
+		t.Fatalf("direct model routing failed: %v, %v", d, err)
+	}
+}

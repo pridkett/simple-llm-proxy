@@ -28,6 +28,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/proxy ./cmd/proxy
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -H proxy
 WORKDIR /app
+RUN mkdir -p /data && chown proxy:proxy /data
 COPY --from=backend /out/proxy /app/proxy
 # Default FrontendDir fallback is ./frontend/dist relative to the workdir,
 # so the SPA is served at / with no extra config.
