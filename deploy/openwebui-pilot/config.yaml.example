@@ -1,0 +1,39 @@
+# Preserve the client-facing model IDs used by LiteLLM. Add explicit entries for
+# any other models OpenWebUI needs; wildcard discovery is not required for this pilot.
+model_list:
+  - model_name: openai/gpt-5.4-mini
+    litellm_params:
+      model: openai/gpt-5.4-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: anthropic/claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: openrouter/google/gemini-3.1-flash-lite-preview
+    litellm_params:
+      model: openrouter/google/gemini-3.1-flash-lite-preview
+      api_key: os.environ/OPENROUTER_API_KEY
+  # Confirm the installed model name using Ollama's /api/tags before enabling.
+  # Keep an ollama_chat/... client alias while using this proxy's ollama provider.
+  # - model_name: ollama_chat/phi4
+  #   litellm_params:
+  #     model: ollama/phi4
+  #     api_base: os.environ/OLLAMA_API_BASE
+router_settings:
+  routing_strategy: round-robin
+  num_retries: 2
+  allowed_fails: 3
+  cooldown_time: 30s
+general_settings:
+  master_key: os.environ/PROXY_MASTER_KEY
+  database_url: /data/proxy.db
+  port: 8080
+  body_snippet_limit: 0
+  log_retention_days: 30
+oidc_settings:
+  issuer_url: os.environ/OIDC_ISSUER_URL
+  client_id: os.environ/OIDC_CLIENT_ID
+  client_secret: os.environ/OIDC_CLIENT_SECRET
+  redirect_url: os.environ/OIDC_REDIRECT_URL
+  admin_group: admins  # Match the group emitted by your identity provider.
+  dev_mode: true  # The pilot admin UI is reached through a localhost SSH tunnel.

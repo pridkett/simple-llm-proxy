@@ -334,6 +334,7 @@ type CostOverride struct {
 
 // RequestLog represents a logged request.
 type RequestLog struct {
+	UsageKnown    bool // false when the upstream omitted usage; zero tokens are then unknown
 	RequestID     string
 	APIKeyID      *int64 // nil when authenticated via master key
 	Model         string

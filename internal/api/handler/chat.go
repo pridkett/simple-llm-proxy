@@ -144,7 +144,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			resp, err := d.Provider.ChatCompletion(ctx, &providerReq)
 			operation.failedAttempt(d, err)
 			return resp, nil, err
-		})
+		}, router.RouteOptions{EstimatedTokens: chatReq.EstimatedTokens()})
 
 		requestID := middleware.RequestIDFromContext(ctx)
 
@@ -161,11 +161,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 					return
 				}
 			}
-			if result.DeploymentUsed == nil && len(result.DeploymentsTried) == 0 {
-				model.WriteError(w, model.ErrModelNotFound(chatReq.Model))
-			} else {
-				model.WriteError(w, model.ErrProviderError("all providers", result.Error))
-			}
+			model.WriteError(w, model.ErrProviderError("all providers", result.Error))
 			return
 		}
 
@@ -173,7 +169,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet)
+			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
 			operation.finish(result, usage, cost)
 			operation.fail(err)
 		} else {
@@ -206,7 +202,7 @@ func handleNonStreamingResponse(
 	r.ReportSuccess(result.DeploymentUsed)
 
 	// Log the request if storage is available
-	if store != nil && result.Response != nil && result.Response.Usage != nil {
+	if store != nil && result.Response != nil {
 		go logRequest(logRequestParams{
 			Store:           store,
 			SpendAcc:        sa,
@@ -251,6 +247,7 @@ func handleStreamingResponse(
 	requestID string,
 	bodySnippetLimit int,
 	reqBodySnippet *string,
+	includeUsage bool,
 ) (*model.Usage, float64, error) {
 	stream := result.Stream
 	defer stream.Close()
@@ -288,11 +285,8 @@ func handleStreamingResponse(
 			// STREAM-01: ReportSuccess fires here, after all chunks received.
 			r.ReportSuccess(result.DeploymentUsed)
 
-			// STREAM-02: use token counts from stream; fall back to empty usage if none provided.
+			// Retain missing usage as unknown instead of manufacturing zero tokens.
 			usage := streamUsage
-			if usage == nil {
-				usage = &model.Usage{}
-			}
 			cost := computeCost(cm, result.DeploymentUsed, usage)
 			if store != nil {
 				go logRequest(logRequestParams{
@@ -356,12 +350,21 @@ func handleStreamingResponse(
 			streamUsage = chunk.Usage
 		}
 
-		data, err := json.Marshal(chunk)
+		output := *chunk
+		if !includeUsage {
+			output.Usage = nil
+			if len(output.Choices) == 0 {
+				continue
+			}
+		}
+		data, err := json.Marshal(output)
 		if err != nil {
 			return nil, 0, err
 		}
 
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+			return streamUsage, 0, err
+		}
 		flusher.Flush()
 	}
 }
@@ -402,6 +405,10 @@ type logRequestParams struct {
 func logRequest(p logRequestParams) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	usageKnown := p.Usage != nil
+	if p.Usage == nil {
+		p.Usage = &model.Usage{}
+	}
 
 	totalCost := p.TotalCost
 	if !p.CostKnown {
@@ -414,6 +421,7 @@ func logRequest(p logRequestParams) {
 		Model:            p.Deployment.ModelName,
 		Provider:         p.Deployment.ProviderName,
 		Endpoint:         p.Endpoint,
+		UsageKnown:       usageKnown,
 		InputTokens:      p.Usage.PromptTokens,
 		OutputTokens:     p.Usage.CompletionTokens,
 		TotalCost:        totalCost,

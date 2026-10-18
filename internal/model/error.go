@@ -2,8 +2,12 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // APIError represents an OpenAI-compatible error response.
@@ -21,6 +25,8 @@ type ErrorDetail struct {
 
 // ProxyError is an error type used internally.
 type ProxyError struct {
+	RawBody    json.RawMessage
+	RetryAfter time.Duration
 	StatusCode int
 	Message    string
 	Type       string
@@ -92,13 +98,26 @@ func ErrNoDeploymentAvailable(model string) *ProxyError {
 }
 
 func ErrProviderError(provider string, err error) *ProxyError {
-	return &ProxyError{
-		StatusCode: http.StatusBadGateway,
-		Message:    fmt.Sprintf("provider '%s' error: %v", provider, err),
-		Type:       "server_error",
-		Code:       "provider_error",
-		Err:        err,
+	result := &ProxyError{StatusCode: http.StatusBadGateway, Message: fmt.Sprintf("provider '%s' error: %v", provider, err), Type: "server_error", Code: "provider_error", Err: err}
+	var upstream interface {
+		HTTPStatus() int
+		RetryDelay() time.Duration
+		APIErrorBody() json.RawMessage
 	}
+	if errors.As(err, &upstream) {
+		result.StatusCode = upstream.HTTPStatus()
+		result.RetryAfter = upstream.RetryDelay()
+		var body map[string]json.RawMessage
+		if json.Unmarshal(upstream.APIErrorBody(), &body) == nil && len(body["error"]) > 0 {
+			result.RawBody = upstream.APIErrorBody()
+		}
+		if result.StatusCode == 429 {
+			result.Type = "rate_limit_error"
+		} else if result.StatusCode >= 400 && result.StatusCode < 500 {
+			result.Type = "invalid_request_error"
+		}
+	}
+	return result
 }
 
 func ErrInternalServer(message string, err error) *ProxyError {
@@ -169,10 +188,26 @@ func ErrBudgetExceeded(message string) *ProxyError {
 	}
 }
 
-
 // WriteError writes an error response to the http.ResponseWriter.
 func WriteError(w http.ResponseWriter, err *ProxyError) {
 	w.Header().Set("Content-Type", "application/json")
+	if err.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(err.RetryAfter.Seconds()))))
+	}
 	w.WriteHeader(err.StatusCode)
+	if len(err.RawBody) > 0 {
+		w.Write(err.RawBody)
+		return
+	}
 	json.NewEncoder(w).Encode(err.ToAPIError())
+}
+
+func (e *ProxyError) HTTPStatus() int           { return e.StatusCode }
+func (e *ProxyError) RetryDelay() time.Duration { return e.RetryAfter }
+func (e *ProxyError) APIErrorBody() json.RawMessage {
+	if len(e.RawBody) > 0 {
+		return e.RawBody
+	}
+	data, _ := json.Marshal(e.ToAPIError())
+	return data
 }

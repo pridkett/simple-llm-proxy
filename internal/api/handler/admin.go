@@ -61,8 +61,8 @@ type configModelEntry struct {
 }
 
 type adminConfigResponse struct {
-	ModelList      []configModelEntry `json:"model_list"`
-	RouterSettings routerSettingsJSON `json:"router_settings"`
+	ModelList       []configModelEntry `json:"model_list"`
+	RouterSettings  routerSettingsJSON `json:"router_settings"`
 	GeneralSettings struct {
 		MasterKeySet bool   `json:"master_key_set"`
 		DatabaseURL  string `json:"database_url"`
@@ -138,8 +138,9 @@ type logEntry struct {
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
 	InputTokens   int       `json:"prompt_tokens"`     // JSON key kept for frontend compatibility
-	OutputTokens  int       `json:"completion_tokens"`  // JSON key kept for frontend compatibility
+	OutputTokens  int       `json:"completion_tokens"` // JSON key kept for frontend compatibility
 	TotalTokens   int       `json:"total_tokens"`
+	UsageKnown    bool      `json:"usage_known"`
 	TotalCost     float64   `json:"total_cost"`
 	StatusCode    int       `json:"status_code"`
 	LatencyMS     int64     `json:"latency_ms"`
@@ -232,6 +233,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 				OutputTokens:  l.OutputTokens,
 				TotalTokens:   l.InputTokens + l.OutputTokens,
 				TotalCost:     l.TotalCost,
+				UsageKnown:    l.UsageKnown,
 				StatusCode:    l.StatusCode,
 				LatencyMS:     l.LatencyMS,
 				TTFTMs:        l.TTFTMs,

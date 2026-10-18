@@ -1,14 +1,12 @@
 package openaicompat
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
@@ -80,23 +78,12 @@ func (p *BaseProvider) ChatCompletion(ctx context.Context, req *model.ChatComple
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, &provider.RateLimitError{
-			Provider:   p.ProviderName,
-			RetryAfter: provider.ParseRetryAfter(resp.Header.Get("Retry-After")),
-		}
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		if p.ParseError != nil {
-			return nil, p.ParseError(resp.StatusCode, respBody)
+		var cause error
+		if p.ParseError != nil && resp.StatusCode != http.StatusTooManyRequests {
+			cause = p.ParseError(resp.StatusCode, respBody)
 		}
-		// Default OpenAI-style error parsing
-		var apiErr model.APIError
-		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("%s error: %s", p.ProviderName, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("%s error (status %d): %s", p.ProviderName, resp.StatusCode, string(respBody))
+		return nil, provider.NewHTTPError(p.ProviderName, resp.StatusCode, resp.Header, respBody, cause)
 	}
 
 	var result model.ChatCompletionResponse
@@ -116,6 +103,12 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 	// Copy request and ensure stream is enabled
 	reqCopy := *req
 	reqCopy.Stream = true
+	options := model.StreamOptions{}
+	if req.StreamOptions != nil {
+		options = *req.StreamOptions
+	}
+	options.IncludeUsage = true
+	reqCopy.StreamOptions = &options
 
 	body, err := json.Marshal(reqCopy)
 	if err != nil {
@@ -141,26 +134,14 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 		return nil, fmt.Errorf("making request: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := provider.ParseRetryAfter(resp.Header.Get("Retry-After"))
-		resp.Body.Close()
-		return nil, &provider.RateLimitError{
-			Provider:   p.ProviderName,
-			RetryAfter: retryAfter,
-		}
-	}
-
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if p.ParseError != nil {
-			return nil, p.ParseError(resp.StatusCode, respBody)
+		var cause error
+		if p.ParseError != nil && resp.StatusCode != http.StatusTooManyRequests {
+			cause = p.ParseError(resp.StatusCode, respBody)
 		}
-		var apiErr model.APIError
-		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("%s error: %s", p.ProviderName, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("%s error (status %d): %s", p.ProviderName, resp.StatusCode, string(respBody))
+		return nil, provider.NewHTTPError(p.ProviderName, resp.StatusCode, resp.Header, respBody, cause)
 	}
 
 	chunks := make(chan *model.StreamChunk)
@@ -169,34 +150,36 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 
 	go func() {
 		defer close(chunks)
+		defer resp.Body.Close()
 
-		reader := bufio.NewReader(resp.Body)
+		reader := provider.NewSSEReader(resp.Body)
 		for {
-			line, err := reader.ReadString('\n')
+			event, data, err := reader.Next()
 			if err != nil {
-				if err != io.EOF {
+				if ctx.Err() != nil {
+					errs <- ctx.Err()
+				} else if err != io.EOF {
 					errs <- err
+				} else if sentinel != "" {
+					errs <- io.ErrUnexpectedEOF
 				}
 				return
 			}
-
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+			if sentinel != "" && string(data) == sentinel {
+				return
 			}
-
-			if !strings.HasPrefix(line, "data: ") {
-				continue
+			if event == "error" {
+				errs <- fmt.Errorf("%s stream error: %s", p.ProviderName, data)
+				return
 			}
-
-			data := strings.TrimPrefix(line, "data: ")
-
-			if sentinel != "" && data == sentinel {
+			var payload map[string]json.RawMessage
+			if json.Unmarshal(data, &payload) == nil && payload["error"] != nil {
+				errs <- fmt.Errorf("%s stream error: %s", p.ProviderName, data)
 				return
 			}
 
 			var chunk model.StreamChunk
-			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			if err := json.Unmarshal(data, &chunk); err != nil {
 				errs <- fmt.Errorf("unmarshaling chunk: %w", err)
 				return
 			}
@@ -252,22 +235,12 @@ func (p *BaseProvider) Embeddings(ctx context.Context, req *model.EmbeddingsRequ
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, &provider.RateLimitError{
-			Provider:   p.ProviderName,
-			RetryAfter: provider.ParseRetryAfter(resp.Header.Get("Retry-After")),
-		}
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		if p.ParseError != nil {
-			return nil, p.ParseError(resp.StatusCode, respBody)
+		var cause error
+		if p.ParseError != nil && resp.StatusCode != http.StatusTooManyRequests {
+			cause = p.ParseError(resp.StatusCode, respBody)
 		}
-		var apiErr model.APIError
-		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("%s error: %s", p.ProviderName, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("%s error (status %d): %s", p.ProviderName, resp.StatusCode, string(respBody))
+		return nil, provider.NewHTTPError(p.ProviderName, resp.StatusCode, resp.Header, respBody, cause)
 	}
 
 	var result model.EmbeddingsResponse

@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -52,15 +51,17 @@ func (p *Provider) SupportsEmbeddings() bool {
 // Anthropic request/response types
 
 type anthropicRequest struct {
-	Model       string             `json:"model"`
-	Messages    []anthropicMessage `json:"messages"`
-	MaxTokens   int                `json:"max_tokens"`
-	System      string             `json:"system,omitempty"`
-	Temperature *float64           `json:"temperature,omitempty"`
-	TopP        *float64           `json:"top_p,omitempty"`
-	StopSeq     []string           `json:"stop_sequences,omitempty"`
-	Stream      bool               `json:"stream,omitempty"`
-	Tools       []anthropicTool    `json:"tools,omitempty"`
+	ToolChoice   map[string]any     `json:"tool_choice,omitempty"`
+	OutputConfig map[string]any     `json:"output_config,omitempty"`
+	Model        string             `json:"model"`
+	Messages     []anthropicMessage `json:"messages"`
+	MaxTokens    int                `json:"max_tokens"`
+	System       string             `json:"system,omitempty"`
+	Temperature  *float64           `json:"temperature,omitempty"`
+	TopP         *float64           `json:"top_p,omitempty"`
+	StopSeq      []string           `json:"stop_sequences,omitempty"`
+	Stream       bool               `json:"stream,omitempty"`
+	Tools        []anthropicTool    `json:"tools,omitempty"`
 }
 
 type anthropicMessage struct {
@@ -79,6 +80,7 @@ type anthropicContent struct {
 }
 
 type anthropicTool struct {
+	Strict      *bool  `json:"strict,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	InputSchema any    `json:"input_schema"`
@@ -103,6 +105,7 @@ type anthropicUsage struct {
 }
 
 type anthropicStreamEvent struct {
+	Error        *model.ErrorDetail `json:"error,omitempty"`
 	Type         string             `json:"type"`
 	Index        int                `json:"index,omitempty"`
 	Delta        *anthropicDelta    `json:"delta,omitempty"`
@@ -112,10 +115,10 @@ type anthropicStreamEvent struct {
 }
 
 type anthropicDelta struct {
-	Type         string `json:"type,omitempty"`
-	Text         string `json:"text,omitempty"`
-	StopReason   string `json:"stop_reason,omitempty"`
-	PartialJSON  string `json:"partial_json,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Text        string `json:"text,omitempty"`
+	StopReason  string `json:"stop_reason,omitempty"`
+	PartialJSON string `json:"partial_json,omitempty"`
 }
 
 type anthropicError struct {
@@ -157,18 +160,8 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, &provider.RateLimitError{
-			Provider:   p.Name(),
-			RetryAfter: provider.ParseRetryAfter(resp.Header.Get("Retry-After")),
-		}
-	}
 	if resp.StatusCode != http.StatusOK {
-		var apiErr anthropicError
-		if err := json.Unmarshal(respBody, &apiErr); err == nil {
-			return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, provider.NewHTTPError(p.Name(), resp.StatusCode, resp.Header, respBody)
 	}
 
 	var anthResp anthropicResponse
@@ -206,22 +199,10 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		return nil, fmt.Errorf("making request: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := provider.ParseRetryAfter(resp.Header.Get("Retry-After"))
-		resp.Body.Close()
-		return nil, &provider.RateLimitError{
-			Provider:   p.Name(),
-			RetryAfter: retryAfter,
-		}
-	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		var apiErr anthropicError
-		if err := json.Unmarshal(respBody, &apiErr); err == nil {
-			return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("anthropic error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, provider.NewHTTPError(p.Name(), resp.StatusCode, resp.Header, respBody)
 	}
 
 	chunks := make(chan *model.StreamChunk)
@@ -231,7 +212,8 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		defer close(chunks)
 		defer resp.Body.Close()
 
-		reader := bufio.NewReader(resp.Body)
+		reader := provider.NewSSEReader(resp.Body)
+		toolIndices := make(map[int]int)
 		responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 
 		var inputTokens int      // accumulated from message_start event
@@ -239,34 +221,31 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		var cacheWriteTokens int // accumulated from message_start event
 
 		for {
-			line, err := reader.ReadString('\n')
+			_, data, err := reader.Next()
 			if err != nil {
-				if err != io.EOF {
+				if ctx.Err() != nil {
+					errs <- ctx.Err()
+				} else if err == io.EOF {
+					errs <- io.ErrUnexpectedEOF
+				} else {
 					errs <- err
 				}
 				return
 			}
-
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+			var event anthropicStreamEvent
+			if err := json.Unmarshal(data, &event); err != nil {
+				errs <- fmt.Errorf("anthropic stream: %w", err)
+				return
 			}
-
-			if !strings.HasPrefix(line, "data: ") {
-				continue
+			if event.Type == "message_stop" {
+				return
 			}
-
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
+			if event.Type == "error" {
+				errs <- fmt.Errorf("anthropic stream error: %s", data)
 				return
 			}
 
-			var event anthropicStreamEvent
-			if err := json.Unmarshal([]byte(data), &event); err != nil {
-				continue // Skip malformed events
-			}
-
-			chunk := p.translateStreamEvent(&event, responseID, req.Model, &inputTokens, &cacheReadTokens, &cacheWriteTokens)
+			chunk := p.translateStreamEvent(&event, responseID, req.Model, &inputTokens, &cacheReadTokens, &cacheWriteTokens, toolIndices)
 			if chunk != nil {
 				select {
 				case chunks <- chunk:
@@ -295,6 +274,8 @@ func (p *Provider) translateRequest(req *model.ChatCompletionRequest) (*anthropi
 	// Handle max_tokens - Anthropic requires it
 	if req.MaxTokens != nil {
 		anthReq.MaxTokens = *req.MaxTokens
+	} else if req.MaxCompletionTokens != nil {
+		anthReq.MaxTokens = *req.MaxCompletionTokens
 	} else {
 		anthReq.MaxTokens = defaultMaxTokens
 	}
@@ -324,9 +305,46 @@ func (p *Provider) translateRequest(req *model.ChatCompletionRequest) (*anthropi
 					Name:        tool.Function.Name,
 					Description: tool.Function.Description,
 					InputSchema: tool.Function.Parameters,
+					Strict:      tool.Function.Strict,
 				})
 			}
 		}
+	}
+
+	if len(anthReq.Tools) > 0 {
+		choice := map[string]any{"type": "auto"}
+		switch v := req.ToolChoice.(type) {
+		case string:
+			switch v {
+			case "auto", "none":
+				choice["type"] = v
+			case "required":
+				choice["type"] = "any"
+			default:
+				return nil, model.ErrBadRequest("unsupported tool_choice")
+			}
+		case map[string]any:
+			function, ok := v["function"].(map[string]any)
+			name, _ := function["name"].(string)
+			if !ok || name == "" {
+				return nil, model.ErrBadRequest("tool_choice requires a function name")
+			}
+			choice["type"] = "tool"
+			choice["name"] = name
+		}
+		if req.ParallelToolCalls != nil {
+			choice["disable_parallel_tool_use"] = !*req.ParallelToolCalls
+		}
+		anthReq.ToolChoice = choice
+	}
+	if format := req.ResponseFormat; format != nil && format.Type != "text" {
+		var schema struct {
+			Schema json.RawMessage `json:"schema"`
+		}
+		if format.Type != "json_schema" || json.Unmarshal(format.JSONSchema, &schema) != nil || len(schema.Schema) == 0 || string(schema.Schema) == "null" {
+			return nil, model.ErrBadRequest("Anthropic structured output requires response_format.json_schema.schema")
+		}
+		anthReq.OutputConfig = map[string]any{"format": map[string]any{"type": "json_schema", "schema": schema.Schema}}
 	}
 
 	return anthReq, nil
@@ -383,9 +401,29 @@ func (p *Provider) translateResponse(resp *anthropicResponse, requestModel strin
 // inputTokens is a pointer to the accumulated input token count from message_start;
 // cacheReadTokens and cacheWriteTokens are pointers to cache token counts from message_start.
 // All three pointers are updated in-place when processing message_start and read when processing message_delta.
-func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string, inputTokens *int, cacheReadTokens *int, cacheWriteTokens *int) *model.StreamChunk {
+func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, requestModel string, inputTokens *int, cacheReadTokens *int, cacheWriteTokens *int, toolIndices ...map[int]int) *model.StreamChunk {
+	toolIndex := event.Index
+	if len(toolIndices) > 0 {
+		if event.Type == "content_block_start" && event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
+			toolIndices[0][event.Index] = len(toolIndices[0])
+		}
+		if n, ok := toolIndices[0][event.Index]; ok {
+			toolIndex = n
+		}
+	}
+	toolChunk := func(call model.ToolCall) *model.StreamChunk {
+		call.Index = &toolIndex
+		return &model.StreamChunk{ID: id, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: requestModel, Choices: []model.Choice{{Index: 0, Delta: &model.Delta{ToolCalls: []model.ToolCall{call}}}}}
+	}
 	switch event.Type {
+	case "content_block_start":
+		if block := event.ContentBlock; block != nil && block.Type == "tool_use" {
+			return toolChunk(model.ToolCall{ID: block.ID, Type: "function", Function: model.FunctionCall{Name: block.Name}})
+		}
 	case "content_block_delta":
+		if event.Delta != nil && event.Delta.Type == "input_json_delta" {
+			return toolChunk(model.ToolCall{Function: model.FunctionCall{Arguments: event.Delta.PartialJSON}})
+		}
 		if event.Delta != nil && event.Delta.Text != "" {
 			return &model.StreamChunk{
 				ID:      id,

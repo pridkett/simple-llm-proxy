@@ -1,7 +1,10 @@
 package model
 
+import "encoding/json"
+
 // ChatCompletionResponse represents an OpenAI-compatible chat completion response.
 type ChatCompletionResponse struct {
+	rawFields         map[string]json.RawMessage
 	ID                string   `json:"id"`
 	Object            string   `json:"object"`
 	Created           int64    `json:"created"`
@@ -13,6 +16,7 @@ type ChatCompletionResponse struct {
 
 // Choice represents a completion choice.
 type Choice struct {
+	rawFields    map[string]json.RawMessage
 	Index        int      `json:"index"`
 	Message      *Message `json:"message,omitempty"`
 	Delta        *Delta   `json:"delta,omitempty"`
@@ -21,6 +25,7 @@ type Choice struct {
 
 // Delta represents a streaming delta.
 type Delta struct {
+	rawFields map[string]json.RawMessage
 	Role      string     `json:"role,omitempty"`
 	Content   string     `json:"content,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
@@ -28,6 +33,7 @@ type Delta struct {
 
 // Usage represents token usage.
 type Usage struct {
+	rawFields        map[string]json.RawMessage
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
@@ -37,23 +43,25 @@ type Usage struct {
 
 // EmbeddingsResponse represents an OpenAI-compatible embeddings response.
 type EmbeddingsResponse struct {
-	Object string          `json:"object"`
-	Data   []EmbeddingData `json:"data"`
-	Model  string          `json:"model"`
-	Usage  *Usage          `json:"usage,omitempty"`
+	rawFields map[string]json.RawMessage
+	Object    string          `json:"object"`
+	Data      []EmbeddingData `json:"data"`
+	Model     string          `json:"model"`
+	Usage     *Usage          `json:"usage,omitempty"`
 }
 
 // EmbeddingData represents a single embedding.
 type EmbeddingData struct {
-	Object    string    `json:"object"`
-	Embedding []float64 `json:"embedding"`
-	Index     int       `json:"index"`
+	rawFields map[string]json.RawMessage
+	Object    string `json:"object"`
+	Embedding any    `json:"embedding"`
+	Index     int    `json:"index"`
 }
 
 // ModelsResponse represents the /v1/models response.
 type ModelsResponse struct {
-	Object string       `json:"object"`
-	Data   []ModelInfo  `json:"data"`
+	Object string      `json:"object"`
+	Data   []ModelInfo `json:"data"`
 }
 
 // ModelInfo represents a model in the models list.
@@ -98,6 +106,7 @@ type ModelDetailResponse struct {
 
 // StreamChunk represents a streaming response chunk.
 type StreamChunk struct {
+	rawFields         map[string]json.RawMessage
 	ID                string   `json:"id"`
 	Object            string   `json:"object"`
 	Created           int64    `json:"created"`

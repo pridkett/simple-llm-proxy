@@ -95,3 +95,14 @@ func (b *BackoffManager) getState(key string) backoffState {
 	}
 	return backoffState{}
 }
+
+func (b *BackoffManager) RetryAfter(key string) time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if state := b.state[key]; state != nil {
+		if wait := time.Until(state.nextRetryAt); wait > 0 {
+			return wait
+		}
+	}
+	return 0
+}

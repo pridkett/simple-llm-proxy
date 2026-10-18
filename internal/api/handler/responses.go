@@ -133,11 +133,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 					return
 				}
 			}
-			if result.DeploymentUsed == nil && len(result.DeploymentsTried) == 0 {
-				model.WriteError(w, model.ErrModelNotFound(respReq.Model))
-			} else {
-				model.WriteError(w, model.ErrProviderError("all providers", result.Error))
-			}
+			model.WriteError(w, model.ErrProviderError("all providers", result.Error))
 			return
 		}
 
