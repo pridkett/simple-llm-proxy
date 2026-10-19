@@ -165,6 +165,7 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		Auth:              func(req *http.Request) { req.Header.Set("Authorization", "Bearer "+opts.APIKey) },
 		ExtraHeaders:      opts.ExtraHeaders,
 		DoneSentinel:      "[DONE]",
+		AllowEOFOnFinish:  true, // Hosted MiniMax ends after its terminal chunk without [DONE].
 		TransformResponse: newTransformResponse(xmlEnabled),
 	}
 }

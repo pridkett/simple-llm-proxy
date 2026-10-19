@@ -38,6 +38,7 @@ type BaseProvider struct {
 	TransformStreamChunk TransformStreamChunkFunc // Optional: mutate each stream chunk
 	ParseError           ParseErrorFunc           // Optional: custom error parsing
 	DoneSentinel         string                   // SSE done marker; "" = EOF-only (no sentinel)
+	AllowEOFOnFinish     bool                     // Accept clean EOF after a finish reason when the upstream omits its sentinel
 	ExtraHeaders         map[string]string        // Extra headers on every request
 }
 
@@ -152,6 +153,7 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 		defer close(chunks)
 		defer resp.Body.Close()
 
+		finished := false
 		reader := provider.NewSSEReader(resp.Body)
 		for {
 			event, data, err := reader.Next()
@@ -160,7 +162,7 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 					errs <- ctx.Err()
 				} else if err != io.EOF {
 					errs <- err
-				} else if sentinel != "" {
+				} else if sentinel != "" && !(p.AllowEOFOnFinish && finished) {
 					errs <- io.ErrUnexpectedEOF
 				}
 				return
@@ -182,6 +184,9 @@ func (p *BaseProvider) ChatCompletionStream(ctx context.Context, req *model.Chat
 			if err := json.Unmarshal(data, &chunk); err != nil {
 				errs <- fmt.Errorf("unmarshaling chunk: %w", err)
 				return
+			}
+			for _, choice := range chunk.Choices {
+				finished = finished || choice.FinishReason != ""
 			}
 
 			if p.TransformStreamChunk != nil {

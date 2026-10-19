@@ -66,6 +66,23 @@ model_list:
   #     api_key: os.environ/ANTHROPIC_API_KEY
   #     api_base: os.environ/ANTHROPIC_BASE_URL  # e.g. https://my-gateway.example.com/v1
 
+  # Direct MiniMax Coding Plan (OpenAI-compatible Chat Completions).
+  # Keep these distinct from any openrouter/minimax/... routes.
+  # - model_name: minimax/MiniMax-M3.1-Flash
+  #   litellm_params:
+  #     model: minimax/MiniMax-M3.1-Flash
+  #     api_key: os.environ/MINIMAX_API_KEY
+  #     api_base: https://api.minimax.io/v1
+  #     extra_params:
+  #       xml_tool_calls: false  # Hosted API returns native tool_calls.
+  # - model_name: minimax/MiniMax-M3
+  #   litellm_params:
+  #     model: minimax/MiniMax-M3
+  #     api_key: os.environ/MINIMAX_API_KEY
+  #     api_base: https://api.minimax.io/v1
+  #     extra_params:
+  #       xml_tool_calls: false
+
 router_settings:
   routing_strategy: simple-shuffle  # or "round-robin"
   num_retries: 2
