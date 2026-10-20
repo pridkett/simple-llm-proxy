@@ -281,6 +281,19 @@ simple_llm_proxy/
 
 MIT
 
+## Team administration
+
+Use **Teams** to create a team by name, then manage its applications, API keys,
+and members in one workspace. Creating an application automatically creates a
+**Default** API key and displays it once for copying. Keys allow all models with
+no rate or budget limits unless you set them in key settings.
+
+Breadcrumbs and shareable URLs preserve your location within a team. Existing
+`/#/applications` and `/#/keys?team_id=...&app_id=...` links redirect into the
+workspace. If first-key creation fails, the application remains available and
+the form offers a retry without creating another application. Team, application,
+key, and membership changes remain restricted to system administrators.
+
 ## Session logs
 
 Group requests from a story playthrough, conversation, or agent run by sending

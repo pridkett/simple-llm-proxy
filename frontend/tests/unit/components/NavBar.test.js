@@ -30,7 +30,7 @@ enableAutoUnmount(afterEach)
 async function render({ user = { name: 'Alice Example', email: 'alice@example.com', is_admin: true }, path = '/' } = {}) {
   mockIsAuthenticated.value = Boolean(user)
   mockCurrentUser.value = user
-  const paths = ['/', '/login', '/models', '/chat', '/logs', '/config', '/api-docs', '/settings', '/users', '/teams', '/applications', '/keys', '/cost', '/pools', '/webhooks', '/events']
+  const paths = ['/', '/login', '/models', '/chat', '/logs', '/config', '/api-docs', '/settings', '/users', '/teams', '/teams/1/applications/1', '/applications', '/keys', '/cost', '/pools', '/webhooks', '/events']
   const router = createRouter({
     history: createMemoryHistory(),
     routes: paths.map(path => ({ path, name: path === '/login' ? 'login' : path, component: { template: '<div />' } })),
@@ -62,7 +62,7 @@ describe('NavBar', () => {
     const navigation = wrapper.get('nav[aria-label="Main navigation"]')
     expect(navigation.findAll('a').map(link => link.text())).toEqual([
       'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs',
-      'Users', 'Teams', 'Applications', 'Keys', 'Cost', 'Pools', 'Webhooks', 'Events',
+      'Users', 'Teams', 'Cost', 'Pools', 'Webhooks', 'Events',
     ])
     expect(navigation.get('a[href="/models"]').attributes('aria-current')).toBe('page')
   })
@@ -74,6 +74,13 @@ describe('NavBar', () => {
     ])
     expect(api.spend).not.toHaveBeenCalled()
     expect((await openAccount(wrapper)).text()).toContain('Logout')
+  })
+
+  it('keeps Teams active inside an application workspace', async () => {
+    const { wrapper } = await render({ path: '/teams/1/applications/1' })
+    expect(wrapper.get('nav a[href="/teams"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.get('nav').text()).not.toContain('Applications')
+    expect(wrapper.get('nav').text()).not.toContain('Keys')
   })
 
   it('hides navigation and account controls when not authenticated', async () => {

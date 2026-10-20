@@ -7,9 +7,7 @@ import SettingsView from '../views/SettingsView.vue'
 import ApiDocsView from '../views/ApiDocsView.vue'
 import LoginView from '../views/LoginView.vue'
 import UsersView from '../views/UsersView.vue'
-import TeamsView from '../views/TeamsView.vue'
-import ApplicationsView from '../views/ApplicationsView.vue'
-import KeysView from '../views/KeysView.vue'
+import { teamRoutes } from './teamRoutes.js'
 import ChatView from '../views/ChatView.vue'
 import { useSession } from '../composables/useSession.js'
 
@@ -23,9 +21,7 @@ const routes = [
   { path: '/settings', name: 'settings', component: SettingsView },
   { path: '/api-docs', name: 'api-docs', component: ApiDocsView },
   { path: '/users', name: 'users', component: UsersView },
-  { path: '/teams', name: 'teams', component: TeamsView },
-  { path: '/applications', name: 'applications', component: ApplicationsView },
-  { path: '/keys', name: 'keys', component: KeysView },
+  ...teamRoutes,
   { path: '/cost', name: 'cost', component: () => import('../views/CostView.vue') },
   { path: '/pools', name: 'pools', component: () => import('../views/PoolsView.vue') },
   { path: '/webhooks', name: 'webhooks', component: () => import('../views/WebhooksView.vue') },
