@@ -30,7 +30,7 @@ func (s *Storage) GetLogByID(ctx context.Context, requestID string) (*storage.Re
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
 		LEFT JOIN teams t ON app.team_id = t.id
-		WHERE ul.request_id = ?
+		WHERE ul.request_id = ? AND ul.model != '_flush'
 	`, requestID)
 
 	entry := &storage.RequestLog{}
@@ -82,7 +82,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
 		LEFT JOIN teams t ON app.team_id = t.id
-		WHERE t.id IS NOT NULL
+		WHERE t.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY t.name
 	`)
 	if err != nil {
@@ -108,7 +108,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
-		WHERE app.id IS NOT NULL
+		WHERE app.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY app.name
 	`)
 	if err != nil {
@@ -133,7 +133,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 		SELECT DISTINCT ak.id, ak.name
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
-		WHERE ak.id IS NOT NULL
+		WHERE ak.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY ak.name
 	`)
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows, err = s.db.QueryContext(ctx, `
 		SELECT DISTINCT ul.provider
 		FROM usage_logs ul
-		WHERE ul.provider != ''
+		WHERE ul.provider != '' AND ul.model != '_flush'
 		ORDER BY ul.provider
 	`)
 	if err != nil {
@@ -181,7 +181,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows, err = s.db.QueryContext(ctx, `
 		SELECT DISTINCT ul.model
 		FROM usage_logs ul
-		WHERE ul.model != ''
+		WHERE ul.model != '' AND ul.model != '_flush'
 		ORDER BY ul.model
 	`)
 	if err != nil {
@@ -205,7 +205,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows, err = s.db.QueryContext(ctx, `
 		SELECT DISTINCT ul.pool_name
 		FROM usage_logs ul
-		WHERE ul.pool_name IS NOT NULL AND ul.pool_name != ''
+		WHERE ul.pool_name IS NOT NULL AND ul.pool_name != '' AND ul.model != '_flush'
 		ORDER BY ul.pool_name
 	`)
 	if err != nil {
