@@ -80,8 +80,8 @@ func (s *Storage) DB() *sql.DB {
 // It LEFT JOINs through api_keys -> applications -> teams to resolve names.
 // The filters parameter allows optional filtering by model, team, or application.
 func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storage.LogsFilter) ([]*storage.RequestLog, int, error) {
-	// Build WHERE clauses for optional filters.
-	var whereClauses []string
+	// Internal spend snapshots are not requests, even when explicitly filtered.
+	whereClauses := []string{"ul.model != '_flush'"}
 	var whereArgs []interface{}
 
 	if filters.Model != "" {

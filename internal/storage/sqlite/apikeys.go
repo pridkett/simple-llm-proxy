@@ -218,11 +218,12 @@ func (s *Storage) RecordKeySpend(ctx context.Context, keyID int64, cost float64)
 
 // GetKeySpendTotals returns the total cost per api_key_id from usage_logs.
 // Used at startup to initialize the in-memory spend accumulator.
+// Flush snapshots duplicate costs already recorded by individual requests.
 func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT api_key_id, SUM(total_cost)
 		FROM usage_logs
-		WHERE api_key_id IS NOT NULL
+		WHERE api_key_id IS NOT NULL AND model != '_flush'
 		GROUP BY api_key_id
 	`)
 	if err != nil {
@@ -243,8 +244,8 @@ func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, err
 }
 
 // FlushKeySpend inserts a synthetic usage_log flush entry for the key.
-// Strategy: append-only flush record. On restart, InitFromStorage sums all rows
-// (including flush rows) to restore the accumulator accurately.
+// This internal snapshot is excluded from request logs and spend aggregations;
+// individual request costs are the source of truth when restoring spend.
 func (s *Storage) FlushKeySpend(ctx context.Context, keyID int64, total float64) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO usage_logs (api_key_id, total_cost, model, provider, endpoint, request_time, request_id, status_code, latency_ms)
