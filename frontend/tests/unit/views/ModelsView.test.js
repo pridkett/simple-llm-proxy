@@ -269,22 +269,28 @@ describe('ModelsView', () => {
       (args) => args[1]?.method === 'PATCH' && args[0].includes('/costs')
     )
     expect(patchCall).toBeTruthy()
+    expect(patchCall[0]).toBe('/admin/models/gpt-4/costs')
+    expect(patchCall[1].credentials).toBe('include')
     const body = JSON.parse(patchCall[1].body)
     // 15 $/MTok → 0.000015 per token
     expect(body.input_cost_per_token).toBeCloseTo(0.000015, 10)
   })
 
-  it('calls patchModelCostMapKey on save and reloads', async () => {
+  it('saves a searched cost map selection with the session and refreshes the displayed costs', async () => {
+    const savedCosts = {
+      ...mockCostsData,
+      costs: { ...mockCostsData.costs, source: 'override', cost_map_key: 'openai/gpt-4-turbo', input_cost_per_token: 0.00001 },
+    }
     fetchMock
       .mockResolvedValueOnce(okResponse(mockStatusData))
       .mockResolvedValueOnce(okResponse(mockCostsData))
       .mockResolvedValueOnce(okResponse(mockCostMapModels))
       .mockResolvedValueOnce(okResponse({ model: 'gpt-4', cost_map_key: 'openai/gpt-4-turbo' }))
       .mockResolvedValueOnce(okResponse(mockStatusData))
-      .mockResolvedValueOnce(okResponse(mockCostsData))
+      .mockResolvedValueOnce(okResponse(savedCosts))
     const router = makeRouter()
     await router.push('/')
-    const wrapper = mount(ModelsView, { global: { plugins: [router] } })
+    const wrapper = mount(ModelsView, { global: { plugins: [router], stubs: { Teleport: true } } })
     await flushPromises()
 
     const editBtn = wrapper.findAll('button').find((b) => b.text() === 'Edit')
@@ -292,7 +298,12 @@ describe('ModelsView', () => {
     await flushPromises()
 
     const input = wrapper.find('input[placeholder*="openai"]')
-    await input.setValue('openai/gpt-4-turbo')
+    await input.trigger('focus')
+    await input.setValue('turbo')
+    const suggestion = wrapper.findAll('button').find((b) => b.text().includes('openai/gpt-4-turbo'))
+    expect(suggestion).toBeTruthy()
+    await suggestion.trigger('mousedown')
+    expect(input.element.value).toBe('openai/gpt-4-turbo')
 
     const saveBtn = wrapper.findAll('button').find((b) => b.text() === 'Save')
     await saveBtn.trigger('click')
@@ -302,7 +313,36 @@ describe('ModelsView', () => {
       (args) => args[1]?.method === 'PATCH' && args[0].includes('cost_map_key')
     )
     expect(patchCall).toBeTruthy()
+    expect(patchCall[0]).toBe('/admin/models/gpt-4/cost_map_key')
+    expect(patchCall[1].credentials).toBe('include')
     expect(JSON.parse(patchCall[1].body)).toEqual({ cost_map_key: 'openai/gpt-4-turbo' })
+    expect(wrapper.text()).toContain('override')
+    expect(wrapper.text()).toContain('$10.0000/MTok')
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Save')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('clears a cost override with the session and refreshes the model', async () => {
+    fetchMock
+      .mockResolvedValueOnce(okResponse(mockStatusData))
+      .mockResolvedValueOnce(okResponse({ ...mockCostsData, costs: { ...mockCostsData.costs, source: 'override' } }))
+      .mockResolvedValueOnce(okResponse({ model: 'gpt-4', status: 'cleared' }))
+      .mockResolvedValueOnce(okResponse(mockStatusData))
+      .mockResolvedValueOnce(okResponse(mockCostsData))
+    const router = makeRouter()
+    await router.push('/')
+    const wrapper = mount(ModelsView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Clear').trigger('click')
+    await flushPromises()
+
+    const deleteCall = fetchMock.mock.calls.find((args) => args[1]?.method === 'DELETE')
+    expect(deleteCall[0]).toBe('/admin/models/gpt-4/costs')
+    expect(deleteCall[1].credentials).toBe('include')
+    expect(wrapper.text()).toContain('auto')
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Clear')).toBe(false)
+    wrapper.unmount()
   })
 
   it('re-fetches when the Refresh button is clicked', async () => {

@@ -102,6 +102,9 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Model endpoints mirrored for session-auth browser clients
 		mux.Get("/admin/models", handler.Models(r))
 		mux.Get("/admin/models/{model}", handler.ModelDetail(r, cm))
+		mux.Patch("/admin/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
+		mux.Patch("/admin/models/{model}/costs", handler.PatchModelCosts(cm, store))
+		mux.Delete("/admin/models/{model}/costs", handler.DeleteModelCosts(cm, store))
 		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
