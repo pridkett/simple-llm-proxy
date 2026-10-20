@@ -50,6 +50,23 @@ describe('api client', () => {
     })
   }
 
+  describe('model cost writes', () => {
+    it.each([
+      ['patchModelCostMapKey', 'PATCH', 'cost_map_key', 'openai/gpt-4', { cost_map_key: 'openai/gpt-4' }],
+      ['patchModelCosts', 'PATCH', 'costs', { input_cost_per_token: 0.000015 }, { input_cost_per_token: 0.000015 }],
+      ['deleteModelCosts', 'DELETE', 'costs', undefined, undefined],
+    ])('%s uses the session-authenticated model route', async (method, verb, suffix, input, body) => {
+      mockFetch({ model: 'provider/model' })
+      await api[method]('provider/model', input)
+      const [url, options] = global.fetch.mock.calls[0]
+      expect(url).toBe(`/admin/models/provider%2Fmodel/${suffix}`)
+      expect(options.method).toBe(verb)
+      expect(options.credentials).toBe('include')
+      expect(options.headers.Authorization).toBeUndefined()
+      expect(options.body).toBe(body === undefined ? undefined : JSON.stringify(body))
+    })
+  })
+
   describe('health()', () => {
     it('calls /health with no auth header', async () => {
       mockFetch({ status: 'healthy' })

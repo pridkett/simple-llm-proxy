@@ -17,6 +17,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/pwagstro/simple_llm_proxy/internal/api"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
@@ -36,6 +37,11 @@ type migrationFixture struct {
 }
 
 func newMigrationFixture(t *testing.T) *migrationFixture {
+	t.Helper()
+	return newMigrationFixtureWithCostMap(t, nil)
+}
+
+func newMigrationFixtureWithCostMap(t *testing.T, cm *costmap.Manager) *migrationFixture {
 	t.Helper()
 	f := &migrationFixture{captured: make(chan map[string]any, 100)}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +150,7 @@ func newMigrationFixture(t *testing.T) *migrationFixture {
 	if err := spec.Build(); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(api.NewRouter(route, store, reloader, nil, time.Now(), spec, sm, nil, keystore.New(time.Minute), keystore.NewRateLimiter(), keystore.NewSpendAccumulator(), nil))
+	server := httptest.NewServer(api.NewRouter(route, store, reloader, cm, time.Now(), spec, sm, nil, keystore.New(time.Minute), keystore.NewRateLimiter(), keystore.NewSpendAccumulator(), nil))
 	f.url = server.URL
 	t.Cleanup(server.Close)
 	return f
