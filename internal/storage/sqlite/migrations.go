@@ -329,6 +329,10 @@ func (s *Storage) migrate(ctx context.Context) error {
 		// Preserve the distinction between unavailable usage and a measured zero.
 		`ALTER TABLE usage_logs ADD COLUMN usage_known BOOLEAN NOT NULL DEFAULT FALSE`,
 		`UPDATE usage_logs SET usage_known = TRUE WHERE input_tokens > 0 OR output_tokens > 0`,
+		// Client-supplied session attribution is independent of body capture.
+		`ALTER TABLE usage_logs ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_session_time ON usage_logs(session_id, request_time DESC) WHERE session_id <> ''`,
+		`ALTER TABLE responses_jobs ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for i, sql := range migrations {

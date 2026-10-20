@@ -336,6 +336,7 @@ type CostOverride struct {
 type RequestLog struct {
 	UsageKnown    bool // false when the upstream omitted usage; zero tokens are then unknown
 	RequestID     string
+	SessionID     string // client-supplied log grouping ID; empty = ungrouped
 	APIKeyID      *int64 // nil when authenticated via master key
 	Model         string
 	Provider      string
@@ -351,11 +352,11 @@ type RequestLog struct {
 
 	// New v1.2 telemetry fields. Populated by Phases 13 and 14 respectively;
 	// Phase 12 stores nil/zero defaults until those phases ship.
-	PoolName        string  // empty string = request not routed through a named pool
-	TTFTMs          *int64  // nil = non-streaming or TTFT not yet measured
-	ReqBodySnippet  *string // nil = capture disabled (body_snippet_limit: 0) → SQL NULL
-	                        // non-nil = captured snippet (empty string "" if body was empty)
-	RespBodySnippet string  // empty string until Phase 13 handler instrumentation ships
+	PoolName       string  // empty string = request not routed through a named pool
+	TTFTMs         *int64  // nil = non-streaming or TTFT not yet measured
+	ReqBodySnippet *string // nil = capture disabled (body_snippet_limit: 0) → SQL NULL
+	// non-nil = captured snippet (empty string "" if body was empty)
+	RespBodySnippet  string // empty string until Phase 13 handler instrumentation ships
 	CacheReadTokens  int    // populated from usage.CacheReadTokens; 0 for non-Anthropic
 	CacheWriteTokens int    // populated from usage.CacheWriteTokens; 0 for non-Anthropic
 
@@ -370,9 +371,10 @@ type RequestLog struct {
 // All pointer fields are nil when no filter is applied.
 // String fields use empty-string sentinel: empty = no filter (consistent with Model).
 type LogsFilter struct {
-	Model  string // empty string means no filter
-	TeamID *int64
-	AppID  *int64
+	SessionID string // exact match; empty = no session filter
+	Model     string // empty string means no filter
+	TeamID    *int64
+	AppID     *int64
 	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
 	Provider string     // empty string = no filter (same pattern as Model)
 	PoolName string     // empty string = no filter (same pattern as Model)
@@ -475,18 +477,19 @@ type WebhookSubscription struct {
 // as the primary key. RequestJSON/ResponseJSON/ErrorJSON are raw JSON blobs —
 // the proxy stores/forwards the upstream shape rather than fully modeling it.
 type ResponsesJob struct {
-	ID             string
-	APIKeyID       *int64 // nil when authenticated via master key
-	DeploymentKey  string // provider:model:api_base — re-resolves the deployment for polling
-	ModelName      string
-	PoolName       string // empty string = request not routed through a named pool
-	Status         string // queued|in_progress|completed|failed|cancelled|incomplete
-	RequestJSON    string
-	ResponseJSON   *string
-	ErrorJSON      *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	CompletedAt    *time.Time
+	SessionID     string // log attribution retained across background polling
+	ID            string
+	APIKeyID      *int64 // nil when authenticated via master key
+	DeploymentKey string // provider:model:api_base — re-resolves the deployment for polling
+	ModelName     string
+	PoolName      string // empty string = request not routed through a named pool
+	Status        string // queued|in_progress|completed|failed|cancelled|incomplete
+	RequestJSON   string
+	ResponseJSON  *string
+	ErrorJSON     *string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	CompletedAt   *time.Time
 }
 
 // NotificationEvent represents a routing event in the notification feed.

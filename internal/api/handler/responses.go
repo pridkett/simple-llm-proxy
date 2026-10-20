@@ -46,7 +46,8 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		}
 
 		var respReq model.ResponsesRequest
-		if err := json.NewDecoder(req.Body).Decode(&respReq); err != nil {
+		sessionID, err := decodeSessionRequest(req, &respReq)
+		if err != nil {
 			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
 			return
 		}
@@ -143,7 +144,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		// completes (see handleResponsesStream's EOF branch), not at stream-open —
 		// a mid-stream failure must still count as a deployment failure.
 		if respReq.Stream {
-			usage, cost, err := handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet)
+			usage, cost, err := handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet, sessionID)
 			operation.finish(result, usage, cost)
 			operation.fail(err)
 			return
@@ -152,7 +153,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 
 		if respReq.Background && respResult.Status != "completed" && respResult.Status != "failed" {
 			if store != nil {
-				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq); err != nil {
+				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq, sessionID); err != nil {
 					operation.fail(err)
 					// The upstream job was already created — the client must not receive a
 					// response_id that GET /v1/responses/{id} can never resolve.
@@ -187,6 +188,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 				StartTime:       startTime,
 				IsStreaming:     false,
 				RequestID:       requestID,
+				SessionID:       sessionID,
 				TTFTMs:          nil,
 				RespBodySnippet: "",
 				ReqBodySnippet:  reqBodySnippet,
@@ -214,6 +216,7 @@ func handleResponsesStream(
 	apiKeyID *int64,
 	startTime time.Time,
 	reqBodySnippet *string,
+	sessionID string,
 ) (*model.Usage, float64, error) {
 	defer stream.Close()
 
@@ -256,6 +259,7 @@ func handleResponsesStream(
 					StartTime:       startTime,
 					IsStreaming:     true,
 					RequestID:       requestID,
+					SessionID:       sessionID,
 					TTFTMs:          nil,
 					RespBodySnippet: "",
 					ReqBodySnippet:  reqBodySnippet,
@@ -297,7 +301,7 @@ func handleResponsesStream(
 // subsequent GET /v1/responses/{id} would 404 with no visible error. Uses a
 // detached 5s context (not the request's) so the write isn't aborted by a client
 // disconnect racing the insert.
-func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest) error {
+func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest, sessionID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -313,6 +317,7 @@ func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d
 
 	job := &storage.ResponsesJob{
 		ID:            resp.ID,
+		SessionID:     sessionID,
 		APIKeyID:      apiKeyID,
 		DeploymentKey: d.DeploymentKey(),
 		ModelName:     d.ModelName,

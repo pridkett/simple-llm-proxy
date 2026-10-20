@@ -17,9 +17,9 @@ func (s *Storage) CreateResponsesJob(ctx context.Context, job *storage.Responses
 		poolName = job.PoolName
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO responses_jobs (id, api_key_id, deployment_key, model_name, pool_name, status, request_json, response_json, error_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		job.ID, job.APIKeyID, job.DeploymentKey, job.ModelName, poolName, job.Status, job.RequestJSON, job.ResponseJSON, job.ErrorJSON,
+		`INSERT INTO responses_jobs (id, api_key_id, deployment_key, model_name, pool_name, status, request_json, response_json, error_json, session_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.APIKeyID, job.DeploymentKey, job.ModelName, poolName, job.Status, job.RequestJSON, job.ResponseJSON, job.ErrorJSON, job.SessionID,
 	)
 	if err != nil {
 		return fmt.Errorf("creating responses job %s: %w", job.ID, err)
@@ -30,7 +30,7 @@ func (s *Storage) CreateResponsesJob(ctx context.Context, job *storage.Responses
 // GetResponsesJob returns the job with the given id, or (nil, nil) if not found.
 func (s *Storage) GetResponsesJob(ctx context.Context, id string) (*storage.ResponsesJob, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, api_key_id, deployment_key, model_name, COALESCE(pool_name, ''), status, request_json, response_json, error_json, created_at, updated_at, completed_at
+		`SELECT id, api_key_id, deployment_key, model_name, COALESCE(pool_name, ''), status, request_json, response_json, error_json, created_at, updated_at, completed_at, session_id
 		 FROM responses_jobs WHERE id = ?`, id)
 
 	job, err := scanResponsesJob(row)
@@ -57,7 +57,7 @@ func (s *Storage) UpdateResponsesJob(ctx context.Context, id, status string, res
 // ListPendingResponsesJobs returns all jobs not yet in a terminal status.
 func (s *Storage) ListPendingResponsesJobs(ctx context.Context) ([]*storage.ResponsesJob, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, api_key_id, deployment_key, model_name, COALESCE(pool_name, ''), status, request_json, response_json, error_json, created_at, updated_at, completed_at
+		`SELECT id, api_key_id, deployment_key, model_name, COALESCE(pool_name, ''), status, request_json, response_json, error_json, created_at, updated_at, completed_at, session_id
 		 FROM responses_jobs
 		 WHERE status NOT IN ('completed', 'failed', 'cancelled', 'incomplete')
 		 ORDER BY created_at ASC`)
@@ -90,7 +90,7 @@ func scanResponsesJob(row rowScanner) (*storage.ResponsesJob, error) {
 	err := row.Scan(
 		&job.ID, &job.APIKeyID, &job.DeploymentKey, &job.ModelName, &job.PoolName, &job.Status,
 		&job.RequestJSON, &job.ResponseJSON, &job.ErrorJSON,
-		&job.CreatedAt, &job.UpdatedAt, &job.CompletedAt,
+		&job.CreatedAt, &job.UpdatedAt, &job.CompletedAt, &job.SessionID,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

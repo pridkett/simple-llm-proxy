@@ -44,7 +44,8 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		// reqBodySnippet is nil when cfg.BodySnippetLimit == 0 → stored as SQL NULL
 
 		var chatReq model.ChatCompletionRequest
-		if err := json.NewDecoder(req.Body).Decode(&chatReq); err != nil {
+		sessionID, err := decodeSessionRequest(req, &chatReq)
+		if err != nil {
 			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
 			return
 		}
@@ -169,7 +170,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
+			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, sessionID, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
 			operation.finish(result, usage, cost)
 			operation.fail(err)
 		} else {
@@ -178,7 +179,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 				usage = result.Response.Usage
 			}
 			cost := computeCost(cm, result.DeploymentUsed, usage)
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost)
+			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost, sessionID)
 			operation.finish(result, usage, cost)
 		}
 	}
@@ -198,6 +199,7 @@ func handleNonStreamingResponse(
 	requestID string,
 	reqBodySnippet *string,
 	cost float64,
+	sessionID string,
 ) {
 	r.ReportSuccess(result.DeploymentUsed)
 
@@ -219,6 +221,7 @@ func handleNonStreamingResponse(
 			StartTime:       startTime,
 			IsStreaming:     false,
 			RequestID:       requestID,
+			SessionID:       sessionID,
 			TTFTMs:          nil,
 			RespBodySnippet: "",
 			ReqBodySnippet:  reqBodySnippet,
@@ -247,6 +250,7 @@ func handleStreamingResponse(
 	requestID string,
 	bodySnippetLimit int,
 	reqBodySnippet *string,
+	sessionID string,
 	includeUsage bool,
 ) (*model.Usage, float64, error) {
 	stream := result.Stream
@@ -305,6 +309,7 @@ func handleStreamingResponse(
 					StartTime:       startTime,
 					IsStreaming:     true,
 					RequestID:       requestID,
+					SessionID:       sessionID,
 					TTFTMs:          ttftMs,
 					RespBodySnippet: snippetBuilder.String(),
 					ReqBodySnippet:  reqBodySnippet,
@@ -387,6 +392,7 @@ type logRequestParams struct {
 	StartTime       time.Time
 	IsStreaming     bool
 	RequestID       string
+	SessionID       string
 	TTFTMs          *int64
 	RespBodySnippet string
 	ReqBodySnippet  *string // nil = disabled (limit=0) → SQL NULL; &"" = empty body; &"..." = captured snippet
@@ -417,6 +423,7 @@ func logRequest(p logRequestParams) {
 
 	log := &storage.RequestLog{
 		RequestID:        p.RequestID,
+		SessionID:        p.SessionID,
 		APIKeyID:         p.APIKeyID,
 		Model:            p.Deployment.ModelName,
 		Provider:         p.Deployment.ProviderName,

@@ -134,6 +134,7 @@ func AdminReload(reloader *config.Reloader, r *router.Router) http.HandlerFunc {
 
 type logEntry struct {
 	RequestID     string    `json:"request_id"`
+	SessionID     string    `json:"session_id"`
 	Model         string    `json:"model"`
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
@@ -187,6 +188,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 		// Parse optional filter params.
 		var filters storage.LogsFilter
 		filters.Model = req.URL.Query().Get("model")
+		filters.SessionID = req.URL.Query().Get("session_id")
 		if v := req.URL.Query().Get("team_id"); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 				filters.TeamID = &n
@@ -226,6 +228,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 		for _, l := range logs {
 			entries = append(entries, logEntry{
 				RequestID:     l.RequestID,
+				SessionID:     l.SessionID,
 				Model:         l.Model,
 				Provider:      l.Provider,
 				Endpoint:      l.Endpoint,

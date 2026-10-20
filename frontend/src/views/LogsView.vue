@@ -9,13 +9,13 @@
     <div class="mb-4 flex flex-wrap gap-3 items-end">
       <div class="flex gap-1">
         <button
-          v-for="range in ['today', '7d', '30d', 'custom']"
-          :key="range"
+          v-for="range in [null, 'today', '7d', '30d', 'custom']"
+          :key="range || 'all'"
           @click="datePreset = range"
           :class="datePreset === range ? 'bg-indigo-50 text-indigo-700 font-bold' : 'btn-secondary'"
           class="btn-secondary text-xs py-2"
         >
-          {{ { today: 'Today', '7d': '7d', '30d': '30d', custom: 'Custom' }[range] }}
+          {{ { null: 'All time', today: 'Today', '7d': '7d', '30d': '30d', custom: 'Custom' }[range] }}
         </button>
       </div>
       <template v-if="datePreset === 'custom'">
@@ -83,6 +83,20 @@
       >
         Clear Filters
       </button>
+    </div>
+
+    <form class="mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="applySession">
+      <div class="w-full sm:w-80">
+        <label for="session-filter" class="block text-xs font-medium text-gray-500 mb-1">Session ID</label>
+        <input id="session-filter" v-model="sessionSearch" class="input text-sm py-2 w-full"
+               placeholder="Exact session ID" maxlength="256" />
+      </div>
+      <button class="btn-secondary text-xs py-2" type="submit">Filter session</button>
+      <button v-if="filterSession" class="btn-secondary text-xs py-2" type="button" @click="removeSession">Clear session</button>
+    </form>
+    <div v-if="filterSession" class="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900" role="status">
+      <p class="font-medium">Session <span class="font-mono break-all">{{ filterSession }}</span></p>
+      <p class="text-xs mt-1">{{ loading ? 'Loading requests…' : `${logsData?.total || 0} requests matching current filters` }} · {{ datePreset === null ? 'All time' : 'Selected date range' }}</p>
     </div>
 
     <LoadingSpinner v-if="loading" />
@@ -165,6 +179,15 @@
 
                         <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2">Attribution</p>
                         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span class="text-gray-500">Session ID</span>
+                          <RouterLink v-if="detailCache.get(log.request_id).session_id"
+                                      :to="{ path: '/logs', query: { session_id: detailCache.get(log.request_id).session_id } }"
+                                      @click="resetDimensions"
+                                      class="font-mono text-indigo-600 hover:underline break-all"
+                                      title="View all requests in this session">
+                            {{ detailCache.get(log.request_id).session_id }}
+                          </RouterLink>
+                          <span v-else class="text-gray-400">—</span>
                           <span class="text-gray-500">Team</span>
                           <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).team_name || '—' }}</span>
                           <span class="text-gray-500">Application</span>
@@ -259,10 +282,26 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { api } from '../api/client.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
+
+const route = useRoute()
+const router = useRouter()
+const filterSession = computed(() => typeof route.query.session_id === 'string' ? route.query.session_id : '')
+const sessionSearch = ref(filterSession.value)
+
+function applySession() {
+  const sessionID = sessionSearch.value.trim()
+  router.push({ query: { ...route.query, session_id: sessionID || undefined } })
+}
+
+function removeSession() {
+  sessionSearch.value = ''
+  router.push({ query: { ...route.query, session_id: undefined } })
+}
 
 const logsData = ref(null)
 const loading = ref(false)
@@ -306,7 +345,7 @@ const hasActiveFilters = computed(() => {
     filterKey.value !== null ||
     filterProvider.value !== '' ||
     filterPool.value !== '' ||
-    filterModel.value !== ''
+    filterModel.value !== '' || filterSession.value !== ''
 })
 
 function buildDateParams() {
@@ -330,15 +369,18 @@ function buildDateParams() {
   return {} // D-06: no preset = no date params = full history
 }
 
+let loadSequence = 0
 async function load() {
+  const sequence = ++loadSequence
   loading.value = true
   error.value = ''
   try {
     const dateParams = buildDateParams()
-    logsData.value = await api.logs({
+    const result = await api.logs({
       limit: pageSize,
       offset: offset.value,
       model: filterModel.value || undefined,
+      session_id: filterSession.value || undefined,
       team_id: filterTeam.value,
       app_id: filterApp.value,
       key_id: filterKey.value,
@@ -346,10 +388,11 @@ async function load() {
       pool_name: filterPool.value || undefined,
       ...dateParams,
     })
+    if (sequence === loadSequence) logsData.value = result
   } catch (e) {
-    error.value = e?.message || 'Failed to load logs'
+    if (sequence === loadSequence) error.value = e?.message || 'Failed to load logs'
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
 
@@ -372,12 +415,17 @@ async function loadMeta() {
 
 // D-09: any filter change auto-fetches with offset reset
 watch(
-  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel],
+  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterSession],
   () => {
     offset.value = 0
     load()
   }
 )
+
+watch(filterSession, (value) => {
+  sessionSearch.value = value
+  expandedRows.value = new Set()
+})
 
 let customDateDebounceTimer = null
 function onCustomDateChange() {
@@ -389,12 +437,22 @@ function onCustomDateChange() {
 }
 watch([customFrom, customTo], onCustomDateChange)
 
+onBeforeUnmount(() => {
+  clearTimeout(customDateDebounceTimer)
+  loadSequence++
+})
+
 onMounted(async () => {
   await loadMeta()
   await load()
 })
 
 function clearFilters() {
+  resetDimensions()
+  removeSession()
+}
+
+function resetDimensions() {
   datePreset.value = null
   customFrom.value = ''
   customTo.value = ''

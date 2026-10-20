@@ -60,6 +60,7 @@ func chatCompletionsPath() *openapi3.PathItem {
 			Summary:     "Create chat completion",
 			Description: "Creates a model response for the given chat conversation. Supports streaming via Server-Sent Events when stream=true.",
 			OperationID: "createChatCompletion",
+			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -110,6 +111,7 @@ func responsesPath() *openapi3.PathItem {
 			Summary:     "Create a response",
 			Description: "Creates a model response via the OpenAI Responses API. Supports streaming (stream=true) and background/long-running requests (background=true, poll GET /v1/responses/{id} for the result). Only model_name entries backed by an OpenAI deployment support this endpoint.",
 			OperationID: "createResponse",
+			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -212,6 +214,7 @@ func embeddingsPath() *openapi3.PathItem {
 			Summary:     "Create embeddings",
 			Description: "Creates an embedding vector representing the input text",
 			OperationID: "createEmbeddings",
+			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -365,6 +368,10 @@ func adminLogsPath() *openapi3.PathItem {
 			OperationID: "getAdminLogs",
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{
+					Name: "session_id", In: "query", Description: "Exact client-supplied session ID; combines with other log filters",
+					Schema: sessionIDSchema(),
+				}},
 				&openapi3.ParameterRef{
 					Value: &openapi3.Parameter{
 						Name:        "limit",
@@ -562,4 +569,12 @@ func buildSecuritySchemes() openapi3.SecuritySchemes {
 			},
 		},
 	}
+}
+
+func sessionHeaderParameter() *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{Value: &openapi3.Parameter{
+		Name: "X-Session-ID", In: "header",
+		Description: "Group related requests in session logs. Takes precedence over session_id/litellm_session_id in the JSON body or metadata. Independent of routing affinity.",
+		Schema:      sessionIDSchema(),
+	}}
 }

@@ -96,12 +96,12 @@ func TestMigrationIdempotency(t *testing.T) {
 		t.Fatalf("second migrate() call failed (not idempotent): %v", err)
 	}
 
-	// Prior schema plus the usage availability column and historical-row backfill.
+	// Prior schema plus usage availability and session attribution.
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 47 {
-		t.Errorf("expected 47 rows in schema_migrations, got %d", count)
+	if count != 50 {
+		t.Errorf("expected 50 rows in schema_migrations, got %d", count)
 	}
 }

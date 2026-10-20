@@ -280,3 +280,41 @@ simple_llm_proxy/
 ## License
 
 MIT
+
+## Session logs
+
+Group requests from a story playthrough, conversation, or agent run by sending
+one unique session ID on every related request. Chat completions, embeddings,
+and Responses requests (including streams and background jobs) support:
+
+```python
+client.chat.completions.create(
+    model="your-model",
+    messages=[{"role": "user", "content": "Continue the story"}],
+    extra_body={"session_id": "thecanyon:playthrough-123"},
+)
+```
+
+You can instead send `X-Session-ID: thecanyon:playthrough-123` or use LiteLLM's
+`litellm_session_id` at the top level or inside `metadata`. `metadata.session_id`
+is also accepted. Precedence is header, top-level `session_id`, top-level
+`litellm_session_id`, `metadata.session_id`, then `metadata.litellm_session_id`;
+blank and null values are skipped. IDs must be strings of at most 256 UTF-8 bytes without
+control characters; surrounding whitespace is trimmed. Invalid values return 400.
+Session fields are consumed by the proxy; other metadata is preserved upstream.
+
+In **Logs**, expand a request and click **Session ID** under **Attribution** to
+view all retained requests with that ID across dates, models, providers, and
+keys. The individual requests remain expandable and paginated. You can also
+paste an exact ID into the session filter, combine it with existing filters,
+and share the `/#/logs?session_id=...` URL. **Clear session** removes only the
+session filter; **Clear Filters** resets everything. The admin API accepts
+`GET /admin/logs?session_id=...` and includes `session_id` in list and detail
+responses.
+
+Session IDs are stored independently of request body capture. Existing logs
+remain ungrouped; sessions obey the normal log retention policy. Use globally
+unique IDs (for example, an application prefix plus a UUID): reusing an ID
+combines its requests, even across keys. Session attribution does not change
+routing affinity or infer sessions from `user`, message contents, or
+`previous_response_id`; clients must supply the ID on every request.

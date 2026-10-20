@@ -523,7 +523,7 @@ func TestResponses_BackgroundCreateThenPollThenCancel(t *testing.T) {
 	cm := costmap.New()
 
 	h := Responses(r, store, sa, cm, nil, config.GeneralSettings{})
-	body, _ := json.Marshal(map[string]any{"model": "test-model", "input": "hi", "background": true})
+	body, _ := json.Marshal(map[string]any{"model": "test-model", "input": "hi", "background": true, "session_id": "play-background"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	h(w, req)
@@ -541,7 +541,7 @@ func TestResponses_BackgroundCreateThenPollThenCancel(t *testing.T) {
 		t.Fatalf("expected 1 persisted job, got %d", len(store.jobs))
 	}
 	job := store.jobs["resp_bg_1"]
-	if job == nil || job.Status != "queued" {
+	if job == nil || job.Status != "queued" || job.SessionID != "play-background" {
 		t.Fatalf("unexpected persisted job: %+v", job)
 	}
 

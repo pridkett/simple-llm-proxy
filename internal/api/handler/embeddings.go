@@ -35,7 +35,8 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		reqBodySnippet := &s
 
 		var embReq model.EmbeddingsRequest
-		if err := json.NewDecoder(req.Body).Decode(&embReq); err != nil {
+		sessionID, err := decodeSessionRequest(req, &embReq)
+		if err != nil {
 			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
 			return
 		}
@@ -148,6 +149,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 				StartTime:       startTime,
 				IsStreaming:     false,
 				RequestID:       requestID,
+				SessionID:       sessionID,
 				TTFTMs:          nil,
 				RespBodySnippet: "",
 				ReqBodySnippet:  reqBodySnippet,
