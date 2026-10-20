@@ -87,10 +87,11 @@
           :key="link.to"
           :to="link.to"
           class="relative whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-          :class="route.path === link.to
+          :class="(route.path === link.to || (link.to === '/teams' && route.path.startsWith('/teams/')))
             ? 'bg-indigo-50 text-indigo-700'
             : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'"
           @click="closeNavigation(true)"
+          :aria-current="(route.path === link.to || (link.to === '/teams' && route.path.startsWith('/teams/'))) ? 'page' : undefined"
         >
           {{ link.label }}
           <span
@@ -143,8 +144,6 @@ const links = [
 const adminLinks = [
   { to: '/users', label: 'Users' },
   { to: '/teams', label: 'Teams' },
-  { to: '/applications', label: 'Applications' },
-  { to: '/keys', label: 'Keys' },
   { to: '/cost', label: 'Cost' },
   { to: '/pools', label: 'Pools' },
   { to: '/webhooks', label: 'Webhooks' },
