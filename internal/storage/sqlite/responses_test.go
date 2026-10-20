@@ -15,6 +15,7 @@ func TestResponsesJobCreateGet(t *testing.T) {
 	keyID := int64(7)
 	job := &storage.ResponsesJob{
 		ID:            "resp_123",
+		SessionID:     "background-session",
 		APIKeyID:      &keyID,
 		DeploymentKey: "openai:gpt-5:",
 		ModelName:     "gpt-5",
@@ -32,7 +33,7 @@ func TestResponsesJobCreateGet(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected job, got nil")
 	}
-	if got.Status != "queued" || got.ModelName != "gpt-5" || got.DeploymentKey != "openai:gpt-5:" {
+	if got.SessionID != "background-session" || got.Status != "queued" || got.ModelName != "gpt-5" || got.DeploymentKey != "openai:gpt-5:" {
 		t.Errorf("unexpected job fields: %+v", got)
 	}
 	if got.APIKeyID == nil || *got.APIKeyID != keyID {

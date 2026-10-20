@@ -94,6 +94,16 @@ describe('api client', () => {
   })
 
   describe('logs()', () => {
+    it('encodes the exact session ID alongside pagination and dimension filters', async () => {
+      mockFetch({ logs: [], total: 0 })
+      const sessionID = 'story:/?a=1&b=%'
+      await api.logs({ session_id: sessionID, limit: 50, offset: 50, provider: 'openai' })
+      const [url] = global.fetch.mock.calls[0]
+      const params = new URL(url, 'http://localhost').searchParams
+      expect(params.get('session_id')).toBe(sessionID)
+      expect(params.get('offset')).toBe('50')
+      expect(params.get('provider')).toBe('openai')
+    })
     it('calls GET /admin/logs with no params by default', async () => {
       mockFetch({ logs: [], total: 0, limit: 50, offset: 0 })
       await api.logs()

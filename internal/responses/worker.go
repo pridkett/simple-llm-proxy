@@ -178,6 +178,7 @@ func (w *Worker) logCompletion(job *storage.ResponsesJob, d *provider.Deployment
 	logEntry := &storage.RequestLog{
 		RequestID:        fmt.Sprintf("responses-%s", job.ID),
 		APIKeyID:         job.APIKeyID,
+		SessionID:        job.SessionID,
 		Model:            job.ModelName,
 		Provider:         d.ProviderName,
 		Endpoint:         "/v1/responses",

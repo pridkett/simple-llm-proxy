@@ -41,7 +41,7 @@ func TestAdminLogsFilterParsing(t *testing.T) {
 	handler := AdminLogs(mock)
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/admin/logs?provider=openai&pool_name=fast-pool&key_id=5&date_from=2026-04-01T00:00:00Z&date_to=2026-06-01T00:00:00Z",
+		"/admin/logs?session_id=play-1&provider=openai&pool_name=fast-pool&key_id=5&date_from=2026-04-01T00:00:00Z&date_to=2026-06-01T00:00:00Z",
 		nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
@@ -50,6 +50,9 @@ func TestAdminLogsFilterParsing(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	f := mock.capturedFilter
+	if f.SessionID != "play-1" {
+		t.Errorf("session ID=%q", f.SessionID)
+	}
 	if f.Provider != "openai" {
 		t.Errorf("Provider: got %q, want openai", f.Provider)
 	}
@@ -73,6 +76,7 @@ func TestAdminLogDetail_Found(t *testing.T) {
 	mock := &filterCaptureMock{
 		logByIDResult: &storage.RequestLog{
 			RequestID:   "req-123",
+			SessionID:   "play-1",
 			Model:       "gpt-4",
 			Provider:    "openai",
 			Endpoint:    "/v1/chat/completions",
@@ -95,6 +99,9 @@ func TestAdminLogDetail_Found(t *testing.T) {
 	var resp map[string]interface{}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
+	}
+	if resp["session_id"] != "play-1" {
+		t.Errorf("session ID=%v", resp["session_id"])
 	}
 	if resp["request_id"] != "req-123" {
 		t.Errorf("request_id: got %v, want req-123", resp["request_id"])

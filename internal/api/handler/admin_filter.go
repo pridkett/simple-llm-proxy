@@ -15,6 +15,7 @@ import (
 type logDetailEntry struct {
 	// --- logEntry fields (verbatim copy — do not embed) ---
 	RequestID     string    `json:"request_id"`
+	SessionID     string    `json:"session_id"`
 	Model         string    `json:"model"`
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
@@ -62,6 +63,7 @@ func AdminLogDetail(store storage.Storage) http.HandlerFunc {
 		}
 		entry := logDetailEntry{
 			RequestID:        log.RequestID,
+			SessionID:        log.SessionID,
 			Model:            log.Model,
 			Provider:         log.Provider,
 			Endpoint:         log.Endpoint,

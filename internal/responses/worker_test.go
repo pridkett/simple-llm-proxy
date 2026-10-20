@@ -44,7 +44,7 @@ func TestWorker_PollJob_AdvancesToTerminal(t *testing.T) {
 
 	dk := mustDeploymentKey(t, r, "test-model")
 	job := &storage.ResponsesJob{
-		ID: "resp_1", DeploymentKey: dk, ModelName: "test-model",
+		ID: "resp_1", DeploymentKey: dk, ModelName: "test-model", SessionID: "play-background",
 		Status: "queued", RequestJSON: `{}`,
 	}
 	if err := store.CreateResponsesJob(ctx, job); err != nil {
@@ -70,6 +70,10 @@ func TestWorker_PollJob_AdvancesToTerminal(t *testing.T) {
 	}
 	if got.CompletedAt == nil {
 		t.Fatalf("expected completed_at to be set")
+	}
+	logs, total, err := store.GetLogs(ctx, 50, 0, storage.LogsFilter{SessionID: "play-background"})
+	if err != nil || total != 1 || logs[0].SessionID != "play-background" {
+		t.Fatalf("background session attribution: logs=%+v total=%d err=%v", logs, total, err)
 	}
 }
 

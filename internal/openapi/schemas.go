@@ -62,6 +62,8 @@ func chatCompletionRequestSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"model", "messages"},
 			Properties: openapi3.Schemas{
+				"session_id":         sessionIDSchema(),
+				"litellm_session_id": sessionIDSchema(),
 				"model": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
@@ -168,6 +170,8 @@ func embeddingsRequestSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"model", "input"},
 			Properties: openapi3.Schemas{
+				"session_id":         sessionIDSchema(),
+				"litellm_session_id": sessionIDSchema(),
 				"model": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
@@ -905,17 +909,18 @@ func logEntrySchema() *openapi3.SchemaRef {
 		Value: &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
-				"request_id":         {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"model":              {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"provider":           {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"endpoint":           {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"prompt_tokens":      {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"completion_tokens":  {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"total_tokens":       {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"total_cost":         {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}}},
-				"status_code":        {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"latency_ms":         {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"request_time":       {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "date-time"}},
+				"session_id":        sessionIDSchema(),
+				"request_id":        {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"model":             {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"provider":          {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"endpoint":          {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"prompt_tokens":     {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"completion_tokens": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"total_tokens":      {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"total_cost":        {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}}},
+				"status_code":       {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"latency_ms":        {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"request_time":      {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "date-time"}},
 			},
 		},
 	}
@@ -1008,16 +1013,18 @@ func responsesRequestSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"model", "input"},
 			Properties: openapi3.Schemas{
-				"model": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "ID of the model to use"}},
-				"input": {Value: &openapi3.Schema{Description: "A string or structured array of input items"}},
-				"instructions": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "System-level instructions for the model"}},
+				"session_id":           sessionIDSchema(),
+				"litellm_session_id":   sessionIDSchema(),
+				"model":                {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "ID of the model to use"}},
+				"input":                {Value: &openapi3.Schema{Description: "A string or structured array of input items"}},
+				"instructions":         {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "System-level instructions for the model"}},
 				"previous_response_id": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "ID of a prior response to continue from", Nullable: true}},
-				"background": {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, the response is created asynchronously; poll GET /v1/responses/{id} for the result"}},
-				"stream":     {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, server-sent Responses API events are streamed"}},
-				"temperature": {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(2.0)}},
-				"top_p":       {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(1.0)}},
-				"max_output_tokens": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Min: ptr(1.0)}},
-				"tools":       {Value: &openapi3.Schema{Type: &openapi3.Types{"array"}, Items: &openapi3.SchemaRef{Ref: "#/components/schemas/Tool"}}},
+				"background":           {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, the response is created asynchronously; poll GET /v1/responses/{id} for the result"}},
+				"stream":               {Value: &openapi3.Schema{Type: &openapi3.Types{"boolean"}, Description: "When true, server-sent Responses API events are streamed"}},
+				"temperature":          {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(2.0)}},
+				"top_p":                {Value: &openapi3.Schema{Type: &openapi3.Types{"number"}, Min: ptr(0.0), Max: ptr(1.0)}},
+				"max_output_tokens":    {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Min: ptr(1.0)}},
+				"tools":                {Value: &openapi3.Schema{Type: &openapi3.Types{"array"}, Items: &openapi3.SchemaRef{Ref: "#/components/schemas/Tool"}}},
 				"metadata": {Value: &openapi3.Schema{
 					Type:                 &openapi3.Types{"object"},
 					Description:          "Arbitrary string key/value metadata attached to the response",
@@ -1060,3 +1067,10 @@ func responsesResponseSchema() *openapi3.SchemaRef {
 	}
 }
 
+func sessionIDSchema() *openapi3.SchemaRef {
+	maxLength := uint64(256)
+	return &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type: &openapi3.Types{"string"}, MaxLength: &maxLength,
+		Description: "Client-supplied session ID for log grouping (up to 256 UTF-8 bytes, no control characters). Also accepts metadata.session_id or metadata.litellm_session_id. Whitespace is trimmed; an empty ID leaves the request ungrouped. Proxy-only session fields are not forwarded upstream.",
+	}}
+}
