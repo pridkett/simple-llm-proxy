@@ -1,6 +1,6 @@
 # Simple LLM Proxy
 
-A Go proxy for apps using OpenAI-compatible chat completions. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
+A Go proxy for apps using OpenAI-compatible chat completions or Anthropic-compatible Messages. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
 
 For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
 
@@ -165,11 +165,12 @@ model_list:
 | GET | `/openapi.json` | OpenAPI 3.0 specification (no auth required) |
 | GET | `/v1/models` | List available models |
 | POST | `/v1/chat/completions` | Chat completions (streaming supported) |
+| POST | `/v1/messages` | Anthropic-compatible Messages to any configured chat model (streaming supported) |
 | POST | `/v1/embeddings` | Generate embeddings (compatible providers) |
 
 ### Authentication
 
-All `/v1/*` endpoints require authentication via bearer token:
+All `/v1/*` endpoints accept authentication via bearer token. `/v1/messages` also accepts proxy keys in `x-api-key` for Anthropic SDK compatibility. An explicit `Authorization` header takes precedence:
 
 ```bash
 curl -H "Authorization: Bearer your-app-key" http://localhost:8080/v1/models
@@ -189,6 +190,68 @@ curl -X POST http://localhost:8080/v1/chat/completions \
     "stream": true
   }'
 ```
+
+### Anthropic Messages API
+
+Use `POST /v1/messages` with any configured `model_name`. The requested name
+selects the existing route, so an Anthropic SDK can call OpenAI, OpenRouter,
+Ollama, Anthropic, or another registered chat provider through the same endpoint.
+Application key permissions, rate limits, budgets, failover, session logging,
+and cost tracking apply as they do for chat completions.
+
+```bash
+curl -N http://localhost:8080/v1/messages \
+  -H "x-api-key: your-app-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "max_tokens": 128,
+    "system": "Be concise.",
+    "messages": [{"role": "user", "content": "Count to 10"}],
+    "stream": true
+  }'
+```
+
+With the Python `anthropic` SDK, set `base_url` to the proxy root, without `/v1`:
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(api_key="your-app-key", base_url="http://localhost:8080")
+with client.messages.stream(
+    model="gpt-4",  # Any configured proxy model_name
+    max_tokens=128,
+    messages=[{"role": "user", "content": "Hello!"}],
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="", flush=True)
+    message = stream.get_final_message()
+    print(message.usage)
+```
+
+Use `client.messages.create(...)` for a non-streaming Message response.
+Streaming returns named Anthropic events, including incremental text and tool
+JSON deltas, and ends with `message_stop`. An upstream failure emits an `error`
+event. Responses use the requested model alias; `X-Provider-Used` identifies
+the actual deployment. `request-id` and `X-Request-ID` carry the same correlation ID.
+
+Supported portable fields include string or text-block system prompts, text,
+base64/URL user images, client tool schemas, assistant `tool_use`, user
+`tool_result` with string/text content, `tool_choice` (`auto`, `any`, `tool`,
+`none`), `disable_parallel_tool_use`, `max_tokens`, `temperature`, `top_p`,
+`stop_sequences`, and `metadata.user_id`. Tool errors are conveyed to the model
+with a `Tool error:` prefix. Vision and tool use require a capable target model.
+
+This endpoint implements the portable Messages subset. Unsupported fields and
+content types return HTTP 400, including extended thinking, `top_k`, server
+tools, documents, and beta-only options. Token counting, batches, and files
+endpoints are not implemented. Cache-control hints are accepted but do not
+guarantee provider caching. A matched `stop_sequence` is returned only when the
+upstream reports it; other providers may report `end_turn` instead. Usage comes
+from the upstream; initial streaming usage may be zero until final counts arrive.
+If the upstream omits usage, response counts are zero and stored usage remains
+unknown. See [ADR 014](adr/014-anthropic-messages-api.md) for the design and plan.
 
 ### OpenAPI Specification
 

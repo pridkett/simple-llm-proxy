@@ -55,8 +55,9 @@ Messages protocol. Do not implement a second router or an Anthropic-only bypass.
   failure emits an Anthropic error event, never a successful completion marker.
   Client cancellation continues to avoid penalizing provider health.
 - Map length to max_tokens, tool_calls to tool_use, stop to end_turn, and preserve
-  stop_sequence when the upstream reports it. Do not invent a matched sequence
-  when the normalized upstream result does not identify it.
+  stop_sequence and its matched sequence when the upstream reports them. Carry
+  provider stop metadata internally without changing the OpenAI wire format.
+  Do not invent a sequence when the upstream does not identify it.
 - Use reported token usage, including cache counts. OpenAI-compatible streams
   request usage explicitly; final usage may arrive after the finish reason.
   message_start may have zero input usage until the provider reports counts;

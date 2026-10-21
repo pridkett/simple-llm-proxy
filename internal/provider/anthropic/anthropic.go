@@ -70,13 +70,14 @@ type anthropicMessage struct {
 }
 
 type anthropicContent struct {
-	Type      string `json:"type"`
-	Text      string `json:"text,omitempty"`
-	ID        string `json:"id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Input     any    `json:"input,omitempty"`
-	ToolUseID string `json:"tool_use_id,omitempty"`
-	Content   string `json:"content,omitempty"`
+	Type      string         `json:"type"`
+	Text      string         `json:"text,omitempty"`
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	Input     any            `json:"input,omitempty"`
+	ToolUseID string         `json:"tool_use_id,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Source    map[string]any `json:"source,omitempty"`
 }
 
 type anthropicTool struct {
@@ -115,10 +116,11 @@ type anthropicStreamEvent struct {
 }
 
 type anthropicDelta struct {
-	Type        string `json:"type,omitempty"`
-	Text        string `json:"text,omitempty"`
-	StopReason  string `json:"stop_reason,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"`
+	Type         string  `json:"type,omitempty"`
+	Text         string  `json:"text,omitempty"`
+	StopReason   string  `json:"stop_reason,omitempty"`
+	StopSequence *string `json:"stop_sequence,omitempty"`
+	PartialJSON  string  `json:"partial_json,omitempty"`
 }
 
 type anthropicError struct {
@@ -385,6 +387,7 @@ func (p *Provider) translateResponse(resp *anthropicResponse, requestModel strin
 					ToolCalls: toolCalls,
 				},
 				FinishReason: mapStopReason(resp.StopReason),
+				StopSequence: optionalStopSequence(resp.StopReason, resp.StopSequence),
 			},
 		},
 		Usage: &model.Usage{
@@ -505,6 +508,7 @@ func (p *Provider) translateStreamEvent(event *anthropicStreamEvent, id, request
 						Index:        0,
 						Delta:        &model.Delta{},
 						FinishReason: mapStopReason(event.Delta.StopReason),
+						StopSequence: event.Delta.StopSequence,
 					},
 				},
 				Usage: usage,
@@ -569,6 +573,32 @@ func convertContent(msg model.Message) any {
 		return content
 	}
 
+	// Preserve multimodal user content for both inbound API formats.
+	if data, err := json.Marshal(msg.Content); err == nil {
+		var parts []model.ContentPart
+		if json.Unmarshal(data, &parts) == nil && len(parts) > 0 {
+			content := make([]anthropicContent, 0, len(parts))
+			for _, part := range parts {
+				switch part.Type {
+				case "text":
+					content = append(content, anthropicContent{Type: "text", Text: part.Text})
+				case "image_url":
+					if part.ImageURL == nil {
+						continue
+					}
+					source := map[string]any{"type": "url", "url": part.ImageURL.URL}
+					if strings.HasPrefix(part.ImageURL.URL, "data:") {
+						prefix, data, ok := strings.Cut(strings.TrimPrefix(part.ImageURL.URL, "data:"), ";base64,")
+						if ok {
+							source = map[string]any{"type": "base64", "media_type": prefix, "data": data}
+						}
+					}
+					content = append(content, anthropicContent{Type: "image", Source: source})
+				}
+			}
+			return content
+		}
+	}
 	// Simple text content
 	return extractTextContent(msg.Content)
 }
@@ -580,6 +610,13 @@ func mapRole(role string) string {
 	default:
 		return role
 	}
+}
+
+func optionalStopSequence(reason, sequence string) *string {
+	if reason != "stop_sequence" {
+		return nil
+	}
+	return &sequence
 }
 
 func mapStopReason(reason string) string {

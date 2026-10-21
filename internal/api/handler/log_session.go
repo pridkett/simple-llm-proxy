@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"unicode"
@@ -11,10 +12,20 @@ import (
 // decodeSessionRequest consumes proxy-only session attribution before decoding
 // the provider request. No dependency on body capture, routing affinity, or user.
 // Precedence: header, top-level session_id/litellm_session_id, then metadata.
-func decodeSessionRequest(req *http.Request, dst any) (string, error) {
+func decodeSessionRequest(req *http.Request, dst any, strict ...bool) (string, error) {
 	var fields map[string]json.RawMessage
-	if err := json.NewDecoder(req.Body).Decode(&fields); err != nil {
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&fields); err != nil {
 		return "", err
+	}
+	if len(strict) > 0 && strict[0] {
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err != nil {
+				return "", err
+			}
+			return "", fmt.Errorf("request must contain a single JSON object")
+		}
 	}
 	if fields == nil {
 		return "", fmt.Errorf("request must be a JSON object")

@@ -19,7 +19,7 @@ func Recovery() func(http.Handler) http.Handler {
 						Interface("panic", err).
 						Str("stack", string(debug.Stack())).
 						Msg("panic recovered")
-					model.WriteError(w, model.ErrInternalServer("internal server error", nil))
+					model.WriteRequestError(w, r, model.ErrInternalServer("internal server error", nil))
 				}
 			}()
 

@@ -30,8 +30,12 @@ func KeyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if r.URL.Path == "/v1/messages" && r.Header.Get("Authorization") == "" {
+				token = r.Header.Get("x-api-key")
+			}
+			writeError := func(w http.ResponseWriter, err *model.ProxyError) { model.WriteRequestError(w, r, err) }
 			if token == "" {
-				model.WriteError(w, model.ErrUnauthorized("missing Authorization header"))
+				writeError(w, model.ErrUnauthorized("missing API key"))
 				return
 			}
 
@@ -45,28 +49,28 @@ func KeyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 			ctx := r.Context()
 			ck, err := cache.Get(ctx, token, store)
 			if err != nil {
-				model.WriteError(w, model.ErrInternal("key lookup failed"))
+				writeError(w, model.ErrInternal("key lookup failed"))
 				return
 			}
 			if ck == nil {
-				model.WriteError(w, model.ErrUnauthorized("invalid API key"))
+				writeError(w, model.ErrUnauthorized("invalid API key"))
 				return
 			}
 			if !ck.Key.IsActive {
-				model.WriteError(w, model.ErrUnauthorized("API key has been revoked"))
+				writeError(w, model.ErrUnauthorized("API key has been revoked"))
 				return
 			}
 
 			// Rate limit checks (RPM then RPD)
 			if ck.Key.MaxRPM != nil {
 				if !rl.CheckAndIncrementRPM(ck.Key.ID, *ck.Key.MaxRPM) {
-					model.WriteError(w, model.ErrRateLimited("rate limit exceeded: requests per minute"))
+					writeError(w, model.ErrRateLimited("rate limit exceeded: requests per minute"))
 					return
 				}
 			}
 			if ck.Key.MaxRPD != nil {
 				if !rl.CheckAndIncrementRPD(ck.Key.ID, *ck.Key.MaxRPD) {
-					model.WriteError(w, model.ErrRateLimited("rate limit exceeded: requests per day"))
+					writeError(w, model.ErrRateLimited("rate limit exceeded: requests per day"))
 					return
 				}
 			}
@@ -74,7 +78,7 @@ func KeyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 			// Hard budget check
 			if ck.Key.MaxBudget != nil {
 				if sa.CurrentSpend(ck.Key.ID) >= *ck.Key.MaxBudget {
-					model.WriteError(w, model.ErrBudgetExceeded("hard budget limit exceeded for this API key"))
+					writeError(w, model.ErrBudgetExceeded("hard budget limit exceeded for this API key"))
 					return
 				}
 			}
