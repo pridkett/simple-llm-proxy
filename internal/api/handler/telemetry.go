@@ -67,7 +67,7 @@ func (o *operationSpan) failedAttempt(d *provider.Deployment, err error) {
 	o.span.AddEvent("llmproxy.provider_attempt.failed", trace.WithAttributes(attrs...))
 }
 
-func (o *operationSpan) finish(result *router.RouteResult, usage *model.Usage, cost float64) {
+func (o *operationSpan) finish(result *router.RouteResult, usage *model.Usage, cost float64, known ...bool) {
 	if o == nil || result == nil {
 		return
 	}
@@ -98,7 +98,11 @@ func (o *operationSpan) finish(result *router.RouteResult, usage *model.Usage, c
 	if usage != nil {
 		o.span.SetAttributes(attribute.Int(proxyotel.GenAIInputTokens, usage.PromptTokens), attribute.Int(proxyotel.GenAIOutputTokens, usage.CompletionTokens))
 	}
-	if usage != nil {
+	costKnown := usage != nil
+	if len(known) > 0 {
+		costKnown = known[0]
+	}
+	if costKnown {
 		o.span.SetAttributes(attribute.Float64(proxyotel.CostTotalUSD, cost))
 	}
 }

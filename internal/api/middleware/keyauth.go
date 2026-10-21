@@ -27,6 +27,15 @@ func APIKeyFromContext(ctx context.Context) *keystore.CachedKey {
 // Per D-06: CachedKey is injected into context so downstream handlers can read key config
 // for model allowlist enforcement and cost attribution without extra DB calls.
 func KeyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl *keystore.RateLimiter, sa *keystore.SpendAccumulator) func(http.Handler) http.Handler {
+	return keyAuth(masterKey, store, cache, rl, sa, false)
+}
+
+// KeyAuthReadOnly authenticates active keys without consuming generation quotas or
+// enforcing spend caps, so clients can retrieve accounting after exhausting them.
+func KeyAuthReadOnly(masterKey string, store storage.Storage, cache *keystore.Cache) func(http.Handler) http.Handler {
+	return keyAuth(masterKey, store, cache, nil, nil, true)
+}
+func keyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl *keystore.RateLimiter, sa *keystore.SpendAccumulator, readOnly bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -61,6 +70,11 @@ func KeyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 				return
 			}
 
+			if readOnly {
+				ctx = context.WithValue(ctx, contextKeyAPIKey{}, ck)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
 			// Rate limit checks (RPM then RPD)
 			if ck.Key.MaxRPM != nil {
 				if !rl.CheckAndIncrementRPM(ck.Key.ID, *ck.Key.MaxRPM) {

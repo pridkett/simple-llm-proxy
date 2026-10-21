@@ -154,7 +154,7 @@
             <thead>
               <tr class="border-b border-gray-100 dark:border-gray-700">
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Est. Spend</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Spend</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Budget</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">% Budget</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
@@ -195,7 +195,7 @@
                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Output Tokens</th>
                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Read</th>
                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Write</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Est. Spend</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Spend</th>
               </tr>
             </thead>
             <tbody>
@@ -235,9 +235,9 @@
           </table>
         </div>
         <p data-testid="estimate-note" class="px-6 py-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700">
-          Costs are estimates calculated from the proxy's model price map when each request completed,
-          including prompt-cache read/write pricing where the provider reports it. They may differ from
-          provider invoices.
+          Costs use upstream-reported amounts when available, otherwise estimates from the model price map.
+          Request logs show each amount's source and coverage. Unknown costs are excluded from spend totals;
+          known subtotals can be incomplete and may differ from provider invoices.
         </p>
       </div>
 
@@ -498,9 +498,8 @@ function rowStatus(row) {
   if (row.soft_budget != null && row.total_spend >= row.soft_budget) return 'warning'
   return 'ok'
 }
-// Spend values are estimates computed from the cost map at request time (ADR 012 D-04);
-// budget caps are exact configured values and use formatBudget instead.
-function formatSpend(v) { return `~$${(v ?? 0).toFixed(4)}` }
+// Aggregates can combine upstream reports and local estimates; request logs expose provenance.
+function formatSpend(v) { return `$${(v ?? 0).toFixed(4)}` }
 function formatCount(v) { return (v ?? 0).toLocaleString() }
 function formatBudget(row) {
   if (row.max_budget == null) return '—'

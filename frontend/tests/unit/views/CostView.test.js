@@ -172,7 +172,7 @@ describe('CostView', () => {
       const wrapper = await mountByModel(spendWithModels)
       const headers = wrapper.findAll('th').map(th => th.text())
       expect(headers).toEqual(expect.arrayContaining(
-        ['Model', 'Requests', 'Input Tokens', 'Output Tokens', 'Cache Read', 'Cache Write', 'Est. Spend']))
+        ['Model', 'Requests', 'Input Tokens', 'Output Tokens', 'Cache Read', 'Cache Write', 'Spend']))
       const rows = wrapper.findAll('[data-testid="model-row"]')
       expect(rows).toHaveLength(2)
       const cells = rows[0].findAll('td').map(td => td.text())
@@ -183,7 +183,7 @@ describe('CostView', () => {
         (40000).toLocaleString(),
         (2000000).toLocaleString(),
         (50000).toLocaleString(),
-        '~$1.2500',
+        '$1.2500',
       ])
     })
 
@@ -197,7 +197,7 @@ describe('CostView', () => {
         (50000).toLocaleString(),
         (2000000).toLocaleString(),
         (50000).toLocaleString(),
-        '~$1.5000',
+        '$1.5000',
       ])
     })
 
@@ -217,14 +217,14 @@ describe('CostView', () => {
     })
   })
 
-  describe('estimated cost labeling (ADR 012 D-04)', () => {
-    it('prefixes spend with ~ but leaves budget caps exact', async () => {
+  describe('cost provenance labeling', () => {
+    it('shows spend without implying all upstream reports are estimates', async () => {
       api.spend.mockResolvedValue(spendWithModels)
       const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
       await flushPromises()
       const text = wrapper.text()
-      expect(text).toContain('Est. Spend')
-      expect(text).toContain('~$1.5000')
+      expect(text).toContain('Spend')
+      expect(text).toContain('$1.5000')
       expect(text).toContain('$10.00')
       expect(text).not.toContain('~$10.00')
     })
@@ -233,7 +233,7 @@ describe('CostView', () => {
       api.spend.mockResolvedValue(spendWithModels)
       const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
       await flushPromises()
-      expect(wrapper.find('[data-testid="estimate-note"]').text()).toContain('Costs are estimates')
+      expect(wrapper.find('[data-testid="estimate-note"]').text()).toContain('Costs use upstream-reported amounts')
     })
   })
 })

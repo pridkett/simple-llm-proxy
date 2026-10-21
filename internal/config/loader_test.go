@@ -535,3 +535,19 @@ func TestDeploymentEnvironmentExpansion(t *testing.T) {
 		t.Fatal("deployment environment expansion failed")
 	}
 }
+
+func TestCostPolicyValidation(t *testing.T) {
+	for _, policy := range []string{"prefer_upstream", "estimate_only", "require_upstream", "invalid"} {
+		data := []byte("model_list:\n - model_name: test\n   cost_policy: " + policy + "\n   litellm_params:\n     model: openai/test\n")
+		cfg, err := Parse(data)
+		if policy == "invalid" {
+			if err == nil {
+				t.Fatal("accepted invalid policy")
+			}
+			continue
+		}
+		if err != nil || cfg.ModelList[0].CostPolicy != policy {
+			t.Fatalf("%s: %v", policy, err)
+		}
+	}
+}

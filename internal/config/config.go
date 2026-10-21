@@ -52,6 +52,7 @@ type LogSettings struct {
 
 // ModelConfig represents a model deployment configuration.
 type ModelConfig struct {
+	CostPolicy    string        `yaml:"cost_policy,omitempty"`
 	ModelName     string        `yaml:"model_name"`
 	LiteLLMParams LiteLLMParams `yaml:"litellm_params"`
 	RPM           int           `yaml:"rpm,omitempty"`

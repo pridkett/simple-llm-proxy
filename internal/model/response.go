@@ -4,6 +4,7 @@ import "encoding/json"
 
 // ChatCompletionResponse represents an OpenAI-compatible chat completion response.
 type ChatCompletionResponse struct {
+	ProxyAccounting   any `json:"proxy_accounting,omitempty"`
 	rawFields         map[string]json.RawMessage
 	ID                string   `json:"id"`
 	Object            string   `json:"object"`
@@ -35,6 +36,7 @@ type Delta struct {
 
 // Usage represents token usage.
 type Usage struct {
+	originalUsage    json.RawMessage
 	rawFields        map[string]json.RawMessage
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
@@ -45,11 +47,12 @@ type Usage struct {
 
 // EmbeddingsResponse represents an OpenAI-compatible embeddings response.
 type EmbeddingsResponse struct {
-	rawFields map[string]json.RawMessage
-	Object    string          `json:"object"`
-	Data      []EmbeddingData `json:"data"`
-	Model     string          `json:"model"`
-	Usage     *Usage          `json:"usage,omitempty"`
+	ProxyAccounting any `json:"proxy_accounting,omitempty"`
+	rawFields       map[string]json.RawMessage
+	Object          string          `json:"object"`
+	Data            []EmbeddingData `json:"data"`
+	Model           string          `json:"model"`
+	Usage           *Usage          `json:"usage,omitempty"`
 }
 
 // EmbeddingData represents a single embedding.
@@ -108,6 +111,7 @@ type ModelDetailResponse struct {
 
 // StreamChunk represents a streaming response chunk.
 type StreamChunk struct {
+	ProxyAccounting   any `json:"proxy_accounting,omitempty"`
 	rawFields         map[string]json.RawMessage
 	ID                string   `json:"id"`
 	Object            string   `json:"object"`

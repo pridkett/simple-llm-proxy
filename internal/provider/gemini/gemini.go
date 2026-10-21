@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
@@ -164,13 +165,14 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-goog-api-key", p.apiKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := provider.Do(p.client, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("gemini: making request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
+	accounting.ObserveJSON(ctx, respBody)
 	if err != nil {
 		return nil, fmt.Errorf("gemini: reading response: %w", err)
 	}
@@ -218,7 +220,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-goog-api-key", p.apiKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := provider.Do(p.client, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("gemini: making request: %w", err)
 	}
@@ -234,6 +236,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		accounting.ObserveJSON(ctx, respBody)
 		var apiErr geminiError
 		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
 			return nil, fmt.Errorf("gemini error (status %d): %s", resp.StatusCode, apiErr.Error.Message)
@@ -270,6 +273,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 			data := strings.TrimPrefix(line, "data: ")
 
 			var gemResp geminiResponse
+			accounting.ObserveJSON(ctx, []byte(data))
 			if err := json.Unmarshal([]byte(data), &gemResp); err != nil {
 				errs <- fmt.Errorf("gemini: unmarshaling stream chunk: %w", err)
 				return

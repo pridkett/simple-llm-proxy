@@ -26,6 +26,7 @@ func buildPaths() *openapi3.Paths {
 	paths.Set("/admin/costmap/reload", adminCostMapReloadPath())
 	paths.Set("/admin/costmap/url", adminCostMapSetURLPath())
 
+	addAccountingContract(paths)
 	return paths
 }
 

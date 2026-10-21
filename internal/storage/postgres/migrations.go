@@ -11,7 +11,20 @@ var baseline string
 
 // PostgreSQL has its own append-only migration sequence. The initial schema
 // describes current state; it does not replay SQLite's destructive history.
-var migrations = []string{baseline}
+var migrations = []string{baseline, `
+ CREATE TABLE request_accounting (
+ id TEXT PRIMARY KEY, api_key_id BIGINT, request_id TEXT NOT NULL,
+ state TEXT NOT NULL, record_json TEXT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX idx_request_accounting_request ON request_accounting(request_id);
+ CREATE INDEX idx_request_accounting_created ON request_accounting(created_at);
+ ALTER TABLE responses_jobs ADD COLUMN accounting_id TEXT NOT NULL DEFAULT '';
+ ALTER TABLE usage_logs ADD COLUMN accounting_id TEXT NOT NULL DEFAULT '';
+ ALTER TABLE usage_logs ADD COLUMN cost_source TEXT NOT NULL DEFAULT '';
+ ALTER TABLE usage_logs ADD COLUMN cost_known BOOLEAN;
+ ALTER TABLE usage_logs ADD COLUMN cost_coverage TEXT NOT NULL DEFAULT '';
+ `}
 
 func (s *Storage) migrate(ctx context.Context) error {
 	tx, err := s.DB().BeginTx(ctx, nil)

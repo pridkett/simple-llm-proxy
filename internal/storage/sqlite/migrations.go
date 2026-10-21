@@ -333,6 +333,18 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`ALTER TABLE usage_logs ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_session_time ON usage_logs(session_id, request_time DESC) WHERE session_id <> ''`,
 		`ALTER TABLE responses_jobs ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE request_accounting (
+ id TEXT PRIMARY KEY, api_key_id INTEGER, request_id TEXT NOT NULL,
+ state TEXT NOT NULL, record_json TEXT NOT NULL,
+ created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+ )`,
+		`CREATE INDEX idx_request_accounting_request ON request_accounting(request_id)`,
+		`CREATE INDEX idx_request_accounting_created ON request_accounting(created_at)`,
+		`ALTER TABLE responses_jobs ADD COLUMN accounting_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE usage_logs ADD COLUMN accounting_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE usage_logs ADD COLUMN cost_source TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE usage_logs ADD COLUMN cost_known BOOLEAN`,
+		`ALTER TABLE usage_logs ADD COLUMN cost_coverage TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for i, sql := range migrations {

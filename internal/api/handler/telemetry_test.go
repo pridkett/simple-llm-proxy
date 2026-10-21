@@ -265,3 +265,14 @@ func TestResponsesTelemetry(t *testing.T) {
 		t.Fatalf("Responses span attributes: %v", a)
 	}
 }
+
+func TestTelemetryCostIsIndependentOfUsage(t *testing.T) {
+	recorder, provider := testTracer(t)
+	_, op := beginOperation(context.Background(), provider.Tracer("test"), "chat", "m", false)
+	op.finish(&router.RouteResult{}, nil, 0.25, true)
+	op.end()
+	attrs := spanAttrs(recorder.Ended()[0])
+	if attrs[proxyotel.CostTotalUSD] != 0.25 {
+		t.Fatalf("reported cost lost without tokens: %+v", attrs)
+	}
+}

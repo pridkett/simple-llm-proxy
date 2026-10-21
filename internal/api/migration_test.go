@@ -41,10 +41,17 @@ func newMigrationFixture(t *testing.T) *migrationFixture {
 	return newMigrationFixtureWithCostMap(t, nil)
 }
 
-func newMigrationFixtureWithCostMap(t *testing.T, cm *costmap.Manager) *migrationFixture {
+func newMigrationFixtureWithCostMap(t *testing.T, cm *costmap.Manager, overrides ...http.HandlerFunc) *migrationFixture {
+	return newConfiguredMigrationFixture(t, cm, nil, overrides...)
+}
+func newConfiguredMigrationFixture(t *testing.T, cm *costmap.Manager, configure func(*config.Config), overrides ...http.HandlerFunc) *migrationFixture {
 	t.Helper()
 	f := &migrationFixture{captured: make(chan map[string]any, 100)}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(overrides) > 0 {
+			overrides[0](w, r)
+			return
+		}
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
@@ -111,6 +118,9 @@ func newMigrationFixtureWithCostMap(t *testing.T, cm *costmap.Manager) *migratio
 		cfg.ModelList = append(cfg.ModelList, config.ModelConfig{ModelName: name, RPM: rpm, LiteLLMParams: config.LiteLLMParams{Model: providerName + "/wire-" + name, APIKey: "upstream-only", APIBase: upstream.URL + "/v1"}})
 	}
 	cfg.RouterSettings.AllowedFails = 1
+	if configure != nil {
+		configure(cfg)
+	}
 	// Config supports YAML; JSON is also a valid YAML representation.
 	// yaml tags differ from JSON, so use a small literal fixture for the reloader.
 	configPath := filepath.Join(t.TempDir(), "config.yaml")

@@ -10,6 +10,13 @@ import (
 // batches of 1,000 to limit database lock duration.
 // Returns the total number of rows deleted across all batches.
 func (s *Storage) DeleteOldRequestLogs(ctx context.Context, cutoff time.Time) (int64, error) {
+	accountingQuery := `DELETE FROM request_accounting WHERE created_at < ?`
+	if s.dialect == SQLite {
+		accountingQuery = `DELETE FROM request_accounting WHERE created_at < datetime(?)`
+	}
+	if _, err := s.db.ExecContext(ctx, s.bind(accountingQuery), cutoff.UTC()); err != nil {
+		return 0, fmt.Errorf("deleting old accounting: %w", err)
+	}
 	var total int64
 	for {
 		result, err := s.db.ExecContext(ctx,
