@@ -27,7 +27,7 @@ func accountingPath() *openapi3.PathItem {
 }
 func addAccountingContract(paths *openapi3.Paths) {
 	paths.Set("/v1/accounting/{id}", accountingPath())
-	for _, path := range []string{"/v1/chat/completions", "/v1/embeddings", "/v1/responses"} {
+	for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/embeddings", "/v1/responses"} {
 		op := paths.Value(path).Post
 		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{Value: openapi3.NewHeaderParameter("X-LLM-Include-Accounting").WithSchema(openapi3.NewBoolSchema()).WithDescription("Opt in to proxy_accounting in JSON responses or a final accounting SSE chunk/event. Default false; never forwarded upstream.")})
 		op.Description += " Every call returns X-LLM-Accounting-ID, X-LLM-Accounting-State, and X-LLM-Accounting-Coverage. Final non-streaming calls include X-LLM-Cost-USD and X-LLM-Cost-Source when known, plus LiteLLM cost/token aliases. Streaming headers remain pending; fetch /v1/accounting/{id} after completion or opt in to inline accounting. Chat emits a final choices:[] chunk with proxy_accounting before [DONE]; Responses emits event: proxy.accounting."

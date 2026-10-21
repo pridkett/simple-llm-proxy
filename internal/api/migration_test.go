@@ -92,6 +92,7 @@ func newConfiguredMigrationFixture(t *testing.T, cm *costmap.Manager, configure 
 			if opts["include_usage"] == true && !strings.Contains(actual, "unknown") {
 				fmt.Fprint(w, "data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"created\":1,\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}\n\n")
 			}
+			fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
 			fmt.Fprint(w, "data: [DONE]\n\n")
 			return
 		}

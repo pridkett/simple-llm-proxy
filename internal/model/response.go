@@ -17,6 +17,8 @@ type ChatCompletionResponse struct {
 
 // Choice represents a completion choice.
 type Choice struct {
+	// StopSequence carries provider stop metadata between protocol adapters only.
+	StopSequence *string `json:"-"`
 	rawFields    map[string]json.RawMessage
 	Index        int      `json:"index"`
 	Message      *Message `json:"message,omitempty"`

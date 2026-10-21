@@ -9,6 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlstore"
 )
 
 // newTestStorage creates an in-memory SQLite storage for testing.
@@ -25,7 +26,7 @@ func newTestStorage(t *testing.T) *Storage {
 		t.Fatalf("enabling foreign keys: %v", err)
 	}
 
-	s := &Storage{db: db}
+	s := &Storage{Storage: sqlstore.New(db, sqlstore.SQLite), db: db}
 	ctx := context.Background()
 	if err := s.Initialize(ctx); err != nil {
 		db.Close()

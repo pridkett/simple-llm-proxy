@@ -12,6 +12,7 @@ func buildPaths() *openapi3.Paths {
 
 	paths.Set("/health", healthPath())
 	paths.Set("/v1/chat/completions", chatCompletionsPath())
+	paths.Set("/v1/messages", messagesPath())
 	paths.Set("/v1/responses", responsesPath())
 	paths.Set("/v1/responses/{id}", responseByIDPath())
 	paths.Set("/v1/embeddings", embeddingsPath())
@@ -562,6 +563,7 @@ const bearerAuthName = "bearerAuth"
 // buildSecuritySchemes returns the security scheme definitions.
 func buildSecuritySchemes() openapi3.SecuritySchemes {
 	return openapi3.SecuritySchemes{
+		"anthropicApiKey": {Value: &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "x-api-key", Description: "Proxy master or application key for the Anthropic Messages endpoint."}},
 		bearerAuthName: &openapi3.SecuritySchemeRef{
 			Value: &openapi3.SecurityScheme{
 				Type:        "http",

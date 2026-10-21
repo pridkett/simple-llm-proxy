@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -11,15 +11,15 @@ import (
 // UpsertUser creates or updates a user. user.ID must be the OIDC sub claim.
 // On update, created_at is preserved and last_seen is refreshed.
 func (s *Storage) UpsertUser(ctx context.Context, user *storage.User) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO users (id, email, name, is_admin, last_seen)
-		VALUES (?, ?, ?, ?, datetime('now'))
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			email    = excluded.email,
 			name     = excluded.name,
 			is_admin = excluded.is_admin,
-			last_seen = datetime('now')
-	`, user.ID, user.Email, user.Name, user.IsAdmin)
+			last_seen = CURRENT_TIMESTAMP
+	`), user.ID, user.Email, user.Name, user.IsAdmin)
 	if err != nil {
 		return fmt.Errorf("upsert user: %w", err)
 	}
@@ -30,11 +30,11 @@ func (s *Storage) UpsertUser(ctx context.Context, user *storage.User) error {
 // Returns (nil, nil) if no user exists with that id.
 func (s *Storage) GetUser(ctx context.Context, id string) (*storage.User, error) {
 	u := &storage.User{}
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT id, email, name, is_admin, created_at, last_seen
 		FROM users
 		WHERE id = ?
-	`, id).Scan(&u.ID, &u.Email, &u.Name, &u.IsAdmin, &u.CreatedAt, &u.LastSeen)
+	`), id).Scan(&u.ID, &u.Email, &u.Name, &u.IsAdmin, &u.CreatedAt, &u.LastSeen)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -46,11 +46,11 @@ func (s *Storage) GetUser(ctx context.Context, id string) (*storage.User, error)
 
 // ListUsers returns all users ordered by email.
 func (s *Storage) ListUsers(ctx context.Context) ([]*storage.User, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT id, email, name, is_admin, created_at, last_seen
 		FROM users
 		ORDER BY email
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -72,23 +72,18 @@ func (s *Storage) ListUsers(ctx context.Context) ([]*storage.User, error) {
 
 // CreateTeam creates a new team with the given name.
 func (s *Storage) CreateTeam(ctx context.Context, name string) (*storage.Team, error) {
-	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO teams (name) VALUES (?)
-	`, name)
+	var id int64
+	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO teams (name) VALUES (?) RETURNING id`), name).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("create team: %w", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("get team id: %w", err)
 	}
 	return &storage.Team{ID: id, Name: name}, nil
 }
 
 // DeleteTeam deletes the team with the given id.
-// ON DELETE CASCADE (with PRAGMA foreign_keys=ON) removes team_members and applications.
+// ON DELETE CASCADE removes team_members and applications.
 func (s *Storage) DeleteTeam(ctx context.Context, id int64) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM teams WHERE id = ?`, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.bind(`DELETE FROM teams WHERE id = ?`), id); err != nil {
 		return fmt.Errorf("delete team: %w", err)
 	}
 	return nil
@@ -96,9 +91,9 @@ func (s *Storage) DeleteTeam(ctx context.Context, id int64) error {
 
 // ListTeams returns all teams ordered by name.
 func (s *Storage) ListTeams(ctx context.Context) ([]*storage.Team, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT id, name, created_at FROM teams ORDER BY name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("list teams: %w", err)
 	}
@@ -121,9 +116,9 @@ func (s *Storage) ListTeams(ctx context.Context) ([]*storage.Team, error) {
 // AddTeamMember adds a user to a team with the given role.
 // The DB CHECK constraint rejects roles outside ('admin','member','viewer').
 func (s *Storage) AddTeamMember(ctx context.Context, teamID int64, userID string, role string) error {
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)
-	`, teamID, userID, role); err != nil {
+	`), teamID, userID, role); err != nil {
 		return fmt.Errorf("add team member: %w", err)
 	}
 	return nil
@@ -131,9 +126,9 @@ func (s *Storage) AddTeamMember(ctx context.Context, teamID int64, userID string
 
 // RemoveTeamMember removes a user from a team.
 func (s *Storage) RemoveTeamMember(ctx context.Context, teamID int64, userID string) error {
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, s.bind(`
 		DELETE FROM team_members WHERE team_id = ? AND user_id = ?
-	`, teamID, userID); err != nil {
+	`), teamID, userID); err != nil {
 		return fmt.Errorf("remove team member: %w", err)
 	}
 	return nil
@@ -141,9 +136,9 @@ func (s *Storage) RemoveTeamMember(ctx context.Context, teamID int64, userID str
 
 // UpdateTeamMemberRole updates the role of a team member.
 func (s *Storage) UpdateTeamMemberRole(ctx context.Context, teamID int64, userID string, role string) error {
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, s.bind(`
 		UPDATE team_members SET role = ? WHERE team_id = ? AND user_id = ?
-	`, role, teamID, userID); err != nil {
+	`), role, teamID, userID); err != nil {
 		return fmt.Errorf("update team member role: %w", err)
 	}
 	return nil
@@ -151,12 +146,12 @@ func (s *Storage) UpdateTeamMemberRole(ctx context.Context, teamID int64, userID
 
 // ListTeamMembers returns all members of a team, joined with user info.
 func (s *Storage) ListTeamMembers(ctx context.Context, teamID int64) ([]*storage.TeamMember, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT tm.team_id, tm.user_id, tm.role, u.email, u.name
 		FROM team_members tm
 		JOIN users u ON u.id = tm.user_id
 		WHERE tm.team_id = ?
-	`, teamID)
+	`), teamID)
 	if err != nil {
 		return nil, fmt.Errorf("list team members: %w", err)
 	}
@@ -178,12 +173,12 @@ func (s *Storage) ListTeamMembers(ctx context.Context, teamID int64) ([]*storage
 
 // ListMyTeams returns all teams the given user belongs to, joined with team info.
 func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.TeamMember, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT tm.team_id, tm.user_id, tm.role, t.name
 		FROM team_members tm
 		JOIN teams t ON t.id = tm.team_id
 		WHERE tm.user_id = ?
-	`, userID)
+	`), userID)
 	if err != nil {
 		return nil, fmt.Errorf("list my teams: %w", err)
 	}
@@ -205,22 +200,17 @@ func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.Te
 
 // CreateApplication creates a new application scoped to the given team.
 func (s *Storage) CreateApplication(ctx context.Context, teamID int64, name string) (*storage.Application, error) {
-	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO applications (team_id, name) VALUES (?, ?)
-	`, teamID, name)
+	var id int64
+	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO applications (team_id, name) VALUES (?, ?) RETURNING id`), teamID, name).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("create application: %w", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("get application id: %w", err)
 	}
 	return &storage.Application{ID: id, TeamID: teamID, Name: name}, nil
 }
 
 // DeleteApplication deletes the application with the given id.
 func (s *Storage) DeleteApplication(ctx context.Context, id int64) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM applications WHERE id = ?`, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.bind(`DELETE FROM applications WHERE id = ?`), id); err != nil {
 		return fmt.Errorf("delete application: %w", err)
 	}
 	return nil
@@ -228,12 +218,12 @@ func (s *Storage) DeleteApplication(ctx context.Context, id int64) error {
 
 // ListApplications returns all applications for the given team, ordered by name.
 func (s *Storage) ListApplications(ctx context.Context, teamID int64) ([]*storage.Application, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT id, team_id, name, created_at
 		FROM applications
 		WHERE team_id = ?
 		ORDER BY name
-	`, teamID)
+	`), teamID)
 	if err != nil {
 		return nil, fmt.Errorf("list applications: %w", err)
 	}
@@ -255,7 +245,7 @@ func (s *Storage) ListApplications(ctx context.Context, teamID int64) ([]*storag
 
 // CleanExpiredSessions removes all sessions whose expiry time has passed.
 func (s *Storage) CleanExpiredSessions(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expiry <= datetime('now')`); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.bind(`DELETE FROM sessions WHERE expiry <= CURRENT_TIMESTAMP`)); err != nil {
 		return fmt.Errorf("clean expired sessions: %w", err)
 	}
 	return nil

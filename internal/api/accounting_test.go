@@ -288,3 +288,44 @@ func TestAccountingRemainsReadableAfterBudgetExhaustion(t *testing.T) {
 		t.Fatalf("%+v", rec)
 	}
 }
+
+func TestMessagesAccountingAndInlineStream(t *testing.T) {
+	f := newMigrationFixtureWithCostMap(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-litellm-response-cost", "0.025")
+		var req struct {
+			Stream bool `json:"stream"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.Stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}\n\ndata: [DONE]\n\n")
+			return
+		}
+		fmt.Fprint(w, `{"id":"c","choices":[{"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`)
+	})
+	for _, stream := range []bool{false, true} {
+		body := fmt.Sprintf(`{"model":"openai","max_tokens":10,"messages":[{"role":"user","content":"hi"}],"stream":%t}`, stream)
+		status, h, data := accountingRequest(t, f, "/v1/messages", body, "master-only", true)
+		if status != 200 {
+			t.Fatalf("%d %s", status, data)
+		}
+		rec := getAccounting(t, f, h.Get("X-LLM-Accounting-ID"), "master-only")
+		if *rec.Cost.Amount != "0.025" || rec.State != "final" {
+			t.Fatalf("%+v", rec)
+		}
+		if !bytes.Contains(data, []byte(`"proxy_accounting"`)) {
+			t.Fatalf("missing inline accounting: %s", data)
+		}
+		if stream {
+			accountingPos := bytes.Index(data, []byte("event: proxy.accounting"))
+			stopPos := bytes.Index(data, []byte("event: message_stop"))
+			if accountingPos < 0 || accountingPos > stopPos || bytes.Contains(data, []byte("[DONE]")) {
+				t.Fatalf("bad message accounting order: %s", data)
+			}
+		}
+		logs, _, err := f.store.GetLogs(context.Background(), 10, 0, storage.LogsFilter{})
+		if err != nil || logs[0].Endpoint != "/v1/messages" {
+			t.Fatalf("logs=%+v err=%v", logs, err)
+		}
+	}
+}

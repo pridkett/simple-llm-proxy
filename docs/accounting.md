@@ -1,6 +1,6 @@
 # Request cost and usage accounting
 
-Chat completions, embeddings, and Responses calls expose one accounting record per
+Chat completions, Anthropic Messages, embeddings, and Responses calls expose one accounting record per
 logical request. The record includes every upstream attempt, including failures
 before a successful retry. Provider response bodies retain their usual format
 unless the caller opts in to inline accounting.
@@ -40,6 +40,7 @@ or enforce spend caps, so the final record remains readable after a budget is
 exhausted. Application keys can read only their own records. A master key can read any
 record. An inaccessible record and a nonexistent record both return 404.
 Administrators can also use `GET /admin/accounting/{id}` with session auth.
+Both SQLite and PostgreSQL persist the same records and atomic finalization.
 Records follow the configured request-log retention period, including pending
 records left by an interrupted process.
 
@@ -183,6 +184,7 @@ be put into headers after the response has started. On clean completion:
 
 - Chat adds a final `data:` chunk with `choices: []` and `proxy_accounting`, before
   `data: [DONE]`.
+- Anthropic Messages adds `event: proxy.accounting` before `message_stop`.
 - Responses adds `event: proxy.accounting` with a JSON object containing
   `type: "proxy.accounting"` and `proxy_accounting`.
 

@@ -43,6 +43,7 @@ func TestSpec_HasExpectedPaths(t *testing.T) {
 	expectedPaths := []string{
 		"/health",
 		"/v1/chat/completions",
+		"/v1/messages",
 		"/v1/embeddings",
 		"/v1/models",
 		"/v1/completions",
@@ -68,6 +69,9 @@ func TestSpec_HasExpectedSchemas(t *testing.T) {
 
 	expectedSchemas := []string{
 		"ChatCompletionRequest",
+		"AnthropicMessagesRequest",
+		"AnthropicMessage",
+		"AnthropicError",
 		"ChatCompletionResponse",
 		"EmbeddingsRequest",
 		"EmbeddingsResponse",

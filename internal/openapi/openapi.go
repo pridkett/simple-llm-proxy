@@ -27,7 +27,7 @@ func (s *Spec) Build() error {
 		OpenAPI: "3.0.3",
 		Info: &openapi3.Info{
 			Title:       "Simple LLM Proxy",
-			Description: "A lightweight LLM proxy server providing OpenAI-compatible endpoints with multi-provider support (OpenAI, Anthropic).",
+			Description: "A lightweight LLM proxy server providing OpenAI-compatible and Anthropic-compatible endpoints with multi-provider routing.",
 			Version:     "1.0.0",
 			License: &openapi3.License{
 				Name: "MIT",

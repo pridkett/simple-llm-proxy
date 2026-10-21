@@ -1,7 +1,8 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 
@@ -17,11 +18,11 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 	defer tx.Rollback() //nolint:errcheck
 
 	key := &storage.APIKey{}
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, s.bind(`
 		INSERT INTO api_keys (application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
-	`, appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget).
+	`), appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget).
 		Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
 			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt)
 	if err != nil {
@@ -29,7 +30,7 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 	}
 
 	for _, model := range allowedModels {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`, key.ID, model); err != nil {
+		if _, err := tx.ExecContext(ctx, s.bind(`INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`), key.ID, model); err != nil {
 			return nil, fmt.Errorf("create api key allowlist: %w", err)
 		}
 	}
@@ -43,7 +44,7 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 // GetAPIKeyByHash looks up a key by SHA-256 hash. Returns (nil, nil) if not found.
 func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage.APIKey, error) {
 	key := &storage.APIKey{}
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT k.id, k.application_id, k.name, k.key_prefix, k.key_hash,
 		       k.max_rpm, k.max_rpd, k.max_budget, k.soft_budget, k.is_active,
 		       k.created_at, a.name, t.name
@@ -51,7 +52,7 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 		JOIN applications a ON a.id = k.application_id
 		JOIN teams t ON t.id = a.team_id
 		WHERE k.key_hash = ?
-	`, keyHash).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
+	`), keyHash).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
 		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt,
 		&key.AppName, &key.TeamName)
 	if err == sql.ErrNoRows {
@@ -65,10 +66,10 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 
 // ListAPIKeys returns all keys for an application, newest first.
 func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIKey, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
 		FROM api_keys WHERE application_id = ? ORDER BY created_at DESC
-	`, appID)
+	`), appID)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -89,10 +90,10 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 // GetAPIKeyByID looks up a key by its numeric ID. Returns (nil, nil) if not found.
 func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*storage.APIKey, error) {
 	key := &storage.APIKey{}
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
 		FROM api_keys WHERE id = ?
-	`, id).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
+	`), id).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
 		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -106,7 +107,7 @@ func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*storage.APIKey,
 // ListUserAccessibleKeys returns all active API keys the user can access via team membership,
 // enriched with team and application names for the UI.
 func (s *Storage) ListUserAccessibleKeys(ctx context.Context, userID string) ([]*storage.AccessibleKey, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT k.id, k.name, k.key_prefix, a.id, a.name, t.id, t.name
 		FROM api_keys k
 		JOIN applications a ON a.id = k.application_id
@@ -114,7 +115,7 @@ func (s *Storage) ListUserAccessibleKeys(ctx context.Context, userID string) ([]
 		JOIN team_members tm ON tm.team_id = t.id
 		WHERE tm.user_id = ? AND k.is_active = TRUE
 		ORDER BY t.name, a.name, k.name
-	`, userID)
+	`), userID)
 	if err != nil {
 		return nil, fmt.Errorf("list user accessible keys: %w", err)
 	}
@@ -133,7 +134,7 @@ func (s *Storage) ListUserAccessibleKeys(ctx context.Context, userID string) ([]
 
 // RevokeAPIKey marks the key as inactive. Record is preserved for audit.
 func (s *Storage) RevokeAPIKey(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE api_keys SET is_active = FALSE WHERE id = ?`, id)
+	res, err := s.db.ExecContext(ctx, s.bind(`UPDATE api_keys SET is_active = FALSE WHERE id = ?`), id)
 	if err != nil {
 		return fmt.Errorf("revoke api key: %w", err)
 	}
@@ -146,7 +147,7 @@ func (s *Storage) RevokeAPIKey(ctx context.Context, id int64) error {
 // GetKeyAllowedModels returns the model names in the key's allowlist.
 // Empty slice means all models are allowed.
 func (s *Storage) GetKeyAllowedModels(ctx context.Context, keyID int64) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT model_name FROM key_allowed_models WHERE key_id = ?`, keyID)
+	rows, err := s.db.QueryContext(ctx, s.bind(`SELECT model_name FROM key_allowed_models WHERE key_id = ?`), keyID)
 	if err != nil {
 		return nil, fmt.Errorf("get key allowed models: %w", err)
 	}
@@ -172,11 +173,11 @@ func (s *Storage) UpdateKeyAllowedModels(ctx context.Context, keyID int64, model
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM key_allowed_models WHERE key_id = ?`, keyID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.bind(`DELETE FROM key_allowed_models WHERE key_id = ?`), keyID); err != nil {
 		return fmt.Errorf("update key allowed models delete: %w", err)
 	}
 	for _, model := range models {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`, keyID, model); err != nil {
+		if _, err := tx.ExecContext(ctx, s.bind(`INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`), keyID, model); err != nil {
 			return fmt.Errorf("update key allowed models insert: %w", err)
 		}
 	}
@@ -192,17 +193,17 @@ func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, ma
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.bind(`
 		UPDATE api_keys SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?
 		WHERE id=?
-	`, name, maxRPM, maxRPD, maxBudget, softBudget, keyID); err != nil {
+	`), name, maxRPM, maxRPD, maxBudget, softBudget, keyID); err != nil {
 		return fmt.Errorf("update api key: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM key_allowed_models WHERE key_id=?`, keyID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.bind(`DELETE FROM key_allowed_models WHERE key_id=?`), keyID); err != nil {
 		return fmt.Errorf("update api key delete models: %w", err)
 	}
 	for _, model := range allowedModels {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`, keyID, model); err != nil {
+		if _, err := tx.ExecContext(ctx, s.bind(`INSERT INTO key_allowed_models (key_id, model_name) VALUES (?, ?)`), keyID, model); err != nil {
 			return fmt.Errorf("update api key insert model: %w", err)
 		}
 	}
@@ -220,12 +221,12 @@ func (s *Storage) RecordKeySpend(ctx context.Context, keyID int64, cost float64)
 // Used at startup to initialize the in-memory spend accumulator.
 // Flush snapshots duplicate costs already recorded by individual requests.
 func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT api_key_id, SUM(total_cost)
 		FROM usage_logs
 		WHERE api_key_id IS NOT NULL AND model != '_flush'
 		GROUP BY api_key_id
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("get key spend totals: %w", err)
 	}
@@ -247,11 +248,10 @@ func (s *Storage) GetKeySpendTotals(ctx context.Context) (map[int64]float64, err
 // This internal snapshot is excluded from request logs and spend aggregations;
 // individual request costs are the source of truth when restoring spend.
 func (s *Storage) FlushKeySpend(ctx context.Context, keyID int64, total float64) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO usage_logs (api_key_id, total_cost, model, provider, endpoint, request_time, request_id, status_code, latency_ms)
-		VALUES (?, ?, '_flush', '_flush', '_flush', datetime('now'),
-		        'flush-' || cast(strftime('%s','now') as text), 0, 0)
-	`, keyID, total)
+		VALUES (?, ?, '_flush', '_flush', '_flush', CURRENT_TIMESTAMP, ?, 0, 0)
+	`), keyID, total, "flush-"+rand.Text())
 	if err != nil {
 		return fmt.Errorf("flush key spend: %w", err)
 	}

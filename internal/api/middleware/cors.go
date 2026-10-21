@@ -15,7 +15,7 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 			if origin != "" && (len(originSet) == 0 || originSet[origin]) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-LLM-Include-Accounting")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key, Anthropic-Version, Anthropic-Beta, Anthropic-Dangerous-Direct-Browser-Access, X-Session-ID, X-Request-ID, X-LLM-Include-Accounting")
 				w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, X-LLM-Accounting-ID, X-LLM-Accounting-State, X-LLM-Accounting-Coverage, X-LLM-Cost-USD, X-LLM-Cost-Source, x-litellm-response-cost, x-litellm-total-tokens")
 				w.Header().Set("Access-Control-Max-Age", "86400")
 			}

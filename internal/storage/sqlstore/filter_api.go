@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 // GetLogByID returns the full RequestLog for the given request_id.
 // Returns (nil, nil) when no log exists with that request_id (caller returns 404).
 func (s *Storage) GetLogByID(ctx context.Context, requestID string) (*storage.RequestLog, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT ul.request_id, ul.model, ul.provider, ul.endpoint,
 		       ul.input_tokens, ul.output_tokens, ul.total_cost,
 		       ul.status_code, ul.latency_ms, ul.request_time,
@@ -31,7 +31,7 @@ func (s *Storage) GetLogByID(ctx context.Context, requestID string) (*storage.Re
 		LEFT JOIN applications app ON ak.application_id = app.id
 		LEFT JOIN teams t ON app.team_id = t.id
 		WHERE ul.request_id = ? AND ul.model != '_flush'
-	`, requestID)
+	`), requestID)
 
 	entry := &storage.RequestLog{}
 	var ttftNull sql.NullInt64
@@ -76,7 +76,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	}
 
 	// --- Teams (id+name via JOIN chain) ---
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT t.id, t.name
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
@@ -84,7 +84,7 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 		LEFT JOIN teams t ON app.team_id = t.id
 		WHERE t.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY t.name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta teams: %w", err)
 	}
@@ -103,14 +103,14 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows.Close()
 
 	// --- Apps (id+name via JOIN) ---
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT app.id, app.name
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
 		WHERE app.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY app.name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta apps: %w", err)
 	}
@@ -129,13 +129,13 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows.Close()
 
 	// --- Keys (id+name via JOIN) ---
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT ak.id, ak.name
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		WHERE ak.id IS NOT NULL AND ul.model != '_flush'
 		ORDER BY ak.name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta keys: %w", err)
 	}
@@ -154,12 +154,12 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows.Close()
 
 	// --- Providers (plain string) ---
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT ul.provider
 		FROM usage_logs ul
 		WHERE ul.provider != '' AND ul.model != '_flush'
 		ORDER BY ul.provider
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta providers: %w", err)
 	}
@@ -178,12 +178,12 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows.Close()
 
 	// --- Models (plain string) ---
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT ul.model
 		FROM usage_logs ul
 		WHERE ul.model != '' AND ul.model != '_flush'
 		ORDER BY ul.model
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta models: %w", err)
 	}
@@ -202,12 +202,12 @@ func (s *Storage) GetLogsMeta(ctx context.Context) (*storage.LogsMeta, error) {
 	rows.Close()
 
 	// --- Pools (plain string; NULL guard required — pool_name is NULL for non-pooled rows) ---
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = s.db.QueryContext(ctx, s.bind(`
 		SELECT DISTINCT ul.pool_name
 		FROM usage_logs ul
 		WHERE ul.pool_name IS NOT NULL AND ul.pool_name != '' AND ul.model != '_flush'
 		ORDER BY ul.pool_name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying log meta pools: %w", err)
 	}

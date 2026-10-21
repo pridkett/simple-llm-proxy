@@ -1,6 +1,6 @@
 # Simple LLM Proxy
 
-A Go proxy for apps using OpenAI-compatible chat completions. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
+A Go proxy for apps using OpenAI-compatible chat completions or Anthropic-compatible Messages. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
 
 For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
 
@@ -106,7 +106,7 @@ router_settings:
 
 general_settings:
   master_key: os.environ/PROXY_MASTER_KEY
-  database_url: ./proxy.db               # SQLite path
+  database_url: ./proxy.db               # SQLite path, or a PostgreSQL URL
   port: 8080
 ```
 
@@ -118,6 +118,57 @@ Use `os.environ/VAR_NAME` syntax to reference environment variables:
 api_key: os.environ/OPENAI_API_KEY
 master_key: os.environ/PROXY_MASTER_KEY
 ```
+
+### PostgreSQL storage
+
+SQLite remains the default. To use PostgreSQL 17 or newer, create a dedicated
+database owned by the proxy's database role and configure:
+
+```yaml
+general_settings:
+  database_url: os.environ/PROXY_DATABASE_URL
+```
+
+Set `PROXY_DATABASE_URL` in the proxy process's environment, for example
+`postgresql://proxy:URL_ENCODED_PASSWORD@postgres.home:5432/llm_proxy?sslmode=verify-full`.
+Configure a trusted CA with `sslrootcert` when required. Both `postgres://` and
+`postgresql://` are accepted. The role needs schema creation/migration permissions;
+tables and indexes are created automatically at startup. Connection and migration
+failures stop startup. Storage changes require a restart.
+
+PostgreSQL stores the same data as SQLite, including login sessions, usage logs,
+configured body snippets, and background Responses jobs. It uses a pool of up
+to 10 connections per process, with 5 idle connections and a 30-minute connection
+lifetime. Keep this within the database's connection budget. For an encrypted
+home-network connection, prefer `sslmode=verify-full`; `sslmode=disable` is an
+explicit option for trusted development networks. Keep database credentials in
+your environment/secret manager and include them in container environment
+configuration if using Docker.
+
+**Switching backends does not copy data.** Back up the SQLite database and stop
+the proxy before changing the URL. PostgreSQL starts empty: sign in again and
+recreate teams, applications, and API keys. If you need existing identities,
+keys, history, or pending jobs, keep SQLite until you have a separately verified
+data-import process. No automatic importer is provided. Verify login, key
+creation, a request log, and spend after cutover. To roll back, stop the proxy,
+restore the SQLite URL, and restart; PostgreSQL-only writes will not be copied
+back. Operate and test PostgreSQL backups/restores separately from proxy backups.
+
+PostgreSQL allows concurrent database operations and independent database
+management. It does **not** yet make running multiple proxy replicas safe:
+budgets, rate limits, caches, and worker coordination still have process-local
+state. Full request/response archival is also separate from existing bounded
+snippets. See [ADR 014](adr/014-postgresql-storage.md) for the design and limits.
+
+To run integration tests against a dedicated PostgreSQL test database:
+
+```sh
+TEST_POSTGRES_URL='postgresql://proxy_test:password@localhost:5432/proxy_test?sslmode=disable' go test -race ./...
+```
+
+Tests create and remove isolated schemas within that database. CI runs them
+against PostgreSQL 17; local runs skip PostgreSQL integration tests when the
+variable is unset.
 
 ### OpenTelemetry traces
 
@@ -168,11 +219,12 @@ model_list:
 | GET | `/openapi.json` | OpenAPI 3.0 specification (no auth required) |
 | GET | `/v1/models` | List available models |
 | POST | `/v1/chat/completions` | Chat completions (streaming supported) |
+| POST | `/v1/messages` | Anthropic-compatible Messages to any configured chat model (streaming supported) |
 | POST | `/v1/embeddings` | Generate embeddings (compatible providers) |
 
 ### Authentication
 
-All `/v1/*` endpoints require authentication via bearer token:
+All `/v1/*` endpoints accept authentication via bearer token. `/v1/messages` also accepts proxy keys in `x-api-key` for Anthropic SDK compatibility. An explicit `Authorization` header takes precedence:
 
 ```bash
 curl -H "Authorization: Bearer your-app-key" http://localhost:8080/v1/models
@@ -192,6 +244,68 @@ curl -X POST http://localhost:8080/v1/chat/completions \
     "stream": true
   }'
 ```
+
+### Anthropic Messages API
+
+Use `POST /v1/messages` with any configured `model_name`. The requested name
+selects the existing route, so an Anthropic SDK can call OpenAI, OpenRouter,
+Ollama, Anthropic, or another registered chat provider through the same endpoint.
+Application key permissions, rate limits, budgets, failover, session logging,
+and cost tracking apply as they do for chat completions.
+
+```bash
+curl -N http://localhost:8080/v1/messages \
+  -H "x-api-key: your-app-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "max_tokens": 128,
+    "system": "Be concise.",
+    "messages": [{"role": "user", "content": "Count to 10"}],
+    "stream": true
+  }'
+```
+
+With the Python `anthropic` SDK, set `base_url` to the proxy root, without `/v1`:
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(api_key="your-app-key", base_url="http://localhost:8080")
+with client.messages.stream(
+    model="gpt-4",  # Any configured proxy model_name
+    max_tokens=128,
+    messages=[{"role": "user", "content": "Hello!"}],
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="", flush=True)
+    message = stream.get_final_message()
+    print(message.usage)
+```
+
+Use `client.messages.create(...)` for a non-streaming Message response.
+Streaming returns named Anthropic events, including incremental text and tool
+JSON deltas, and ends with `message_stop`. An upstream failure emits an `error`
+event. Responses use the requested model alias; `X-Provider-Used` identifies
+the actual deployment. `request-id` and `X-Request-ID` carry the same correlation ID.
+
+Supported portable fields include string or text-block system prompts, text,
+base64/URL user images, client tool schemas, assistant `tool_use`, user
+`tool_result` with string/text content, `tool_choice` (`auto`, `any`, `tool`,
+`none`), `disable_parallel_tool_use`, `max_tokens`, `temperature`, `top_p`,
+`stop_sequences`, and `metadata.user_id`. Tool errors are conveyed to the model
+with a `Tool error:` prefix. Vision and tool use require a capable target model.
+
+This endpoint implements the portable Messages subset. Unsupported fields and
+content types return HTTP 400, including extended thinking, `top_k`, server
+tools, documents, and beta-only options. Token counting, batches, and files
+endpoints are not implemented. Cache-control hints are accepted but do not
+guarantee provider caching. A matched `stop_sequence` is returned only when the
+upstream reports it; other providers may report `end_turn` instead. Usage comes
+from the upstream; initial streaming usage may be zero until final counts arrive.
+If the upstream omits usage, response counts are zero and stored usage remains
+unknown. See [ADR 014](adr/014-anthropic-messages-api.md) for the design and plan.
 
 ### OpenAPI Specification
 

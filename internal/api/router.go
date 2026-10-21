@@ -67,6 +67,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 
 		// OpenAI-compatible endpoints
 		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		mux.Post("/v1/messages", handler.Messages(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/v1/completions", handler.Completions())
 		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 

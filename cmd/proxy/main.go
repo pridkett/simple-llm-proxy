@@ -26,7 +26,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/responses"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
-	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage/database"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 	"go.opentelemetry.io/otel/trace"
 
@@ -79,20 +79,16 @@ func main() {
 	}
 
 	// Initialize storage (before router, so sticky sessions can use it)
-	var store storage.Storage
-	var sqliteStore *sqlite.Storage
-	if cfg.GeneralSettings.DatabaseURL != "" {
-		var err error
-		sqliteStore, err = sqlite.New(cfg.GeneralSettings.DatabaseURL)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to initialize storage")
-		}
-		if err := sqliteStore.Initialize(context.Background()); err != nil {
-			log.Fatal().Err(err).Msg("failed to run migrations")
-		}
-		store = sqliteStore
+	storageCtx, cancelStorage := context.WithTimeout(context.Background(), 30*time.Second)
+	store, sessionStore, err := database.Open(storageCtx, cfg.GeneralSettings.DatabaseURL)
+	cancelStorage()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize storage")
+	}
+	if store != nil {
 		defer store.Close()
 	}
+
 	otelProvider, err := proxyotel.NewProvider(cfg.OTelSettings)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to initialize tracing")
@@ -110,11 +106,11 @@ func main() {
 	r.Start(context.Background())
 	defer r.Close()
 
-	// Create SCS session manager backed by the custom SQLite session store.
+	// Create SCS session manager backed by the selected database.
 	// Cookie attributes are set explicitly per ADR 003 §4.
 	sm := scs.New()
-	if sqliteStore != nil {
-		sm.Store = &sqlite.SessionStore{DB: sqliteStore.DB()}
+	if sessionStore != nil {
+		sm.Store = sessionStore
 	}
 	sm.Lifetime = 24 * time.Hour
 	// IdleTimeout is disabled (zero value) so SCS does not slide the session

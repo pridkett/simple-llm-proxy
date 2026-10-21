@@ -7,6 +7,9 @@ import (
 // buildSchemas returns all schema definitions for the OpenAPI spec.
 func buildSchemas() openapi3.Schemas {
 	return openapi3.Schemas{
+		"AnthropicMessagesRequest": messagesRequestSchema(),
+		"AnthropicMessage":         messagesResponseSchema(),
+		"AnthropicError":           messagesErrorSchema(),
 		// Request types
 		"ChatCompletionRequest": chatCompletionRequestSchema(),
 		"ResponsesRequest":      responsesRequestSchema(),
