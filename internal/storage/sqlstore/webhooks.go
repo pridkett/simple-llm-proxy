@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 // ListWebhookSubscriptions returns all webhook subscriptions ordered by created_at DESC.
 func (s *Storage) ListWebhookSubscriptions(ctx context.Context) ([]*storage.WebhookSubscription, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, url, events, secret, enabled, created_at
+		s.bind(`SELECT id, url, events, secret, enabled, created_at
 		 FROM webhook_subscriptions
-		 ORDER BY created_at DESC`)
+		 ORDER BY created_at DESC`))
 	if err != nil {
 		return nil, fmt.Errorf("listing webhook subscriptions: %w", err)
 	}
@@ -57,9 +57,9 @@ func (s *Storage) CreateWebhookSubscription(ctx context.Context, sub *storage.We
 	var id int64
 	var createdAt time.Time
 	err = s.db.QueryRowContext(ctx,
-		`INSERT INTO webhook_subscriptions (url, events, secret, enabled)
+		s.bind(`INSERT INTO webhook_subscriptions (url, events, secret, enabled)
 		 VALUES (?, ?, ?, ?)
-		 RETURNING id, created_at`,
+		 RETURNING id, created_at`),
 		sub.URL, string(eventsJSON), secretParam, sub.Enabled,
 	).Scan(&id, &createdAt)
 	if err != nil {
@@ -85,7 +85,7 @@ func (s *Storage) UpdateWebhookSubscription(ctx context.Context, sub *storage.We
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE webhook_subscriptions SET url = ?, events = ?, secret = ?, enabled = ? WHERE id = ?`,
+		s.bind(`UPDATE webhook_subscriptions SET url = ?, events = ?, secret = ?, enabled = ? WHERE id = ?`),
 		sub.URL, string(eventsJSON), secretParam, sub.Enabled, sub.ID,
 	)
 	if err != nil {
@@ -97,7 +97,7 @@ func (s *Storage) UpdateWebhookSubscription(ctx context.Context, sub *storage.We
 // DeleteWebhookSubscription removes a webhook subscription by ID. No error for non-existent ID.
 func (s *Storage) DeleteWebhookSubscription(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM webhook_subscriptions WHERE id = ?`, id)
+		s.bind(`DELETE FROM webhook_subscriptions WHERE id = ?`), id)
 	if err != nil {
 		return fmt.Errorf("deleting webhook subscription %d: %w", id, err)
 	}
@@ -105,12 +105,12 @@ func (s *Storage) DeleteWebhookSubscription(ctx context.Context, id int64) error
 }
 
 // GetEnabledWebhooksByEvent returns only enabled subscriptions whose events JSON array contains the given event type.
-// Filtering is done in Go because modernc.org/sqlite does not support JSON array containment functions.
+// Filtering is done in Go to preserve the same JSON semantics on both backends.
 func (s *Storage) GetEnabledWebhooksByEvent(ctx context.Context, eventType string) ([]*storage.WebhookSubscription, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, url, events, secret, enabled, created_at
+		s.bind(`SELECT id, url, events, secret, enabled, created_at
 		 FROM webhook_subscriptions
-		 WHERE enabled = TRUE`)
+		 WHERE enabled = TRUE`))
 	if err != nil {
 		return nil, fmt.Errorf("querying enabled webhook subscriptions: %w", err)
 	}
@@ -149,7 +149,7 @@ func (s *Storage) GetEnabledWebhooksByEvent(ctx context.Context, eventType strin
 func (s *Storage) InsertNotificationEvent(ctx context.Context, eventType string, payload string) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO notification_events (event_type, payload) VALUES (?, ?) RETURNING id`,
+		s.bind(`INSERT INTO notification_events (event_type, payload) VALUES (?, ?) RETURNING id`),
 		eventType, payload,
 	).Scan(&id)
 	if err != nil {
@@ -166,11 +166,11 @@ func (s *Storage) ListNotificationEvents(ctx context.Context, limit, offset int,
 
 	if eventType != "" {
 		err = s.db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM notification_events WHERE event_type = ?`, eventType,
+			s.bind(`SELECT COUNT(*) FROM notification_events WHERE event_type = ?`), eventType,
 		).Scan(&total)
 	} else {
 		err = s.db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM notification_events`,
+			s.bind(`SELECT COUNT(*) FROM notification_events`),
 		).Scan(&total)
 	}
 	if err != nil {
@@ -186,19 +186,19 @@ func (s *Storage) ListNotificationEvents(ctx context.Context, limit, offset int,
 
 	if eventType != "" {
 		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, event_type, payload, created_at
+			s.bind(`SELECT id, event_type, payload, created_at
 			 FROM notification_events
 			 WHERE event_type = ?
 			 ORDER BY created_at DESC
-			 LIMIT ? OFFSET ?`,
+			 LIMIT ? OFFSET ?`),
 			eventType, limit, offset,
 		)
 	} else {
 		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, event_type, payload, created_at
+			s.bind(`SELECT id, event_type, payload, created_at
 			 FROM notification_events
 			 ORDER BY created_at DESC
-			 LIMIT ? OFFSET ?`,
+			 LIMIT ? OFFSET ?`),
 			limit, offset,
 		)
 	}
@@ -225,7 +225,7 @@ func (s *Storage) ListNotificationEvents(ctx context.Context, limit, offset int,
 // ON DELETE CASCADE on webhook_deliveries.event_id will also delete associated delivery rows.
 func (s *Storage) DeleteOldNotificationEvents(ctx context.Context, olderThan time.Time) (int64, error) {
 	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM notification_events WHERE created_at < ?`,
+		s.bind(`DELETE FROM notification_events WHERE created_at < ?`),
 		olderThan.UTC(),
 	)
 	if err != nil {
@@ -242,7 +242,7 @@ func (s *Storage) DeleteOldNotificationEvents(ctx context.Context, olderThan tim
 func (s *Storage) InsertWebhookDelivery(ctx context.Context, subscriptionID *int64, eventID int64) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO webhook_deliveries (subscription_id, event_id) VALUES (?, ?) RETURNING id`,
+		s.bind(`INSERT INTO webhook_deliveries (subscription_id, event_id) VALUES (?, ?) RETURNING id`),
 		subscriptionID, eventID,
 	).Scan(&id)
 	if err != nil {
@@ -254,7 +254,7 @@ func (s *Storage) InsertWebhookDelivery(ctx context.Context, subscriptionID *int
 // UpdateWebhookDeliveryStatus updates status, response_code, attempt_count, and sets last_attempt_at to now.
 func (s *Storage) UpdateWebhookDeliveryStatus(ctx context.Context, id int64, status string, responseCode int, attemptCount int) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE webhook_deliveries SET status = ?, response_code = ?, attempt_count = ?, last_attempt_at = datetime('now') WHERE id = ?`,
+		s.bind(`UPDATE webhook_deliveries SET status = ?, response_code = ?, attempt_count = ?, last_attempt_at = CURRENT_TIMESTAMP WHERE id = ?`),
 		status, responseCode, attemptCount, id,
 	)
 	if err != nil {

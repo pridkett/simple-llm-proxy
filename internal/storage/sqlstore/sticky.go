@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 // Returns ("", nil) if no session exists or if expired (last_used_at > 1 hour ago).
 func (s *Storage) GetStickySession(ctx context.Context, sessionKey, poolName string) (string, error) {
 	var deploymentKey string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT deployment_key
 		FROM sticky_routing_sessions
 		WHERE session_key = ? AND pool_name = ?
-		  AND last_used_at > datetime('now', '-1 hour')
-	`, sessionKey, poolName).Scan(&deploymentKey)
+		  AND last_used_at > ?
+	`), sessionKey, poolName, time.Now().UTC().Add(-time.Hour)).Scan(&deploymentKey)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -30,14 +30,14 @@ func (s *Storage) GetStickySession(ctx context.Context, sessionKey, poolName str
 
 // UpsertStickySession creates or updates a sticky session mapping.
 func (s *Storage) UpsertStickySession(ctx context.Context, sessionKey, poolName, deploymentKey string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO sticky_routing_sessions (session_key, pool_name, deployment_key, last_used_at)
-		VALUES (?, ?, ?, datetime('now'))
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(session_key) DO UPDATE SET
 			pool_name      = excluded.pool_name,
 			deployment_key = excluded.deployment_key,
-			last_used_at   = datetime('now')
-	`, sessionKey, poolName, deploymentKey)
+			last_used_at   = CURRENT_TIMESTAMP
+	`), sessionKey, poolName, deploymentKey)
 	if err != nil {
 		return fmt.Errorf("upserting sticky session: %w", err)
 	}
@@ -46,9 +46,9 @@ func (s *Storage) UpsertStickySession(ctx context.Context, sessionKey, poolName,
 
 // DeleteExpiredStickySessions removes sessions where last_used_at < cutoff.
 func (s *Storage) DeleteExpiredStickySessions(ctx context.Context, cutoff time.Time) (int64, error) {
-	result, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, s.bind(`
 		DELETE FROM sticky_routing_sessions WHERE last_used_at < ?
-	`, cutoff)
+	`), cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("deleting expired sticky sessions: %w", err)
 	}
@@ -67,21 +67,21 @@ func (s *Storage) BulkUpsertStickySessions(ctx context.Context, sessions []stora
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, `
+	stmt, err := tx.PrepareContext(ctx, s.bind(`
 		INSERT INTO sticky_routing_sessions (session_key, pool_name, deployment_key, last_used_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(session_key) DO UPDATE SET
 			pool_name      = excluded.pool_name,
 			deployment_key = excluded.deployment_key,
 			last_used_at   = excluded.last_used_at
-	`)
+	`))
 	if err != nil {
 		return fmt.Errorf("preparing sticky session upsert: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, sess := range sessions {
-		_, err := stmt.ExecContext(ctx, sess.SessionKey, sess.PoolName, sess.DeploymentKey, sess.LastUsedAt.UTC())
+		_, err := stmt.ExecContext(ctx, s.bind(sess.SessionKey), sess.PoolName, sess.DeploymentKey, sess.LastUsedAt.UTC())
 		if err != nil {
 			return fmt.Errorf("upserting sticky session %q: %w", sess.SessionKey, err)
 		}

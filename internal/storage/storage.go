@@ -22,7 +22,7 @@ type Storage interface {
 	GetLogs(ctx context.Context, limit, offset int, filters LogsFilter) ([]*RequestLog, int, error)
 
 	// DeleteOldRequestLogs removes usage_logs rows with request_time older than cutoff.
-	// Deletion is performed in batches of 1,000 rows to avoid holding the SQLite write lock.
+	// Deletion is performed in batches of 1,000 rows to limit database lock duration.
 	// Returns the total number of rows deleted.
 	DeleteOldRequestLogs(ctx context.Context, cutoff time.Time) (int64, error)
 
@@ -190,7 +190,7 @@ type Storage interface {
 	GetPoolBudgetState(ctx context.Context) ([]PoolBudgetRow, error)
 
 	// UpsertPoolBudgetState creates or updates the budget state for a pool.
-	// Uses INSERT OR REPLACE on pool_name primary key.
+	// Uses an upsert on the pool_name primary key.
 	UpsertPoolBudgetState(ctx context.Context, poolName string, spendToday float64, resetDate string) error
 
 	// --- Webhook Subscriptions ---

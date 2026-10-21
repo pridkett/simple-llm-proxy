@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 // UpsertCostMapKey sets a cost map key override for the given proxy model name,
 // clearing any custom spec that was previously stored.
 func (s *Storage) UpsertCostMapKey(ctx context.Context, modelName, costMapKey string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO cost_overrides (model_name, cost_map_key, custom_spec, updated_at)
-		VALUES (?, ?, NULL, datetime('now'))
+		VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
 		ON CONFLICT(model_name) DO UPDATE SET
 			cost_map_key = excluded.cost_map_key,
 			custom_spec  = NULL,
 			updated_at   = excluded.updated_at
-	`, modelName, costMapKey)
+	`), modelName, costMapKey)
 	if err != nil {
 		return fmt.Errorf("upserting cost map key: %w", err)
 	}
@@ -28,14 +28,14 @@ func (s *Storage) UpsertCostMapKey(ctx context.Context, modelName, costMapKey st
 // UpsertCustomCostSpec stores a custom cost spec (JSON-encoded ModelSpec) for the given
 // proxy model name, clearing any cost map key override that was previously stored.
 func (s *Storage) UpsertCustomCostSpec(ctx context.Context, modelName, specJSON string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, s.bind(`
 		INSERT INTO cost_overrides (model_name, cost_map_key, custom_spec, updated_at)
-		VALUES (?, NULL, ?, datetime('now'))
+		VALUES (?, NULL, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(model_name) DO UPDATE SET
 			cost_map_key = NULL,
 			custom_spec  = excluded.custom_spec,
 			updated_at   = excluded.updated_at
-	`, modelName, specJSON)
+	`), modelName, specJSON)
 	if err != nil {
 		return fmt.Errorf("upserting custom cost spec: %w", err)
 	}
@@ -45,11 +45,11 @@ func (s *Storage) UpsertCustomCostSpec(ctx context.Context, modelName, specJSON 
 // GetCostOverride returns the cost override for the given proxy model name.
 // Returns (nil, nil) if no override exists.
 func (s *Storage) GetCostOverride(ctx context.Context, modelName string) (*storage.CostOverride, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT model_name, cost_map_key, custom_spec, updated_at
 		FROM cost_overrides
 		WHERE model_name = ?
-	`, modelName)
+	`), modelName)
 
 	var ov storage.CostOverride
 	var costMapKey, customSpec sql.NullString
@@ -71,7 +71,7 @@ func (s *Storage) GetCostOverride(ctx context.Context, modelName string) (*stora
 // DeleteCostOverride removes the cost override row for the given proxy model name.
 // A no-op if no override exists.
 func (s *Storage) DeleteCostOverride(ctx context.Context, modelName string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM cost_overrides WHERE model_name = ?`, modelName)
+	_, err := s.db.ExecContext(ctx, s.bind(`DELETE FROM cost_overrides WHERE model_name = ?`), modelName)
 	if err != nil {
 		return fmt.Errorf("deleting cost override: %w", err)
 	}
@@ -80,11 +80,11 @@ func (s *Storage) DeleteCostOverride(ctx context.Context, modelName string) erro
 
 // ListCostOverrides returns all stored cost overrides ordered by model name.
 func (s *Storage) ListCostOverrides(ctx context.Context) ([]*storage.CostOverride, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.bind(`
 		SELECT model_name, cost_map_key, custom_spec, updated_at
 		FROM cost_overrides
 		ORDER BY model_name
-	`)
+	`))
 	if err != nil {
 		return nil, fmt.Errorf("querying cost overrides: %w", err)
 	}
