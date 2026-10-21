@@ -283,6 +283,9 @@ MIT
 
 ## Team administration
 
+The interface follows your browser's light or dark color preference automatically,
+including changes while the page is open.
+
 Use **Teams** to create a team by name, then manage its applications, API keys,
 and members in one workspace. Creating an application automatically creates a
 **Default** API key and displays it once for copying. Keys allow all models with

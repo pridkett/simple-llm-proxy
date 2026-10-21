@@ -2,12 +2,12 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Configuration</h1>
-        <p class="mt-1 text-sm text-gray-500">Current proxy configuration. Secrets are redacted.</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Configuration</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Current proxy configuration. Secrets are redacted.</p>
       </div>
       <div class="flex items-center gap-2">
-        <span v-if="reloadSuccess" class="text-xs text-green-700">Config reloaded.</span>
-        <span v-if="reloadError" class="text-xs text-red-600">{{ reloadError }}</span>
+        <span v-if="reloadSuccess" class="text-xs text-green-700 dark:text-green-300">Config reloaded.</span>
+        <span v-if="reloadError" class="text-xs text-red-600 dark:text-red-400">{{ reloadError }}</span>
         <button class="btn-primary text-xs" :disabled="reloading || loading" @click="triggerReload">
           {{ reloading ? 'Reloading…' : 'Reload Config' }}
         </button>
@@ -21,23 +21,23 @@
     <template v-else-if="data">
       <!-- General settings -->
       <div class="card mb-4">
-        <div class="px-6 py-4 border-b border-gray-100">
-          <h2 class="text-base font-semibold text-gray-900">General Settings</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">General Settings</h2>
         </div>
         <dl class="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <dt class="text-xs text-gray-500">Port</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ data.general_settings.port }}</dd>
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Port</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ data.general_settings.port }}</dd>
           </div>
           <div>
-            <dt class="text-xs text-gray-500">Master Key</dt>
-            <dd class="mt-1 text-sm font-medium" :class="data.general_settings.master_key_set ? 'text-green-700' : 'text-yellow-700'">
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Master Key</dt>
+            <dd class="mt-1 text-sm font-medium" :class="data.general_settings.master_key_set ? 'text-green-700 dark:text-green-300' : 'text-yellow-700 dark:text-yellow-300'">
               {{ data.general_settings.master_key_set ? 'Set' : 'Not configured' }}
             </dd>
           </div>
           <div>
-            <dt class="text-xs text-gray-500">Database</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900 font-mono text-xs">
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Database</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 font-mono text-xs">
               {{ data.general_settings.database_url || '—' }}
             </dd>
           </div>
@@ -46,66 +46,66 @@
 
       <!-- Router settings -->
       <div class="card mb-4">
-        <div class="px-6 py-4 border-b border-gray-100">
-          <h2 class="text-base font-semibold text-gray-900">Router Settings</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Router Settings</h2>
         </div>
         <dl class="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
-            <dt class="text-xs text-gray-500">Strategy</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ data.router_settings.routing_strategy }}</dd>
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Strategy</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ data.router_settings.routing_strategy }}</dd>
           </div>
           <div>
-            <dt class="text-xs text-gray-500">Retries</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ data.router_settings.num_retries }}</dd>
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Retries</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ data.router_settings.num_retries }}</dd>
           </div>
           <div>
-            <dt class="text-xs text-gray-500">Allowed Fails</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ data.router_settings.allowed_fails }}</dd>
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Allowed Fails</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ data.router_settings.allowed_fails }}</dd>
           </div>
           <div>
-            <dt class="text-xs text-gray-500">Cooldown Time</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ data.router_settings.cooldown_time }}</dd>
+            <dt class="text-xs text-gray-500 dark:text-gray-400">Cooldown Time</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ data.router_settings.cooldown_time }}</dd>
           </div>
         </dl>
       </div>
 
       <!-- Model list -->
       <div class="card">
-        <div class="px-6 py-4 border-b border-gray-100">
-          <h2 class="text-base font-semibold text-gray-900">Models ({{ data.model_list.length }})</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Models ({{ data.model_list.length }})</h2>
         </div>
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-100 text-sm">
-            <thead class="bg-gray-50">
+          <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API Key</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API Base</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RPM</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TPM</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Provider</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">API Key</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">API Base</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">RPM</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">TPM</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-50">
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
               <tr v-for="m in data.model_list" :key="m.model_name">
                 <td class="px-6 py-3 font-medium">{{ m.model_name }}</td>
-                <td class="px-6 py-3 text-gray-600 capitalize">{{ m.provider }}</td>
-                <td class="px-6 py-3 text-gray-600 font-mono text-xs">{{ m.actual_model }}</td>
+                <td class="px-6 py-3 text-gray-600 dark:text-gray-300 capitalize">{{ m.provider }}</td>
+                <td class="px-6 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{{ m.actual_model }}</td>
                 <td class="px-6 py-3">
                   <span
                     class="text-xs px-2 py-0.5 rounded font-medium"
-                    :class="m.api_key_set ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'"
+                    :class="m.api_key_set ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' : 'bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300'"
                   >
                     {{ m.api_key_set ? 'Set' : 'Missing' }}
                   </span>
                 </td>
-                <td class="px-6 py-3 text-gray-500 font-mono text-xs">{{ m.api_base || '—' }}</td>
-                <td class="px-6 py-3 text-gray-600">{{ m.rpm || '—' }}</td>
-                <td class="px-6 py-3 text-gray-600">{{ m.tpm || '—' }}</td>
+                <td class="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs">{{ m.api_base || '—' }}</td>
+                <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ m.rpm || '—' }}</td>
+                <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ m.tpm || '—' }}</td>
               </tr>
               <tr v-if="!data.model_list?.length">
-                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                   No models configured.
                 </td>
               </tr>
@@ -117,11 +117,11 @@
 
     <!-- Cost map (always visible, independent of config load state) -->
     <div class="card mt-4">
-      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-base font-semibold text-gray-900">LiteLLM Cost Map</h2>
+      <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">LiteLLM Cost Map</h2>
         <div class="flex items-center gap-2">
-          <span v-if="costMapReloadSuccess" class="text-xs text-green-700">Reloaded.</span>
-          <span v-if="costMapReloadError" class="text-xs text-red-600">{{ costMapReloadError }}</span>
+          <span v-if="costMapReloadSuccess" class="text-xs text-green-700 dark:text-green-300">Reloaded.</span>
+          <span v-if="costMapReloadError" class="text-xs text-red-600 dark:text-red-400">{{ costMapReloadError }}</span>
           <button class="btn-primary text-xs" :disabled="costMapReloading" @click="triggerCostMapReload">
             {{ costMapReloading ? 'Reloading…' : 'Reload Cost Map' }}
           </button>
@@ -129,38 +129,38 @@
       </div>
       <dl class="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <dt class="text-xs text-gray-500">Status</dt>
-          <dd class="mt-1 text-sm font-medium" :class="costMapData?.loaded ? 'text-green-700' : 'text-yellow-700'">
+          <dt class="text-xs text-gray-500 dark:text-gray-400">Status</dt>
+          <dd class="mt-1 text-sm font-medium" :class="costMapData?.loaded ? 'text-green-700 dark:text-green-300' : 'text-yellow-700 dark:text-yellow-300'">
             {{ costMapData?.loaded ? 'Loaded' : 'Not loaded' }}
           </dd>
         </div>
         <div>
-          <dt class="text-xs text-gray-500">Models</dt>
-          <dd class="mt-1 text-sm font-medium text-gray-900">
+          <dt class="text-xs text-gray-500 dark:text-gray-400">Models</dt>
+          <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
             {{ costMapData?.model_count ?? '—' }}
           </dd>
         </div>
         <div>
-          <dt class="text-xs text-gray-500">Last Loaded</dt>
-          <dd class="mt-1 text-sm font-medium text-gray-900 font-mono text-xs">
+          <dt class="text-xs text-gray-500 dark:text-gray-400">Last Loaded</dt>
+          <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 font-mono text-xs">
             {{ costMapData?.loaded_at ? new Date(costMapData.loaded_at).toLocaleString() : '—' }}
           </dd>
         </div>
         <div class="sm:col-span-3">
-          <dt class="text-xs text-gray-500 mb-1">Source URL</dt>
+          <dt class="text-xs text-gray-500 dark:text-gray-400 mb-1">Source URL</dt>
           <div class="flex gap-2 items-center">
             <input
               v-model="costMapURL"
               type="text"
-              class="flex-1 text-xs font-mono border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              class="flex-1 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
               placeholder="https://..."
             />
             <button class="btn-secondary text-xs" :disabled="costMapURLSaving" @click="saveCostMapURL">
               {{ costMapURLSaving ? 'Saving…' : 'Update URL' }}
             </button>
           </div>
-          <p v-if="costMapURLError" class="text-xs text-red-600 mt-1">{{ costMapURLError }}</p>
-          <p v-if="costMapURLSuccess" class="text-xs text-green-700 mt-1">URL updated.</p>
+          <p v-if="costMapURLError" class="text-xs text-red-600 dark:text-red-400 mt-1">{{ costMapURLError }}</p>
+          <p v-if="costMapURLSuccess" class="text-xs text-green-700 dark:text-green-300 mt-1">URL updated.</p>
         </div>
       </dl>
     </div>

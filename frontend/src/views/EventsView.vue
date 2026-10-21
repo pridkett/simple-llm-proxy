@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900">Events</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">Events</h1>
       <div class="flex items-center gap-3">
         <select
           v-model="eventTypeFilter"
@@ -23,18 +23,18 @@
     <template v-else-if="eventsData">
       <div class="card overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-100 text-sm">
-            <thead class="bg-gray-50">
+          <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Details</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Details</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-50">
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
               <template v-for="event in eventsData.events" :key="event.id">
-                <tr class="hover:bg-gray-50 transition-colors cursor-pointer" @click="toggleDetail(event.id)">
-                  <td class="px-6 py-3 text-gray-500 whitespace-nowrap text-xs" :title="formatFullDate(event.created_at)">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer" @click="toggleDetail(event.id)">
+                  <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs" :title="formatFullDate(event.created_at)">
                     {{ relativeTime(event.created_at) }}
                   </td>
                   <td class="px-6 py-3">
@@ -45,18 +45,18 @@
                       {{ formatEventType(event.event_type) }}
                     </span>
                   </td>
-                  <td class="px-6 py-3 text-gray-700">
+                  <td class="px-6 py-3 text-gray-700 dark:text-gray-200">
                     <span class="font-medium">{{ event.payload?.value1 }}</span>
-                    <span v-if="event.payload?.value2" class="text-gray-500 ml-1">{{ event.payload.value2 }}</span>
+                    <span v-if="event.payload?.value2" class="text-gray-500 dark:text-gray-400 ml-1">{{ event.payload.value2 }}</span>
                   </td>
                 </tr>
                 <tr v-if="expandedId === event.id">
-                  <td colspan="3" class="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Event Details</h4>
+                  <td colspan="3" class="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                    <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Event Details</h4>
                     <dl class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                       <template v-for="(value, key) in flattenContext(event.payload?.context)" :key="key">
-                        <dt class="text-gray-500 font-semibold">{{ formatContextKey(key) }}</dt>
-                        <dd class="text-gray-900">{{ formatContextValue(value) }}</dd>
+                        <dt class="text-gray-500 dark:text-gray-400 font-semibold">{{ formatContextKey(key) }}</dt>
+                        <dd class="text-gray-900 dark:text-gray-100">{{ formatContextValue(value) }}</dd>
                       </template>
                     </dl>
                   </td>
@@ -64,8 +64,8 @@
               </template>
               <tr v-if="!eventsData.events?.length">
                 <td colspan="3" class="px-6 py-12 text-center">
-                  <h3 class="text-base font-semibold text-gray-900">No events recorded</h3>
-                  <p class="mt-2 text-sm text-gray-500">Routing events appear here when provider failovers, budget exhaustion, or pool cooldowns occur. Events are retained for 30 days.</p>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">No events recorded</h3>
+                  <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Routing events appear here when provider failovers, budget exhaustion, or pool cooldowns occur. Events are retained for 30 days.</p>
                 </td>
               </tr>
             </tbody>
@@ -74,9 +74,9 @@
 
         <div
           v-if="eventsData.total > pageSize"
-          class="px-4 py-3 border-t border-gray-100 flex items-center justify-between"
+          class="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between"
         >
-          <p class="text-xs text-gray-500">
+          <p class="text-xs text-gray-500 dark:text-gray-400">
             Showing {{ offset + 1 }}&ndash;{{ Math.min(offset + pageSize, eventsData.total) }}
             of {{ eventsData.total }} events
           </p>
@@ -155,10 +155,10 @@ function formatFullDate(iso) {
 
 function eventTypeBadgeClasses(type) {
   switch (type) {
-    case 'provider_failover': return 'bg-amber-50 text-amber-700'
-    case 'budget_exhausted': return 'bg-red-50 text-red-700'
-    case 'pool_cooldown': return 'bg-red-50 text-red-700'
-    default: return 'bg-gray-100 text-gray-600'
+    case 'provider_failover': return 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+    case 'budget_exhausted': return 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'
+    case 'pool_cooldown': return 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'
+    default: return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
   }
 }
 

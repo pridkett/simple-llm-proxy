@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Request Logs</h1>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Request Logs</h1>
       <button class="btn-secondary text-xs" :disabled="loading" @click="load">Refresh</button>
     </div>
 
@@ -12,7 +12,7 @@
           v-for="range in [null, 'today', '7d', '30d', 'custom']"
           :key="range || 'all'"
           @click="datePreset = range"
-          :class="datePreset === range ? 'bg-indigo-50 text-indigo-700 font-bold' : 'btn-secondary'"
+          :class="datePreset === range ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold' : 'btn-secondary'"
           class="btn-secondary text-xs py-2"
         >
           {{ { null: 'All time', today: 'Today', '7d': '7d', '30d': '30d', custom: 'Custom' }[range] }}
@@ -20,12 +20,12 @@
       </div>
       <template v-if="datePreset === 'custom'">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">From</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
           <input type="date" v-model="customFrom" @change="onCustomDateChange"
                  class="input text-sm py-2 max-w-[140px]" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">To</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To</label>
           <input type="date" v-model="customTo" @change="onCustomDateChange"
                  class="input text-sm py-2 max-w-[140px]" />
         </div>
@@ -35,42 +35,42 @@
     <!-- Filters: Row 2 — Dimension dropdowns (D-07, D-08) -->
     <div class="mb-4 flex flex-wrap gap-3 items-end">
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Team</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Team</label>
         <select v-model="filterTeam" class="input text-sm py-2 min-w-[160px]">
           <option :value="null">All Teams</option>
           <option v-for="t in metaTeams" :key="t.id" :value="t.id">{{ t.name }}</option>
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Application</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Application</label>
         <select v-model="filterApp" class="input text-sm py-2 min-w-[160px]">
           <option :value="null">All Applications</option>
           <option v-for="a in metaApps" :key="a.id" :value="a.id">{{ a.name }}</option>
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Key</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Key</label>
         <select v-model="filterKey" class="input text-sm py-2 min-w-[160px]">
           <option :value="null">All Keys</option>
           <option v-for="k in metaKeys" :key="k.id" :value="k.id">{{ k.name }}</option>
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Provider</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Provider</label>
         <select v-model="filterProvider" class="input text-sm py-2 min-w-[160px]">
           <option value="">All Providers</option>
           <option v-for="p in metaProviders" :key="p" :value="p">{{ p }}</option>
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Pool</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Pool</label>
         <select v-model="filterPool" class="input text-sm py-2 min-w-[160px]">
           <option value="">All Pools</option>
           <option v-for="p in metaPools" :key="p" :value="p">{{ p }}</option>
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Model</label>
+        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
         <select v-model="filterModel" class="input text-sm py-2 min-w-[160px]">
           <option value="">All Models</option>
           <option v-for="m in metaModels" :key="m" :value="m">{{ m }}</option>
@@ -87,14 +87,14 @@
 
     <form class="mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="applySession">
       <div class="w-full sm:w-80">
-        <label for="session-filter" class="block text-xs font-medium text-gray-500 mb-1">Session ID</label>
+        <label for="session-filter" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Session ID</label>
         <input id="session-filter" v-model="sessionSearch" class="input text-sm py-2 w-full"
                placeholder="Exact session ID" maxlength="256" />
       </div>
       <button class="btn-secondary text-xs py-2" type="submit">Filter session</button>
       <button v-if="filterSession" class="btn-secondary text-xs py-2" type="button" @click="removeSession">Clear session</button>
     </form>
-    <div v-if="filterSession" class="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900" role="status">
+    <div v-if="filterSession" class="mb-4 rounded-lg border border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200" role="status">
       <p class="font-medium">Session <span class="font-mono break-all">{{ filterSession }}</span></p>
       <p class="text-xs mt-1">{{ loading ? 'Loading requests…' : `${logsData?.total || 0} requests matching current filters` }} · {{ datePreset === null ? 'All time' : 'Selected date range' }}</p>
     </div>
@@ -105,50 +105,50 @@
     <template v-else-if="logsData">
       <div class="card overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-100 text-sm">
-            <thead class="bg-gray-50">
+          <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Time</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Request ID</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Key</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Model</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Provider</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Endpoint</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Input Tokens</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Output Tokens</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Cost</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Latency</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">TTFT</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Request ID</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Key</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Provider</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endpoint</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Input Tokens</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Output Tokens</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Latency</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">TTFT</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-50">
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
               <template v-for="log in logsData.logs" :key="log.request_id">
                 <tr @click="toggleRow(log.request_id)"
-                    class="hover:bg-gray-50 transition-colors cursor-pointer">
-                  <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                    class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer">
+                  <td class="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
                     {{ formatDate(log.request_time) }}
                   </td>
-                  <td class="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap" :title="log.request_id">
+                  <td class="px-4 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs whitespace-nowrap" :title="log.request_id">
                     {{ truncateID(log.request_id) }}
                   </td>
-                  <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap" :title="formatKeyFull(log)">
+                  <td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs whitespace-nowrap" :title="formatKeyFull(log)">
                     {{ formatKeyLabel(log) }}
                   </td>
                   <td class="px-4 py-3 font-medium">{{ log.model }}</td>
-                  <td class="px-4 py-3 text-gray-600 capitalize">{{ log.provider }}</td>
-                  <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ log.endpoint }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ log.usage_known === false ? '—' : (log.prompt_tokens || 0).toLocaleString() }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ log.usage_known === false ? '—' : (log.completion_tokens || 0).toLocaleString() }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600 font-mono text-xs">{{ log.usage_known === false ? 'Unknown' : formatCost(log.total_cost) }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ log.latency_ms }}ms</td>
-                  <td class="px-4 py-3 text-right text-gray-600">
+                  <td class="px-4 py-3 text-gray-600 dark:text-gray-300 capitalize">{{ log.provider }}</td>
+                  <td class="px-4 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs">{{ log.endpoint }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.usage_known === false ? '—' : (log.prompt_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.usage_known === false ? '—' : (log.completion_tokens || 0).toLocaleString() }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-mono text-xs">{{ log.usage_known === false ? 'Unknown' : formatCost(log.total_cost) }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.latency_ms }}ms</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
                     {{ log.ttft_ms != null ? log.ttft_ms + 'ms' : '—' }}
                   </td>
                   <td class="px-4 py-3">
                     <span
                       class="px-2 py-0.5 rounded text-xs font-medium"
-                      :class="log.status_code < 400 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+                      :class="log.status_code < 400 ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'"
                     >
                       {{ log.status_code }}
                     </span>
@@ -156,7 +156,7 @@
                 </tr>
                 <!-- Accordion detail sub-row (UI-05) -->
                 <tr v-if="expandedRows.has(log.request_id)">
-                  <td colspan="12" class="bg-gray-50 px-4 py-4">
+                  <td colspan="12" class="bg-gray-50 dark:bg-gray-900 px-4 py-4">
                     <LoadingSpinner v-if="detailLoading.has(log.request_id)" />
                     <ErrorAlert
                       v-else-if="detailErrors.has(log.request_id)"
@@ -169,67 +169,67 @@
                     >
                       <!-- LEFT COLUMN: Request body + Attribution -->
                       <div>
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Request</p>
-                        <p class="text-xs text-gray-500 mb-1">Request Body</p>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Request</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Request Body</p>
                         <pre
                           v-if="detailCache.get(log.request_id).req_body_snippet"
-                          class="text-xs font-mono bg-white border border-gray-200 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700"
+                          class="text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700 dark:text-gray-200"
                         >{{ detailCache.get(log.request_id).req_body_snippet }}</pre>
                         <p v-else class="text-xs text-gray-400 italic">No request body captured.</p>
 
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2">Attribution</p>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-4 mb-2">Attribution</p>
                         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          <span class="text-gray-500">Session ID</span>
+                          <span class="text-gray-500 dark:text-gray-400">Session ID</span>
                           <RouterLink v-if="detailCache.get(log.request_id).session_id"
                                       :to="{ path: '/logs', query: { session_id: detailCache.get(log.request_id).session_id } }"
                                       @click="resetDimensions"
-                                      class="font-mono text-indigo-600 hover:underline break-all"
+                                      class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
                                       title="View all requests in this session">
                             {{ detailCache.get(log.request_id).session_id }}
                           </RouterLink>
                           <span v-else class="text-gray-400">—</span>
-                          <span class="text-gray-500">Team</span>
-                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).team_name || '—' }}</span>
-                          <span class="text-gray-500">Application</span>
-                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).app_name || '—' }}</span>
-                          <span class="text-gray-500">Key</span>
-                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).key_name || '—' }}</span>
-                          <span class="text-gray-500">Pool</span>
-                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).pool_name || '—' }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Team</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).team_name || '—' }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Application</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).app_name || '—' }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Key</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).key_name || '—' }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Pool</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).pool_name || '—' }}</span>
                         </div>
                       </div>
 
                       <!-- RIGHT COLUMN: Response body + Tokens & Cost -->
                       <div>
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Response</p>
-                        <p class="text-xs text-gray-500 mb-1">
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Response</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">
                           {{ detailCache.get(log.request_id).status_code >= 400 &&
                              detailCache.get(log.request_id).resp_body_snippet
                              ? 'Error Response' : 'Response Body' }}
                         </p>
                         <pre
                           v-if="detailCache.get(log.request_id).resp_body_snippet"
-                          class="text-xs font-mono bg-white border border-gray-200 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700"
+                          class="text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 whitespace-pre-wrap break-all overflow-auto max-h-40 text-gray-700 dark:text-gray-200"
                         >{{ detailCache.get(log.request_id).resp_body_snippet }}</pre>
                         <p v-else class="text-xs text-gray-400 italic">No response body captured.</p>
 
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2">Tokens &amp; Cost</p>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-4 mb-2">Tokens &amp; Cost</p>
                         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          <span class="text-gray-500">Input</span>
-                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).prompt_tokens || 0).toLocaleString() }}</span>
-                          <span class="text-gray-500">Output</span>
-                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).completion_tokens || 0).toLocaleString() }}</span>
-                          <span class="text-gray-500">Cache Read</span>
-                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).cache_read_tokens || 0).toLocaleString() }}</span>
-                          <span class="text-gray-500">Cache Write</span>
-                          <span class="text-gray-800 font-bold">{{ (detailCache.get(log.request_id).cache_write_tokens || 0).toLocaleString() }}</span>
-                          <span class="text-gray-500">TTFT</span>
-                          <span class="text-gray-800 font-bold">
+                          <span class="text-gray-500 dark:text-gray-400">Input</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ (detailCache.get(log.request_id).prompt_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Output</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ (detailCache.get(log.request_id).completion_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Cache Read</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ (detailCache.get(log.request_id).cache_read_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Cache Write</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ (detailCache.get(log.request_id).cache_write_tokens || 0).toLocaleString() }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">TTFT</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">
                             {{ detailCache.get(log.request_id).ttft_ms != null
                                ? detailCache.get(log.request_id).ttft_ms + 'ms' : '—' }}
                           </span>
-                          <span class="text-gray-500">Cost</span>
-                          <span class="text-gray-800 font-bold">{{ detailCache.get(log.request_id).usage_known === false ? 'Unknown' : formatCost(detailCache.get(log.request_id).total_cost) }}</span>
+                          <span class="text-gray-500 dark:text-gray-400">Cost</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).usage_known === false ? 'Unknown' : formatCost(detailCache.get(log.request_id).total_cost) }}</span>
                         </div>
                       </div>
                     </div>
@@ -237,7 +237,7 @@
                 </tr>
               </template>
               <tr v-if="!logsData.logs || !logsData.logs.length">
-                <td colspan="12" class="px-4 py-12 text-center text-gray-500">
+                <td colspan="12" class="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
                   <span v-if="hasActiveFilters">
                     No logs match the current filters. Try clearing one or more filters.
                   </span>
@@ -253,9 +253,9 @@
         <!-- Pagination -->
         <div
           v-if="logsData.total > pageSize"
-          class="px-4 py-3 border-t border-gray-100 flex items-center justify-between"
+          class="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between"
         >
-          <p class="text-xs text-gray-500">
+          <p class="text-xs text-gray-500 dark:text-gray-400">
             Showing {{ offset + 1 }}–{{ Math.min(offset + pageSize, logsData.total) }}
             of {{ logsData.total }} logs
           </p>

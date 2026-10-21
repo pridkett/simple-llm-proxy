@@ -1,12 +1,12 @@
 <template>
   <div class="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
     <!-- Top controls bar -->
-    <div class="flex-shrink-0 border-b border-gray-200 bg-white px-4 sm:px-6 lg:px-8 py-3 space-y-3">
+    <div class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 sm:px-6 lg:px-8 py-3 space-y-3">
       <!-- Heading row -->
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-xl font-semibold text-gray-900">Chat</h1>
-          <p class="text-xs text-gray-500 mt-0.5">Test models and compare responses side by side</p>
+          <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Chat</h1>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Test models and compare responses side by side</p>
         </div>
         <button
           v-if="sharedUserMsgs.length > 0"
@@ -20,7 +20,7 @@
 
       <!-- Model selector -->
       <div v-if="loadingModels" class="text-sm text-gray-400">Loading models…</div>
-      <div v-else-if="availableModels.length === 0" class="text-sm text-red-500">
+      <div v-else-if="availableModels.length === 0" class="text-sm text-red-500 dark:text-red-400">
         No models available — check your connection and API key
       </div>
       <div v-else class="space-y-2">
@@ -59,12 +59,12 @@
           />
           <div
             v-if="dropdownOpen && filteredModels.length > 0"
-            class="absolute z-10 mt-1 w-full max-w-sm bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+            class="absolute z-10 mt-1 w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
           >
             <button
               v-for="model in filteredModels"
               :key="model"
-              class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
               @mousedown.prevent="toggleModel(model); modelSearch = ''"
             >
               {{ model }}
@@ -72,7 +72,7 @@
           </div>
           <div
             v-if="dropdownOpen && modelSearch && filteredModels.length === 0"
-            class="absolute z-10 mt-1 w-full max-w-sm bg-white border border-gray-200 rounded-md shadow-lg px-3 py-2 text-sm text-gray-400"
+            class="absolute z-10 mt-1 w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg px-3 py-2 text-sm text-gray-400"
           >
             No matching models
           </div>
@@ -82,7 +82,7 @@
 
       <!-- API key selector -->
       <div class="flex items-center gap-3">
-        <label class="text-xs text-gray-600 whitespace-nowrap">Charge to:</label>
+        <label class="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">Charge to:</label>
         <select
           v-model="selectedKeyId"
           class="input text-sm max-w-sm"
@@ -98,14 +98,14 @@
           </option>
         </select>
         <span v-if="loadingKeys" class="text-xs text-gray-400">Loading keys…</span>
-        <span v-else-if="!currentUser?.is_admin && accessibleKeys.length === 0" class="text-xs text-red-500">
+        <span v-else-if="!currentUser?.is_admin && accessibleKeys.length === 0" class="text-xs text-red-500 dark:text-red-400">
           No API keys available — ask your team admin to create one
         </span>
       </div>
 
       <!-- Advanced options (collapsible) -->
       <details class="group">
-        <summary class="text-xs text-gray-500 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-700 w-fit">
+        <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 w-fit">
           <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="currentColor" viewBox="0 0 20 20">
             <path d="M6 6l8 4-8 4V6z" />
           </svg>
@@ -113,7 +113,7 @@
         </summary>
         <div class="mt-2 flex flex-wrap items-start gap-4">
           <div class="flex-1 min-w-[200px]">
-            <label class="block text-xs text-gray-600 mb-1">System message (optional)</label>
+            <label class="block text-xs text-gray-600 dark:text-gray-300 mb-1">System message (optional)</label>
             <textarea
               v-model="systemMessage"
               class="input resize-y text-sm font-mono"
@@ -123,7 +123,7 @@
             />
           </div>
           <div>
-            <label class="block text-xs text-gray-600 mb-1">Temperature: {{ temperature.toFixed(1) }}</label>
+            <label class="block text-xs text-gray-600 dark:text-gray-300 mb-1">Temperature: {{ temperature.toFixed(1) }}</label>
             <input
               type="range"
               v-model.number="temperature"
@@ -143,11 +143,11 @@
         class="h-full flex items-center justify-center"
       >
         <div class="text-center">
-          <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <p class="text-sm text-gray-500">Select one or more models above to start chatting</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Select one or more models above to start chatting</p>
         </div>
       </div>
 
@@ -175,7 +175,7 @@
     </div>
 
     <!-- Shared input bar -->
-    <div class="flex-shrink-0 border-t border-gray-200 bg-white px-4 sm:px-6 lg:px-8 py-3">
+    <div class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 sm:px-6 lg:px-8 py-3">
       <div class="flex gap-3 items-end">
         <div class="flex-1">
           <textarea

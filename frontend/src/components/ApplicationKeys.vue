@@ -1,7 +1,7 @@
 <template>
   <section class="min-w-0">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <h2 class="text-lg font-semibold text-gray-900">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
         {{ application.name }}
       </h2>
       <RouterLink
@@ -20,7 +20,7 @@
         !viewingKey
       "
       role="alert"
-      class="mb-4 text-sm text-red-600"
+      class="mb-4 text-sm text-red-600 dark:text-red-400"
     >
       Key not found in this application.
     </p>
@@ -28,12 +28,12 @@
     <div
       v-if="error"
       role="alert"
-      class="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-600 flex justify-between items-center"
+      class="mb-4 px-3 py-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400 flex justify-between items-center"
     >
       <span>{{ error }}</span>
       <button
         @click="error = null"
-        class="ml-3 text-red-400 hover:text-red-600"
+        class="ml-3 text-red-400 hover:text-red-600 dark:hover:text-red-400"
       >
         &#10005;
       </button>
@@ -41,47 +41,47 @@
 
     <!-- Keys table -->
     <div
-      class="bg-white border border-gray-200 rounded-lg overflow-x-auto mb-4"
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-x-auto mb-4"
     >
-      <div v-if="loadingKeys" class="px-4 py-3 text-gray-500 text-sm">
+      <div v-if="loadingKeys" class="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">
         Loading keys...
       </div>
-      <table v-else class="min-w-[38rem] w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+      <table v-else class="min-w-[38rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Prefix
             </th>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Name
             </th>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Models
             </th>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Budget
             </th>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Status
             </th>
             <th
-              class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
               Actions
             </th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="keys.length === 0">
             <td
               colspan="6"
@@ -93,19 +93,19 @@
           <tr
             v-for="key in keys"
             :key="key.id"
-            :class="editingKey?.id === key.id ? 'bg-indigo-50' : ''"
+            :class="editingKey?.id === key.id ? 'bg-indigo-50 dark:bg-indigo-950' : ''"
           >
-            <td class="px-4 py-3 font-mono text-sm text-gray-900">
+            <td class="px-4 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
               {{ key.key_prefix }}...
             </td>
-            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
               <RouterLink
                 :to="`${applicationPath}/keys/${key.id}`"
-                class="text-indigo-600 hover:underline"
+                class="text-indigo-600 dark:text-indigo-400 hover:underline"
                 >{{ key.name }}</RouterLink
               >
             </td>
-            <td class="px-4 py-3 text-sm text-gray-500">
+            <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
               <span
                 v-if="!key.allowed_models || key.allowed_models.length === 0"
                 class="italic"
@@ -121,7 +121,7 @@
                 >
               </span>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-700">
+            <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
               <span v-if="key.max_budget != null">
                 ${{ (keySpend[key.id] ?? 0).toFixed(4) }} / ${{
                   key.max_budget.toFixed(2)
@@ -134,12 +134,12 @@
             <td class="px-4 py-3 text-sm">
               <span
                 v-if="key.is_active"
-                class="bg-green-100 text-green-700 text-xs rounded-full px-2 py-0.5"
+                class="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs rounded-full px-2 py-0.5"
                 >active</span
               >
               <span
                 v-else
-                class="bg-gray-100 text-gray-500 text-xs rounded-full px-2 py-0.5"
+                class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs rounded-full px-2 py-0.5"
                 >revoked</span
               >
             </td>
@@ -147,7 +147,7 @@
               <template v-if="!key.is_active">
                 <button
                   @click="openKey(key)"
-                  class="text-xs text-gray-500 hover:text-gray-700"
+                  class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 >
                   View
                 </button>
@@ -156,23 +156,23 @@
                 <!-- Edit button -->
                 <button
                   @click="openKey(key)"
-                  class="text-xs text-indigo-500 hover:text-indigo-700"
+                  class="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                 >
                   Edit
                 </button>
                 <!-- Revoke inline confirmation -->
                 <template v-if="revokeConfirm === key.id">
-                  <span class="text-xs text-gray-500">Revoke?</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">Revoke?</span>
                   <button
                     :data-testid="`confirm-revoke-${key.id}`"
                     @click="confirmRevoke(key.id)"
-                    class="text-xs text-red-600 hover:text-red-800 font-medium"
+                    class="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 font-medium"
                   >
                     Yes
                   </button>
                   <button
                     @click="revokeConfirm = null"
-                    class="text-xs text-gray-500 hover:text-gray-700"
+                    class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                   >
                     No
                   </button>
@@ -181,7 +181,7 @@
                   v-else
                   :data-testid="`revoke-key-${key.id}`"
                   @click="revokeConfirm = key.id"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                 >
                   Revoke
                 </button>
@@ -195,13 +195,13 @@
     <!-- Read-only view for revoked key -->
     <div
       v-if="viewingKey && !editingKey"
-      class="bg-white border border-gray-200 rounded-lg p-4 mb-4"
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4"
     >
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h3 class="text-sm font-medium text-gray-700">
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-200">
             Key Settings — {{ viewingKey.name }} —
-            <span class="font-mono text-gray-500"
+            <span class="font-mono text-gray-500 dark:text-gray-400"
               >{{ viewingKey.key_prefix }}...</span
             >
           </h3>
@@ -211,19 +211,19 @@
         </div>
         <button
           @click="closeKey"
-          class="text-xs text-gray-400 hover:text-gray-600"
+          class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
           &#10005; Close
         </button>
       </div>
       <dl class="space-y-2 text-sm max-w-lg">
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Name</dt>
-          <dd class="text-gray-900">{{ viewingKey.name }}</dd>
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Name</dt>
+          <dd class="text-gray-900 dark:text-gray-100">{{ viewingKey.name }}</dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Allowed models</dt>
-          <dd class="text-gray-900">
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Allowed models</dt>
+          <dd class="text-gray-900 dark:text-gray-100">
             <span
               v-if="!viewingKey.allowed_models?.length"
               class="italic text-gray-400"
@@ -233,16 +233,16 @@
           </dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Rate limit (RPM)</dt>
-          <dd class="text-gray-900">{{ viewingKey.max_rpm ?? '—' }}</dd>
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Rate limit (RPM)</dt>
+          <dd class="text-gray-900 dark:text-gray-100">{{ viewingKey.max_rpm ?? '—' }}</dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Rate limit (RPD)</dt>
-          <dd class="text-gray-900">{{ viewingKey.max_rpd ?? '—' }}</dd>
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Rate limit (RPD)</dt>
+          <dd class="text-gray-900 dark:text-gray-100">{{ viewingKey.max_rpd ?? '—' }}</dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Hard budget</dt>
-          <dd class="text-gray-900">
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Hard budget</dt>
+          <dd class="text-gray-900 dark:text-gray-100">
             {{
               viewingKey.max_budget != null
                 ? `$${viewingKey.max_budget.toFixed(2)}`
@@ -251,8 +251,8 @@
           </dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-40 text-xs text-gray-500 shrink-0">Soft budget alert</dt>
-          <dd class="text-gray-900">
+          <dt class="w-40 text-xs text-gray-500 dark:text-gray-400 shrink-0">Soft budget alert</dt>
+          <dd class="text-gray-900 dark:text-gray-100">
             {{
               viewingKey.soft_budget != null
                 ? `$${viewingKey.soft_budget.toFixed(2)}`
@@ -266,17 +266,17 @@
     <!-- Create / Edit Key form -->
     <div
       v-if="isAdmin && (editingKey || isCreating)"
-      class="bg-white border border-gray-200 rounded-lg p-4"
-      :class="editingKey ? 'border-indigo-300 ring-1 ring-indigo-200' : ''"
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+      :class="editingKey ? 'border-indigo-300 dark:border-indigo-700 ring-1 ring-indigo-200 dark:ring-indigo-800' : ''"
       ref="formRef"
     >
       <!-- Form heading -->
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h3 class="text-sm font-medium text-gray-700">
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-200">
             <template v-if="editingKey">
               Edit Key — {{ editingKey.name }} —
-              <span class="font-mono text-gray-500"
+              <span class="font-mono text-gray-500 dark:text-gray-400"
                 >{{ editingKey.key_prefix }}...</span
               >
             </template>
@@ -289,7 +289,7 @@
         <button
           v-if="editingKey"
           @click="closeKey"
-          class="text-xs text-gray-400 hover:text-gray-600"
+          class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
           &#10005; Cancel edit
         </button>
@@ -298,12 +298,12 @@
       <div
         v-if="formError"
         role="alert"
-        class="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-600 flex justify-between items-center"
+        class="mb-4 px-3 py-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400 flex justify-between items-center"
       >
         <span>{{ formError }}</span>
         <button
           @click="formError = null"
-          class="ml-3 text-red-400 hover:text-red-600"
+          class="ml-3 text-red-400 hover:text-red-600 dark:hover:text-red-400"
         >
           &#10005;
         </button>
@@ -311,7 +311,7 @@
 
       <form @submit.prevent="handleSubmitForm" class="space-y-3 max-w-lg">
         <div>
-          <label for="key-name" class="block text-xs text-gray-500 mb-1"
+          <label for="key-name" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
             >Name</label
           >
           <input
@@ -327,12 +327,12 @@
         </div>
 
         <details :open="!!editingKey">
-          <summary class="cursor-pointer text-sm text-gray-600">
+          <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-300">
             Models and limits
           </summary>
           <!-- Allowed models with autocomplete -->
           <div class="relative">
-            <label for="key-models" class="block text-xs text-gray-500 mb-1"
+            <label for="key-models" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
               >Allowed models (leave empty for all)</label
             >
             <input
@@ -352,16 +352,16 @@
             />
             <ul
               v-if="showSuggestions && filteredSuggestions.length > 0"
-              class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+              class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
             >
               <li
                 v-for="(model, idx) in filteredSuggestions"
                 :key="model"
-                class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
+                class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950"
                 :class="
                   idx === suggestionIndex
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-700'
+                    ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                    : 'text-gray-700 dark:text-gray-200'
                 "
                 @mousedown.prevent="selectSuggestion(model)"
               >
@@ -372,7 +372,7 @@
 
           <div class="flex flex-wrap gap-3">
             <div class="flex-1 min-w-[12rem]">
-              <label for="key-rpm" class="block text-xs text-gray-500 mb-1"
+              <label for="key-rpm" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
                 >Rate limit (requests/min)</label
               >
               <input
@@ -389,7 +389,7 @@
               />
             </div>
             <div class="flex-1 min-w-[12rem]">
-              <label for="key-rpd" class="block text-xs text-gray-500 mb-1"
+              <label for="key-rpd" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
                 >Rate limit (requests/day)</label
               >
               <input
@@ -409,7 +409,7 @@
 
           <div class="flex flex-wrap gap-3">
             <div class="flex-1 min-w-[12rem]">
-              <label for="key-budget" class="block text-xs text-gray-500 mb-1"
+              <label for="key-budget" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
                 >Hard budget limit ($)</label
               >
               <input
@@ -428,7 +428,7 @@
             <div class="flex-1 min-w-[12rem]">
               <label
                 for="key-soft-budget"
-                class="block text-xs text-gray-500 mb-1"
+                class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
                 >Soft budget alert ($)</label
               >
               <input
@@ -446,7 +446,7 @@
                   softBudgetError ? 'border-red-400 focus:ring-red-400' : ''
                 "
               />
-              <p v-if="softBudgetError" class="mt-1 text-xs text-red-500">
+              <p v-if="softBudgetError" class="mt-1 text-xs text-red-500 dark:text-red-400">
                 Must be less than the hard budget limit.
               </p>
             </div>

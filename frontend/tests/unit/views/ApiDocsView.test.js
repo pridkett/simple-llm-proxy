@@ -80,4 +80,23 @@ describe('ApiDocsView', () => {
 
     expect(spy).toHaveBeenCalledWith('')
   })
+
+  it('updates the documentation theme when the browser preference changes', async () => {
+    const media = new EventTarget()
+    media.matches = true
+    vi.stubGlobal('matchMedia', vi.fn(() => media))
+    window.Redoc = { init: vi.fn() }
+    const wrapper = mount(ApiDocsView)
+    await flushPromises()
+    expect(window.Redoc.init.mock.lastCall[1].theme.colors.text.primary).toBe('#F3F4F6')
+    expect(window.Redoc.init.mock.lastCall[1].theme.sidebar.backgroundColor).toBe('#1F2937')
+
+    media.matches = false
+    media.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(window.Redoc.init.mock.lastCall[1].theme.colors.primary.main).toBe('#4F46E5')
+    expect(window.Redoc.init.mock.lastCall[1].theme.sidebar).toBeUndefined()
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
 })

@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Models</h1>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Models</h1>
       <button class="btn-secondary text-xs" :disabled="loading" @click="load">Refresh</button>
     </div>
 
@@ -16,10 +16,10 @@
           class="card overflow-hidden"
         >
           <!-- Model header -->
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <div class="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
             <div>
-              <h2 class="text-base font-semibold text-gray-900">{{ model.model_name }}</h2>
-              <p class="text-xs text-gray-500 mt-0.5">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ model.model_name }}</h2>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {{ model.total_deployments }} deployment{{ model.total_deployments !== 1 ? 's' : '' }}
               </p>
             </div>
@@ -33,58 +33,58 @@
 
           <!-- Deployments table -->
           <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-100 text-sm">
-              <thead class="bg-white">
+            <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+              <thead class="bg-white dark:bg-gray-800">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Failures</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RPM</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TPM</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Provider</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Failures</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">RPM</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">TPM</th>
                 </tr>
               </thead>
-              <tbody class="bg-white divide-y divide-gray-50">
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
                 <tr v-for="(dep, i) in model.deployments" :key="i">
                   <td class="px-6 py-3 font-medium capitalize">{{ dep.provider }}</td>
-                  <td class="px-6 py-3 text-gray-600 font-mono text-xs">{{ dep.actual_model }}</td>
+                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{{ dep.actual_model }}</td>
                   <td class="px-6 py-3">
                     <StatusBadge :status="dep.status" />
                     <span v-if="dep.cooldown_until" class="ml-2 text-xs text-gray-400">
                       until {{ formatTime(dep.cooldown_until) }}
                     </span>
                   </td>
-                  <td class="px-6 py-3 text-gray-600">{{ dep.failure_count }}</td>
-                  <td class="px-6 py-3 text-gray-600">{{ dep.rpm || '—' }}</td>
-                  <td class="px-6 py-3 text-gray-600">{{ dep.tpm || '—' }}</td>
+                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.failure_count }}</td>
+                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.rpm || '—' }}</td>
+                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.tpm || '—' }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <!-- Cost information section -->
-          <div class="border-t border-gray-100">
-            <div class="px-6 py-3 bg-white flex items-center justify-between">
+          <div class="border-t border-gray-100 dark:border-gray-700">
+            <div class="px-6 py-3 bg-white dark:bg-gray-800 flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">Cost Info</span>
+                <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Info</span>
                 <span
                   v-if="model.costs?.source"
                   class="text-xs px-1.5 py-0.5 rounded"
                   :class="{
-                    'bg-green-100 text-green-700': model.costs.source === 'auto',
-                    'bg-blue-100 text-blue-700': model.costs.source === 'override',
-                    'bg-purple-100 text-purple-700': model.costs.source === 'custom',
+                    'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300': model.costs.source === 'auto',
+                    'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300': model.costs.source === 'override',
+                    'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300': model.costs.source === 'custom',
                   }"
                 >{{ model.costs.source }}</span>
                 <span v-else class="text-xs text-gray-400">not mapped</span>
               </div>
-              <div class="flex items-center gap-4 text-xs text-gray-600">
+              <div class="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
                 <span v-if="model.costs?.input_cost_per_token">In: {{ formatCostPerToken(model.costs.input_cost_per_token) }}</span>
                 <span v-if="model.costs?.output_cost_per_token">Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}</span>
                 <span v-if="model.costs?.max_tokens">Max: {{ model.costs.max_tokens.toLocaleString() }} tok</span>
                 <button
                   v-if="model.costs?.source && model.costs.source !== 'auto'"
-                  class="btn-secondary text-xs text-red-600 hover:text-red-700"
+                  class="btn-secondary text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                   :disabled="clearing[model.model_name]"
                   @click="clearCostOverride(model.model_name)"
                 >{{ clearing[model.model_name] ? 'Clearing…' : 'Clear' }}</button>
@@ -95,30 +95,30 @@
             </div>
 
             <!-- Cost editor (collapsible) -->
-            <div v-if="openCostEditors.has(model.model_name)" class="px-6 pb-4 bg-gray-50 border-t border-gray-100">
+            <div v-if="openCostEditors.has(model.model_name)" class="px-6 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
               <!-- Tab switcher -->
-              <div class="flex gap-2 mt-3 mb-4 border-b border-gray-200">
+              <div class="flex gap-2 mt-3 mb-4 border-b border-gray-200 dark:border-gray-700">
                 <button
                   class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'key' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeCostTab(model.model_name) === 'key' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
                   @click="setCostTab(model.model_name, 'key')"
                 >Cost Map Key</button>
                 <button
                   class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'custom' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeCostTab(model.model_name) === 'custom' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
                   @click="setCostTab(model.model_name, 'custom')"
                 >Custom Costs</button>
               </div>
 
               <!-- Cost map key tab — autocomplete combobox -->
               <div v-if="activeCostTab(model.model_name) === 'key'" class="space-y-2">
-                <p class="text-xs text-gray-500">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
                   Select the LiteLLM cost map entry for this model. Type to filter.
                 </p>
                 <div class="flex gap-2">
                   <input
                     :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
-                    class="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 font-mono"
+                    class="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 font-mono"
                     placeholder="e.g. openai/gpt-4"
                     autocomplete="off"
                     @input="onCostKeyInput(model.model_name, $event.target.value, $event)"
@@ -135,7 +135,7 @@
                 <Teleport to="body">
                   <div
                     v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
-                    class="fixed z-50 bg-white border border-gray-200 rounded shadow-xl overflow-y-auto"
+                    class="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-xl overflow-y-auto"
                     :style="{
                       top: (dropdownPos[model.model_name]?.top ?? 0) + 'px',
                       left: (dropdownPos[model.model_name]?.left ?? 0) + 'px',
@@ -147,10 +147,10 @@
                       v-for="entry in filteredCostMapModels(model.model_name)"
                       :key="entry.name"
                       type="button"
-                      class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
+                      class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950 border-b border-gray-100 dark:border-gray-700 last:border-0"
                       @mousedown.prevent="selectCostMapKey(model.model_name, entry)"
                     >
-                      <div class="font-mono text-xs text-gray-900 truncate">{{ entry.name }}</div>
+                      <div class="font-mono text-xs text-gray-900 dark:text-gray-100 truncate">{{ entry.name }}</div>
                       <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
                         <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
                         <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
@@ -159,76 +159,76 @@
                     </button>
                   </div>
                 </Teleport>
-                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600">{{ saveErrors[model.model_name] }}</p>
+                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
               </div>
 
               <!-- Custom costs tab — inputs in $/MTok -->
               <div v-if="activeCostTab(model.model_name) === 'custom'" class="space-y-3">
-                <p class="text-xs text-gray-500">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
                   Define fully custom cost values, bypassing the cost map.
                   Cost fields are in <strong>$ per million tokens ($/MTok)</strong>.
                 </p>
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <label class="block">
-                    <span class="text-xs text-gray-600">Input cost ($/MTok)</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Input cost ($/MTok)</span>
                     <input
                       type="number" step="0.0001" min="0"
                       :value="getCustomMTok(model.model_name, 'input_cost_per_token', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomMTokField(model.model_name, 'input_cost_per_token', $event.target.value)"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Output cost ($/MTok)</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Output cost ($/MTok)</span>
                     <input
                       type="number" step="0.0001" min="0"
                       :value="getCustomMTok(model.model_name, 'output_cost_per_token', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomMTokField(model.model_name, 'output_cost_per_token', $event.target.value)"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Cache read ($/MTok)</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Cache read ($/MTok)</span>
                     <input
                       type="number" step="0.0001" min="0"
                       :value="getCustomMTok(model.model_name, 'cache_read_input_token_cost', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomMTokField(model.model_name, 'cache_read_input_token_cost', $event.target.value)"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Cache write ($/MTok)</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Cache write ($/MTok)</span>
                     <input
                       type="number" step="0.0001" min="0"
                       :value="getCustomMTok(model.model_name, 'cache_creation_input_token_cost', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomMTokField(model.model_name, 'cache_creation_input_token_cost', $event.target.value)"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Max tokens</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Max tokens</span>
                     <input
                       type="number" step="1" min="0"
                       :value="customCostInputs[model.model_name]?.max_tokens ?? model.costs?.max_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomField(model.model_name, 'max_tokens', parseInt($event.target.value))"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Max input tokens</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Max input tokens</span>
                     <input
                       type="number" step="1" min="0"
                       :value="customCostInputs[model.model_name]?.max_input_tokens ?? model.costs?.max_input_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomField(model.model_name, 'max_input_tokens', parseInt($event.target.value))"
                     />
                   </label>
                   <label class="block">
-                    <span class="text-xs text-gray-600">Max output tokens</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">Max output tokens</span>
                     <input
                       type="number" step="1" min="0"
                       :value="customCostInputs[model.model_name]?.max_output_tokens ?? model.costs?.max_output_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
                       @input="setCustomField(model.model_name, 'max_output_tokens', parseInt($event.target.value))"
                     />
                   </label>
@@ -240,7 +240,7 @@
                     @click="saveCustomCosts(model.model_name, model.costs)"
                   >{{ saving[model.model_name] ? 'Saving…' : 'Save custom costs' }}</button>
                 </div>
-                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600">{{ saveErrors[model.model_name] }}</p>
+                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
               </div>
             </div>
           </div>
@@ -249,7 +249,7 @@
           <ModelPlayground v-if="openPlaygrounds.has(model.model_name)" :model-name="model.model_name" />
         </div>
 
-        <div v-if="!data.models?.length" class="card px-6 py-12 text-center text-sm text-gray-500">
+        <div v-if="!data.models?.length" class="card px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
           No models configured. Add models to your config.yaml.
         </div>
       </div>

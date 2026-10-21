@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Dashboard</h1>
 
     <LoadingSpinner v-if="loading" />
 
@@ -14,26 +14,26 @@
       <!-- Summary cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="card p-5">
-          <p class="text-sm text-gray-500 font-medium">Proxy Status</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Proxy Status</p>
           <div class="mt-2 flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <span class="text-xl font-semibold text-gray-900 capitalize">{{ data.status }}</span>
+            <span class="text-xl font-semibold text-gray-900 dark:text-gray-100 capitalize">{{ data.status }}</span>
           </div>
         </div>
 
         <div class="card p-5">
-          <p class="text-sm text-gray-500 font-medium">Uptime</p>
-          <p class="mt-2 text-xl font-semibold text-gray-900">{{ uptime }}</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Uptime</p>
+          <p class="mt-2 text-xl font-semibold text-gray-900 dark:text-gray-100">{{ uptime }}</p>
         </div>
 
         <div class="card p-5">
-          <p class="text-sm text-gray-500 font-medium">Models</p>
-          <p class="mt-2 text-xl font-semibold text-gray-900">{{ data.models?.length ?? 0 }}</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Models</p>
+          <p class="mt-2 text-xl font-semibold text-gray-900 dark:text-gray-100">{{ data.models?.length ?? 0 }}</p>
         </div>
 
         <div class="card p-5">
-          <p class="text-sm text-gray-500 font-medium">In Cooldown</p>
-          <p class="mt-2 text-xl font-semibold" :class="cooldownCount > 0 ? 'text-red-600' : 'text-gray-900'">
+          <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">In Cooldown</p>
+          <p class="mt-2 text-xl font-semibold" :class="cooldownCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">
             {{ cooldownCount }}
           </p>
         </div>
@@ -41,18 +41,18 @@
 
       <!-- Models overview -->
       <div class="card">
-        <div class="px-6 py-4 border-b border-gray-100">
-          <h2 class="text-base font-semibold text-gray-900">Model Deployments</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Model Deployments</h2>
         </div>
-        <div class="divide-y divide-gray-50">
+        <div class="divide-y divide-gray-50 dark:divide-gray-700">
           <div
             v-for="model in data.models"
             :key="model.model_name"
             class="px-6 py-4 flex items-center justify-between"
           >
             <div>
-              <p class="text-sm font-medium text-gray-900">{{ model.model_name }}</p>
-              <p class="text-xs text-gray-500 mt-0.5">
+              <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ model.model_name }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {{ model.healthy_deployments }} / {{ model.total_deployments }} deployments healthy
               </p>
             </div>
@@ -60,7 +60,7 @@
               :status="model.healthy_deployments > 0 ? 'healthy' : 'cooldown'"
             />
           </div>
-          <div v-if="!data.models?.length" class="px-6 py-8 text-center text-sm text-gray-500">
+          <div v-if="!data.models?.length" class="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
             No models configured.
           </div>
         </div>
@@ -68,13 +68,13 @@
 
       <!-- Router settings -->
       <div class="card mt-4">
-        <div class="px-6 py-4 border-b border-gray-100">
-          <h2 class="text-base font-semibold text-gray-900">Router Settings</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Router Settings</h2>
         </div>
-        <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100">
-          <div v-for="item in routerInfo" :key="item.label" class="bg-white px-6 py-4">
-            <dt class="text-xs text-gray-500">{{ item.label }}</dt>
-            <dd class="mt-1 text-sm font-medium text-gray-900">{{ item.value }}</dd>
+        <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100 dark:bg-gray-700">
+          <div v-for="item in routerInfo" :key="item.label" class="bg-white dark:bg-gray-800 px-6 py-4">
+            <dt class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</dt>
+            <dd class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.value }}</dd>
           </div>
         </dl>
       </div>

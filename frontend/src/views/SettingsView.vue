@@ -1,11 +1,11 @@
 <template>
   <div class="max-w-lg mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Settings</h1>
 
     <!-- API Key card -->
     <div class="card p-6 mb-4">
-      <h2 class="text-base font-semibold text-gray-900 mb-1">API Key</h2>
-      <p class="text-sm text-gray-500 mb-4">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">API Key</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
         Enter your proxy master key. It is stored in browser localStorage and used to
         authenticate all admin requests.
       </p>
@@ -44,13 +44,13 @@
         </div>
       </form>
 
-      <div v-if="saved" class="mt-3 text-sm text-green-700 font-medium">Key saved.</div>
+      <div v-if="saved" class="mt-3 text-sm text-green-700 dark:text-green-300 font-medium">Key saved.</div>
     </div>
 
     <!-- Connection test -->
     <div class="card p-6">
-      <h2 class="text-base font-semibold text-gray-900 mb-1">Connection Test</h2>
-      <p class="text-sm text-gray-500 mb-4">Verify the proxy is reachable and your key is valid.</p>
+      <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Connection Test</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Verify the proxy is reachable and your key is valid.</p>
 
       <button class="btn-primary" :disabled="testing" @click="testConnection">
         {{ testing ? 'Testing…' : 'Test Connection' }}
@@ -59,11 +59,11 @@
       <div v-if="testResult" class="mt-3">
         <div
           v-if="testResult.ok"
-          class="text-sm text-green-700 font-medium"
+          class="text-sm text-green-700 dark:text-green-300 font-medium"
         >
           Connected. Uptime: {{ testResult.uptime }}s, {{ testResult.models }} model(s) configured.
         </div>
-        <div v-else class="text-sm text-red-700 font-medium">
+        <div v-else class="text-sm text-red-700 dark:text-red-300 font-medium">
           {{ testResult.error }}
         </div>
       </div>

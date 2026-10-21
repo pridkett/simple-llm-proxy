@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-2xl font-semibold text-gray-900 mb-6">Cost</h1>
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Cost</h1>
 
     <LoadingSpinner v-if="loading" />
     <ErrorAlert v-else-if="error" title="Failed to load cost data" :message="error" />
@@ -9,19 +9,19 @@
       <!-- 1. Alerts Panel — hidden entirely when no alerts -->
       <div v-if="spendData?.alerts?.length > 0" class="mb-6">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-base font-semibold text-gray-700">Budget Alerts</h2>
-          <span class="text-sm text-gray-500">{{ spendData.alerts.length }} key(s) require attention.</span>
+          <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">Budget Alerts</h2>
+          <span class="text-sm text-gray-500 dark:text-gray-400">{{ spendData.alerts.length }} key(s) require attention.</span>
         </div>
         <div class="space-y-2">
           <div
             v-for="alert in spendData.alerts"
             :key="alert.key_id"
             :class="alert.alert_type === 'hard'
-              ? 'bg-red-50 border border-red-200'
-              : 'bg-amber-50 border border-amber-200'"
+              ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800'
+              : 'bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800'"
             class="rounded-md p-3 text-sm flex items-center justify-between"
           >
-            <div :class="alert.alert_type === 'hard' ? 'text-red-800' : 'text-amber-800'">
+            <div :class="alert.alert_type === 'hard' ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'">
               <span class="font-medium">{{ alert.key_name }}</span>
               <span class="ml-1 text-xs">({{ alert.app_name }})</span>
               <span class="ml-2">{{ formatSpend(alert.total_spend) }} spent</span>
@@ -43,7 +43,7 @@
               :key="range"
               @click="dateRange = range"
               :class="dateRange === range
-                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
                 : 'btn-secondary'"
               class="rounded-md px-3 py-1.5 text-sm"
             >
@@ -52,9 +52,9 @@
           </div>
           <!-- Custom date inputs -->
           <template v-if="dateRange === 'custom'">
-            <label class="text-xs text-gray-500">From</label>
+            <label class="text-xs text-gray-500 dark:text-gray-400">From</label>
             <input type="date" v-model="customFrom" @change="onCustomDateChange" class="input max-w-[140px]" />
-            <label class="text-xs text-gray-500">To</label>
+            <label class="text-xs text-gray-500 dark:text-gray-400">To</label>
             <input type="date" v-model="customTo" @change="onCustomDateChange" class="input max-w-[140px]" />
           </template>
           <!-- Team dropdown — always enabled; options from allRowsData -->
@@ -96,14 +96,14 @@
       <!-- 3. Chart — toggleable: Total (bar) / Over Time (area) -->
       <div class="card p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Spend Overview</h2>
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Spend Overview</h2>
           <div class="flex gap-1">
             <button
               v-for="mode in ['total', 'over-time']"
               :key="mode"
               @click="chartMode = mode"
               :class="chartMode === mode
-                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
                 : 'btn-secondary'"
               class="rounded-md px-3 py-1.5 text-sm"
             >
@@ -113,6 +113,7 @@
         </div>
         <apexchart
           v-if="chartMode === 'total'"
+          :key="`total-${chartTheme.mode}`"
           type="bar"
           height="280"
           :options="chartOptions"
@@ -120,6 +121,7 @@
         />
         <apexchart
           v-else
+          :key="`over-time-${chartTheme.mode}`"
           type="area"
           height="280"
           :options="overTimeChartOptions"
@@ -129,15 +131,15 @@
 
       <!-- 4. Breakdown Table — toggleable: By Key / By Model -->
       <div class="card">
-        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 class="text-base font-semibold text-gray-900">Spend Breakdown</h2>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Spend Breakdown</h2>
           <div class="flex gap-1">
             <button
               v-for="mode in ['by-key', 'by-model']"
               :key="mode"
               @click="breakdownMode = mode"
               :class="breakdownMode === mode
-                ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
                 : 'btn-secondary'"
               class="rounded-md px-3 py-1.5 text-sm"
             >
@@ -150,18 +152,18 @@
           <!-- By Key table (default) -->
           <table v-if="breakdownMode === 'by-key'" class="w-full text-sm">
             <thead>
-              <tr class="border-b border-gray-100">
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. Spend</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">% Budget</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <tr class="border-b border-gray-100 dark:border-gray-700">
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Est. Spend</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Budget</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">% Budget</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!spendData?.rows?.length">
-                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">
-                  <div class="font-medium text-gray-700 mb-1">No spend data</div>
+                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">No spend data</div>
                   <div v-if="hasNonDefaultFilter">No spend data matches the selected filters. Try clearing the team or application filter.</div>
                   <div v-else>No requests were recorded in this date range. Try expanding the date range or checking that requests are being proxied.</div>
                 </td>
@@ -169,15 +171,15 @@
               <tr
                 v-for="row in spendData?.rows ?? []"
                 :key="row.key_id"
-                class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                class="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               >
-                <td class="px-6 py-3 text-sm font-medium text-gray-900">
+                <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                   {{ row.key_name }}
                   <span class="ml-1 text-xs text-gray-400">{{ row.app_name }}</span>
                 </td>
-                <td class="px-6 py-3 text-sm text-gray-900">{{ formatSpend(row.total_spend) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500">{{ formatBudget(row) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500">{{ formatPctBudget(row) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">{{ formatSpend(row.total_spend) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">{{ formatBudget(row) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">{{ formatPctBudget(row) }}</td>
                 <td class="px-6 py-3"><StatusBadge :status="rowStatus(row)" /></td>
               </tr>
             </tbody>
@@ -186,20 +188,20 @@
           <!-- By Model table: per-model token and cost breakdown (ADR 012) -->
           <table v-else class="w-full text-sm">
             <thead>
-              <tr class="border-b border-gray-100">
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Model</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Requests</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Input Tokens</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Output Tokens</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Cache Read</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Cache Write</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. Spend</th>
+              <tr class="border-b border-gray-100 dark:border-gray-700">
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Model</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Requests</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Input Tokens</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Output Tokens</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Read</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Write</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Est. Spend</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!spendData?.model_rows?.length">
-                <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500">
-                  <div class="font-medium text-gray-700 mb-1">No model data</div>
+                <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">No model data</div>
                   <div v-if="hasNonDefaultFilter">No model data matches the selected filters.</div>
                   <div v-else>No requests were recorded in this date range.</div>
                 </td>
@@ -208,31 +210,31 @@
                 v-for="row in spendData?.model_rows ?? []"
                 :key="row.model"
                 data-testid="model-row"
-                class="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                class="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               >
-                <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ row.model }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.request_count) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.input_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.output_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.cache_read_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">{{ formatCount(row.cache_write_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatSpend(row.total_spend) }}</td>
+                <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.request_count) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.input_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.output_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.cache_read_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.cache_write_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatSpend(row.total_spend) }}</td>
               </tr>
             </tbody>
             <tfoot v-if="spendData?.model_rows?.length">
-              <tr data-testid="model-totals" class="border-t border-gray-200 bg-gray-50 font-semibold">
-                <td class="px-6 py-3 text-sm text-gray-900">Total</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.request_count) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.input_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.output_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.cache_read_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatCount(modelTotals.cache_write_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">{{ formatSpend(modelTotals.total_spend) }}</td>
+              <tr data-testid="model-totals" class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 font-semibold">
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">Total</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.request_count) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.input_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.output_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.cache_read_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.cache_write_tokens) }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatSpend(modelTotals.total_spend) }}</td>
               </tr>
             </tfoot>
           </table>
         </div>
-        <p data-testid="estimate-note" class="px-6 py-3 text-xs text-gray-500 border-t border-gray-100">
+        <p data-testid="estimate-note" class="px-6 py-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700">
           Costs are estimates calculated from the proxy's model price map when each request completed,
           including prompt-cache read/write pricing where the provider reports it. They may differ from
           provider invoices.
@@ -249,6 +251,15 @@ import { api } from '../api/client.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import { useColorScheme } from '../composables/useColorScheme.js'
+
+const { isDark } = useColorScheme()
+const chartTheme = computed(() => ({
+  mode: isDark.value ? 'dark' : 'light',
+  text: isDark.value ? '#D1D5DB' : '#6B7280',
+  border: isDark.value ? '#374151' : '#E5E7EB',
+  series: isDark.value ? '#818CF8' : '#4F46E5',
+}))
 
 // State — current filtered response
 const loading = ref(false)
@@ -385,13 +396,14 @@ const chartValues = computed(() => {
 const chartSeries = computed(() => [{ name: 'Spend', data: chartValues.value }])
 
 const chartOptions = computed(() => ({
-  chart: { type: 'bar', toolbar: { show: false } },
-  colors: ['#4F46E5'],
+  chart: { type: 'bar', toolbar: { show: false }, background: 'transparent', foreColor: chartTheme.value.text },
+  theme: { mode: chartTheme.value.mode },
+  colors: [chartTheme.value.series],
   plotOptions: { bar: { borderRadius: 4, horizontal: false } },
-  xaxis: { categories: chartLabels.value, labels: { style: { colors: '#6B7280' } } },
-  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
-  grid: { borderColor: '#E5E7EB' },
-  tooltip: { y: { formatter: (v) => formatSpend(v) } },
+  xaxis: { categories: chartLabels.value, labels: { style: { colors: chartTheme.value.text } } },
+  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: chartTheme.value.text } } },
+  grid: { borderColor: chartTheme.value.border },
+  tooltip: { theme: chartTheme.value.mode, y: { formatter: (v) => formatSpend(v) } },
   dataLabels: { enabled: false },
   noData: { text: 'No spend data for this period.' },
 }))
@@ -403,17 +415,18 @@ const overTimeChartSeries = computed(() => [{
 }])
 
 const overTimeChartOptions = computed(() => ({
-  chart: { type: 'area', toolbar: { show: false } },
-  colors: ['#4F46E5'],
+  chart: { type: 'area', toolbar: { show: false }, background: 'transparent', foreColor: chartTheme.value.text },
+  theme: { mode: chartTheme.value.mode },
+  colors: [chartTheme.value.series],
   stroke: { curve: 'smooth', width: 2 },
   fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05 } },
   xaxis: {
     categories: (spendData.value?.daily_rows ?? []).map(r => r.day),
-    labels: { style: { colors: '#6B7280' }, rotate: -30 },
+    labels: { style: { colors: chartTheme.value.text }, rotate: -30 },
   },
-  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: '#6B7280' } } },
-  grid: { borderColor: '#E5E7EB' },
-  tooltip: { y: { formatter: (v) => formatSpend(v) } },
+  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: chartTheme.value.text } } },
+  grid: { borderColor: chartTheme.value.border },
+  tooltip: { theme: chartTheme.value.mode, y: { formatter: (v) => formatSpend(v) } },
   dataLabels: { enabled: false },
   noData: { text: 'No spend data for this period.' },
 }))

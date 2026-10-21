@@ -1,11 +1,11 @@
 <template>
-  <div class="border-t border-gray-100 bg-gray-50/50">
+  <div class="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
     <div class="px-6 py-5 space-y-4">
-      <h3 class="text-sm font-semibold text-gray-700">Test request</h3>
+      <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Test request</h3>
 
       <!-- System message (collapsed by default) -->
       <details class="group">
-        <summary class="text-xs text-gray-500 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-700">
+        <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
           <svg
             class="w-3 h-3 transition-transform group-open:rotate-90"
             fill="currentColor" viewBox="0 0 20 20"
@@ -39,7 +39,7 @@
 
       <!-- Controls -->
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <label class="flex items-center gap-2 text-xs text-gray-600">
+        <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
           <span>Temp {{ temperature.toFixed(1) }}</span>
           <input
             type="range" v-model.number="temperature"
@@ -49,7 +49,7 @@
           />
         </label>
 
-        <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+        <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
           <input type="checkbox" v-model="stream" class="accent-indigo-600" :disabled="sending" />
           Stream
         </label>
@@ -77,14 +77,14 @@
 
       <!-- Response -->
       <div v-if="responseText || (sending && stream)" class="space-y-2">
-        <div class="relative bg-white rounded-md border border-gray-200 p-4">
+        <div class="relative bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
           <pre
-            class="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed min-h-[2rem]"
+            class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-sans leading-relaxed min-h-[2rem]"
           >{{ responseText }}<span v-if="sending && stream" class="inline-block w-2 h-4 bg-indigo-500 animate-pulse ml-0.5 align-text-bottom" /></pre>
 
           <button
             v-if="responseText && !sending"
-            class="absolute top-2 right-2 text-xs text-gray-400 hover:text-gray-600"
+            class="absolute top-2 right-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Copy response"
             @click="copy"
           >
@@ -93,7 +93,7 @@
         </div>
 
         <!-- Stats -->
-        <div v-if="stats" class="flex gap-4 text-xs text-gray-500">
+        <div v-if="stats" class="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
           <span v-if="stats.promptTokens">In: {{ stats.promptTokens }} tok</span>
           <span v-if="stats.completionTokens">Out: {{ stats.completionTokens }} tok</span>
           <span v-if="stats.totalTokens">Total: {{ stats.totalTokens }} tok</span>
