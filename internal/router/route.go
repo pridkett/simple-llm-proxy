@@ -146,7 +146,7 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 					return result
 				}
 
-				resp, stream, err := r.invoke(stickyDep, pool.Name, cb, opts...)
+				resp, stream, err := r.invoke(stickyDep, cb, opts...)
 				if err == nil {
 					result.Response = resp
 					result.Stream = stream
@@ -193,7 +193,7 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 			return result
 		}
 
-		resp, stream, err := r.invoke(deployment, pool.Name, cb, opts...)
+		resp, stream, err := r.invoke(deployment, cb, opts...)
 		if err == nil {
 			result.Response = resp
 			result.Stream = stream
@@ -279,7 +279,7 @@ func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCall
 			return result
 		}
 
-		resp, stream, err := r.invoke(d, "", cb, opts...)
+		resp, stream, err := r.invoke(d, cb, opts...)
 		if err == nil {
 			result.Response = resp
 			result.Stream = stream

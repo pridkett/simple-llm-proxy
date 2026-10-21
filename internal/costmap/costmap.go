@@ -16,19 +16,18 @@ const DefaultURL = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads
 
 // ModelSpec holds the cost and context window data for a single model.
 type ModelSpec struct {
-	KnownRates                      map[string]bool `json:"known_rates,omitempty"`
-	MaxTokens                       int             `json:"max_tokens"`
-	MaxInputTokens                  int             `json:"max_input_tokens"`
-	MaxOutputTokens                 int             `json:"max_output_tokens"`
-	InputCostPerToken               float64         `json:"input_cost_per_token"`
-	OutputCostPerToken              float64         `json:"output_cost_per_token"`
-	CacheReadInputTokenCost         float64         `json:"cache_read_input_token_cost"`
-	CacheCreationInputTokenCost     float64         `json:"cache_creation_input_token_cost"`
-	LiteLLMProvider                 string          `json:"litellm_provider"`
-	Mode                            string          `json:"mode"`
-	SupportsFunctionCalling         bool            `json:"supports_function_calling"`
-	SupportsParallelFunctionCalling bool            `json:"supports_parallel_function_calling"`
-	SupportsVision                  bool            `json:"supports_vision"`
+	MaxTokens                    int     `json:"max_tokens"`
+	MaxInputTokens               int     `json:"max_input_tokens"`
+	MaxOutputTokens              int     `json:"max_output_tokens"`
+	InputCostPerToken            float64 `json:"input_cost_per_token"`
+	OutputCostPerToken           float64 `json:"output_cost_per_token"`
+	CacheReadInputTokenCost      float64 `json:"cache_read_input_token_cost"`
+	CacheCreationInputTokenCost  float64 `json:"cache_creation_input_token_cost"`
+	LiteLLMProvider              string  `json:"litellm_provider"`
+	Mode                         string  `json:"mode"`
+	SupportsFunctionCalling      bool    `json:"supports_function_calling"`
+	SupportsParallelFunctionCalling bool `json:"supports_parallel_function_calling"`
+	SupportsVision               bool    `json:"supports_vision"`
 }
 
 // Status is a snapshot of the Manager's current state, safe to return to callers.
@@ -167,19 +166,18 @@ func (m *Manager) Status() Status {
 // Unknown or non-numeric values are silently ignored (zero value used).
 func parseModelSpec(entry map[string]interface{}) ModelSpec {
 	return ModelSpec{
-		KnownRates:                      knownRates(entry),
-		MaxTokens:                       asInt(entry["max_tokens"]),
-		MaxInputTokens:                  asInt(entry["max_input_tokens"]),
-		MaxOutputTokens:                 asInt(entry["max_output_tokens"]),
-		InputCostPerToken:               asFloat(entry["input_cost_per_token"]),
-		OutputCostPerToken:              asFloat(entry["output_cost_per_token"]),
-		CacheReadInputTokenCost:         asFloat(entry["cache_read_input_token_cost"]),
-		CacheCreationInputTokenCost:     asFloat(entry["cache_creation_input_token_cost"]),
-		LiteLLMProvider:                 asString(entry["litellm_provider"]),
-		Mode:                            asString(entry["mode"]),
-		SupportsFunctionCalling:         asBool(entry["supports_function_calling"]),
+		MaxTokens:                    asInt(entry["max_tokens"]),
+		MaxInputTokens:               asInt(entry["max_input_tokens"]),
+		MaxOutputTokens:              asInt(entry["max_output_tokens"]),
+		InputCostPerToken:            asFloat(entry["input_cost_per_token"]),
+		OutputCostPerToken:           asFloat(entry["output_cost_per_token"]),
+		CacheReadInputTokenCost:      asFloat(entry["cache_read_input_token_cost"]),
+		CacheCreationInputTokenCost:  asFloat(entry["cache_creation_input_token_cost"]),
+		LiteLLMProvider:              asString(entry["litellm_provider"]),
+		Mode:                         asString(entry["mode"]),
+		SupportsFunctionCalling:      asBool(entry["supports_function_calling"]),
 		SupportsParallelFunctionCalling: asBool(entry["supports_parallel_function_calling"]),
-		SupportsVision:                  asBool(entry["supports_vision"]),
+		SupportsVision:               asBool(entry["supports_vision"]),
 	}
 }
 
@@ -322,33 +320,4 @@ func (m *Manager) GetEffectiveSpec(proxyModel string, candidateActualModels []st
 	}
 
 	return EffectiveSpecResult{}
-}
-
-var rateFields = []string{"input_cost_per_token", "output_cost_per_token", "cache_read_input_token_cost", "cache_creation_input_token_cost"}
-
-func knownRates(entry map[string]interface{}) map[string]bool {
-	result := make(map[string]bool, len(rateFields))
-	for _, key := range rateFields {
-		_, ok := entry[key].(float64)
-		result[key] = ok
-	}
-	return result
-}
-
-// UnmarshalJSON retains omitted rates so an unknown price is not interpreted as free.
-func (s *ModelSpec) UnmarshalJSON(data []byte) error {
-	type wire ModelSpec
-	var value wire
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	*s = ModelSpec(value)
-	if s.KnownRates == nil {
-		var entry map[string]interface{}
-		if err := json.Unmarshal(data, &entry); err != nil {
-			return err
-		}
-		s.KnownRates = knownRates(entry)
-	}
-	return nil
 }

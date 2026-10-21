@@ -253,7 +253,7 @@ type Storage interface {
 // ID is the OIDC subject identifier (sub claim) — NOT an internal UUID.
 // Using the sub claim directly avoids fragile account reconciliation.
 type User struct {
-	ID        string    `json:"id"` // OIDC sub claim — the stable identity from PocketID
+	ID        string    `json:"id"`       // OIDC sub claim — the stable identity from PocketID
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	IsAdmin   bool      `json:"is_admin"`
@@ -270,9 +270,9 @@ type Team struct {
 
 // TeamMember represents a user's membership in a team with a role.
 type TeamMember struct {
-	TeamID int64  `json:"team_id"`
-	UserID string `json:"user_id"` // OIDC sub of the user
-	Role   string `json:"role"`    // "admin", "member", or "viewer"
+	TeamID    int64  `json:"team_id"`
+	UserID    string `json:"user_id"` // OIDC sub of the user
+	Role      string `json:"role"`    // "admin", "member", or "viewer"
 	// Joined fields for convenience:
 	UserEmail string `json:"user_email"`
 	UserName  string `json:"user_name"`
@@ -290,18 +290,18 @@ type Application struct {
 // APIKey represents a per-application API key with enforcement limits.
 // Full plaintext key is NEVER stored — only the prefix (first 8 hex chars) and SHA-256 hash.
 type APIKey struct {
-	ID            int64     `json:"id"`
-	ApplicationID int64     `json:"application_id"`
-	AppName       string    `json:"-"` // populated on key-cache lookup
-	TeamName      string    `json:"-"` // populated on key-cache lookup
-	Name          string    `json:"name"`
-	KeyPrefix     string    `json:"key_prefix"`  // first 8 chars after "sk-app-"
-	KeyHash       string    `json:"-"`           // SHA-256 hex — never serialized to JSON
-	MaxRPM        *int      `json:"max_rpm"`     // nil = unlimited
-	MaxRPD        *int      `json:"max_rpd"`     // nil = unlimited
-	MaxBudget     *float64  `json:"max_budget"`  // nil = unlimited (hard cap)
-	SoftBudget    *float64  `json:"soft_budget"` // nil = no alert threshold
-	IsActive      bool      `json:"is_active"`
+	ID            int64    `json:"id"`
+	ApplicationID int64    `json:"application_id"`
+	AppName       string   `json:"-"` // populated on key-cache lookup
+	TeamName      string   `json:"-"` // populated on key-cache lookup
+	Name          string   `json:"name"`
+	KeyPrefix     string   `json:"key_prefix"` // first 8 chars after "sk-app-"
+	KeyHash       string   `json:"-"`          // SHA-256 hex — never serialized to JSON
+	MaxRPM        *int     `json:"max_rpm"`    // nil = unlimited
+	MaxRPD        *int     `json:"max_rpd"`    // nil = unlimited
+	MaxBudget     *float64 `json:"max_budget"` // nil = unlimited (hard cap)
+	SoftBudget    *float64 `json:"soft_budget"` // nil = no alert threshold
+	IsActive      bool     `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -327,18 +327,13 @@ type APIKeyAllowedModel struct {
 // Exactly one of CostMapKey or CustomSpec will be non-nil.
 type CostOverride struct {
 	ModelName  string
-	CostMapKey *string // if set: use this key for LiteLLM cost map lookup
-	CustomSpec *string // if set: JSON-encoded ModelSpec for fully custom costs
+	CostMapKey *string   // if set: use this key for LiteLLM cost map lookup
+	CustomSpec *string   // if set: JSON-encoded ModelSpec for fully custom costs
 	UpdatedAt  time.Time
 }
 
 // RequestLog represents a logged request.
 type RequestLog struct {
-	AccountingID string `json:"accounting_id,omitempty"`
-	CostSource   string `json:"cost_source,omitempty"`
-	CostKnown    *bool  `json:"cost_known"`
-	CostCoverage string `json:"cost_coverage,omitempty"`
-
 	UsageKnown    bool // false when the upstream omitted usage; zero tokens are then unknown
 	RequestID     string
 	SessionID     string // client-supplied log grouping ID; empty = ungrouped
@@ -417,8 +412,8 @@ type SpendFilters struct {
 }
 
 // ModelSpendRow is one row from GetModelSpend: spend and token totals per model name.
-// New accounting rows normalize input tokens to include cached input. Historical
-// rows retain their original provider semantics (ADR 012); no backfill is performed.
+// Token semantics follow the provider: Anthropic input_tokens exclude cached tokens and
+// the cache columns are populated; other providers report zero cache tokens (ADR 012 D-02).
 type ModelSpendRow struct {
 	Model            string  `json:"model"`
 	TotalSpend       float64 `json:"total_spend"`
@@ -431,7 +426,7 @@ type ModelSpendRow struct {
 
 // DailySpendRow is one row from GetDailySpend: daily spend totals for time-series charts.
 type DailySpendRow struct {
-	Day          string  `json:"day"` // YYYY-MM-DD
+	Day          string  `json:"day"`           // YYYY-MM-DD
 	TotalSpend   float64 `json:"total_spend"`
 	RequestCount int64   `json:"request_count"`
 }
@@ -471,8 +466,8 @@ type PoolBudgetRow struct {
 type WebhookSubscription struct {
 	ID        int64     `json:"id"`
 	URL       string    `json:"url"`
-	Events    []string  `json:"events"` // JSON-decoded from TEXT column
-	Secret    string    `json:"-"`      // never serialize to API response
+	Events    []string  `json:"events"`    // JSON-decoded from TEXT column
+	Secret    string    `json:"-"`          // never serialize to API response
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -482,7 +477,6 @@ type WebhookSubscription struct {
 // as the primary key. RequestJSON/ResponseJSON/ErrorJSON are raw JSON blobs —
 // the proxy stores/forwards the upstream shape rather than fully modeling it.
 type ResponsesJob struct {
-	AccountingID  string
 	SessionID     string // log attribution retained across background polling
 	ID            string
 	APIKeyID      *int64 // nil when authenticated via master key

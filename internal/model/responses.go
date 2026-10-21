@@ -4,26 +4,25 @@ package model
 // Input accepts either a plain string or a structured array of input items
 // (OpenAI's union type) — the proxy passes it through largely unmodified.
 type ResponsesRequest struct {
-	Model              string            `json:"model"`
-	Input              any               `json:"input"`
-	Instructions       string            `json:"instructions,omitempty"`
-	PreviousResponseID *string           `json:"previous_response_id,omitempty"`
-	Background         bool              `json:"background,omitempty"`
-	Stream             bool              `json:"stream,omitempty"`
-	Temperature        *float64          `json:"temperature,omitempty"`
-	TopP               *float64          `json:"top_p,omitempty"`
-	MaxOutputTokens    *int              `json:"max_output_tokens,omitempty"`
-	Tools              []Tool            `json:"tools,omitempty"`
-	ToolChoice         any               `json:"tool_choice,omitempty"`
-	ParallelToolCalls  *bool             `json:"parallel_tool_calls,omitempty"`
+	Model              string   `json:"model"`
+	Input              any      `json:"input"`
+	Instructions       string   `json:"instructions,omitempty"`
+	PreviousResponseID *string  `json:"previous_response_id,omitempty"`
+	Background         bool     `json:"background,omitempty"`
+	Stream             bool     `json:"stream,omitempty"`
+	Temperature        *float64 `json:"temperature,omitempty"`
+	TopP               *float64 `json:"top_p,omitempty"`
+	MaxOutputTokens    *int     `json:"max_output_tokens,omitempty"`
+	Tools              []Tool   `json:"tools,omitempty"`
+	ToolChoice         any      `json:"tool_choice,omitempty"`
+	ParallelToolCalls  *bool    `json:"parallel_tool_calls,omitempty"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
-	User               string            `json:"user,omitempty"`
+	User               string   `json:"user,omitempty"`
 }
 
 // ResponsesResponse represents an OpenAI Responses API response, returned both
 // from a synchronous create call and from GET /v1/responses/{id}.
 type ResponsesResponse struct {
-	ProxyAccounting    any                  `json:"proxy_accounting,omitempty"`
 	ID                 string               `json:"id"`
 	Object             string               `json:"object"`
 	Model              string               `json:"model,omitempty"`
@@ -54,10 +53,10 @@ func (r *ResponsesResponse) IsTerminal() bool {
 // the shape (e.g. "message", "reasoning", "function_call"); the proxy stores and
 // forwards the raw item rather than fully modeling every OpenAI item variant.
 type ResponseOutputItem struct {
-	ID      string                `json:"id,omitempty"`
-	Type    string                `json:"type"`
-	Role    string                `json:"role,omitempty"`
-	Status  string                `json:"status,omitempty"`
+	ID      string          `json:"id,omitempty"`
+	Type    string          `json:"type"`
+	Role    string          `json:"role,omitempty"`
+	Status  string          `json:"status,omitempty"`
 	Content []ResponseContentPart `json:"content,omitempty"`
 
 	// Function/tool call fields (Type == "function_call").

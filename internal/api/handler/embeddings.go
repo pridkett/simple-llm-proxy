@@ -80,18 +80,14 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
-		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, embReq.Model, "/v1/embeddings", sessionID, apiKeyID, false)
-		defer acc.close()
 		ctx, operation := beginOperation(ctx, tracer, "embeddings", embReq.Model, false)
 		defer operation.end()
-		acc.ctx = ctx
 
 		// Route() owns all retry/failover logic. Use a closure variable to
 		// capture the embeddings response since RouteCallback returns
 		// ChatCompletionResponse (not EmbeddingsResponse).
 		var embResp *model.EmbeddingsResponse
 		result := r.Route(ctx, embReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
-			ctx := acc.attemptCtx
 			if !d.Provider.SupportsEmbeddings() {
 				err := fmt.Errorf("provider does not support embeddings")
 				operation.failedAttempt(d, err)
@@ -106,17 +102,14 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 			}
 			embResp = resp
 			return &model.ChatCompletionResponse{Usage: resp.Usage}, nil, nil // internal usage for capacity reconciliation
-		}, acc.options(embReq.EstimatedTokens()))
+		}, router.RouteOptions{EstimatedTokens: embReq.EstimatedTokens()})
 
 		// Emit routing events to webhook dispatcher.
 		requestID := middleware.RequestIDFromContext(ctx)
 		emitRoutingEvents(dispatcher, r, result, embReq.Model, requestID)
 
 		if result.Error != nil {
-			acc.err = result.Error
-			acc.streaming = false
-			acc.complete()
-			operation.finish(result, nil, acc.cost(nil), acc.hasCost())
+			operation.finish(result, nil, 0)
 			operation.fail(result.Error)
 			// Check for budget exhaustion specifically (BUDGET-04).
 			for _, reason := range result.FailoverReasons {
@@ -135,13 +128,12 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		if embResp != nil {
 			usage = embResp.Usage
 		}
-		cost := callAccountingFromContext(ctx).cost(usage)
-		operation.finish(result, usage, acc.cost(usage), acc.hasCost())
+		cost := computeCost(cm, result.DeploymentUsed, usage)
+		operation.finish(result, usage, cost)
 
 		// Log the request if storage is available
 		if store != nil && embResp != nil {
-			logRequest(logRequestParams{
-				Accounting:      callAccountingFromContext(ctx),
+			go logRequest(logRequestParams{
 				Store:           store,
 				SpendAcc:        sa,
 				CostMap:         cm,
@@ -164,7 +156,6 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 			})
 		}
 
-		embResp.ProxyAccounting = acc.inlineRecord()
 		router.SetRouteHeaders(w, result)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(embResp)

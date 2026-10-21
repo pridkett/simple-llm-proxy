@@ -70,7 +70,6 @@ type Stream interface {
 
 // Deployment represents a specific model deployment.
 type Deployment struct {
-	CostPolicy   string   // prefer_upstream (default), estimate_only, require_upstream
 	ModelName    string   // User-facing model name
 	Provider     Provider // The provider instance
 	ProviderName string   // Provider name (e.g., "openai")

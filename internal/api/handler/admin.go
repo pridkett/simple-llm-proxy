@@ -134,11 +134,6 @@ func AdminReload(reloader *config.Reloader, r *router.Router) http.HandlerFunc {
 }
 
 type logEntry struct {
-	AccountingID string `json:"accounting_id,omitempty"`
-	CostSource   string `json:"cost_source,omitempty"`
-	CostKnown    *bool  `json:"cost_known"`
-	CostCoverage string `json:"cost_coverage,omitempty"`
-
 	RequestID     string    `json:"request_id"`
 	SessionID     string    `json:"session_id"`
 	Model         string    `json:"model"`
@@ -233,8 +228,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 		entries := make([]logEntry, 0, len(logs))
 		for _, l := range logs {
 			entries = append(entries, logEntry{
-				RequestID:    l.RequestID,
-				AccountingID: l.AccountingID, CostSource: l.CostSource, CostKnown: l.CostKnown, CostCoverage: l.CostCoverage,
+				RequestID:     l.RequestID,
 				SessionID:     l.SessionID,
 				Model:         l.Model,
 				Provider:      l.Provider,

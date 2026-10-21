@@ -241,7 +241,6 @@ func (x ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 }
 
 func (x *Usage) UnmarshalJSON(data []byte) error {
-	x.originalUsage = append(x.originalUsage[:0], data...)
 	type wire Usage
 	fields, err := readObject(data, (*wire)(x))
 	if err != nil {
@@ -295,12 +294,3 @@ func (x *Tool) UnmarshalJSON(data []byte) error {
 	return err
 }
 func (x Tool) MarshalJSON() ([]byte, error) { type wire Tool; return writeObject(wire(x), x.rawFields) }
-
-// AccountingJSON preserves field presence: omitted counts are different from reported zeros.
-func (x Usage) AccountingJSON() json.RawMessage {
-	if x.originalUsage != nil {
-		return x.originalUsage
-	}
-	data, _ := json.Marshal(x)
-	return data
-}

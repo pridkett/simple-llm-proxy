@@ -86,8 +86,7 @@ func discoverModelsWithClient(ctx context.Context, client httpClient, apiKey, ap
 		}
 
 		mc := config.ModelConfig{
-			ModelName:  m.ID,
-			CostPolicy: template.CostPolicy,
+			ModelName: m.ID,
 			LiteLLMParams: config.LiteLLMParams{
 				Model:        "openrouter/" + m.ID,
 				APIKey:       template.LiteLLMParams.APIKey,

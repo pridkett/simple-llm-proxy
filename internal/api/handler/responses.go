@@ -18,7 +18,6 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
-	backgroundresponses "github.com/pwagstro/simple_llm_proxy/internal/responses"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
@@ -86,16 +85,12 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
-		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, respReq.Model, "/v1/responses", sessionID, apiKeyID, respReq.Stream)
-		defer acc.close()
 		ctx, operation := beginOperation(ctx, tracer, "generate_content", respReq.Model, respReq.Stream)
 		defer operation.end()
-		acc.ctx = ctx
 
 		var respResult *model.ResponsesResponse
 		var respStream provider.ResponsesStream
 		result := r.Route(ctx, respReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
-			ctx := acc.attemptCtx
 			rp, ok := d.Provider.(provider.ResponsesProvider)
 			if !ok {
 				operation.failedAttempt(d, errNotResponsesProvider)
@@ -120,17 +115,14 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 				return nil, nil, err
 			}
 			respResult = resp
-			return &model.ChatCompletionResponse{Usage: resp.Usage}, nil, nil
-		}, acc.options(1))
+			return nil, nil, nil
+		})
 
 		requestID := middleware.RequestIDFromContext(ctx)
 		emitRoutingEvents(dispatcher, r, result, respReq.Model, requestID)
 
 		if result.Error != nil {
-			acc.err = result.Error
-			acc.streaming = false
-			acc.complete()
-			operation.finish(result, nil, acc.cost(nil), acc.hasCost())
+			operation.finish(result, nil, 0)
 			operation.fail(result.Error)
 			if errors.Is(result.Error, errNotResponsesProvider) {
 				model.WriteError(w, model.ErrBadRequest(errNotResponsesProvider.Error()+": "+respReq.Model))
@@ -152,19 +144,16 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		// completes (see handleResponsesStream's EOF branch), not at stream-open —
 		// a mid-stream failure must still count as a deployment failure.
 		if respReq.Stream {
-			usage, _, err := handleResponsesStream(ctx, w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet, sessionID)
-			operation.finish(result, usage, acc.cost(usage), acc.hasCost())
-			acc.err = err
+			usage, cost, err := handleResponsesStream(w, respStream, result, r, store, sa, cm, budget, requestID, apiKeyID, startTime, reqBodySnippet, sessionID)
+			operation.finish(result, usage, cost)
 			operation.fail(err)
 			return
 		}
 		r.ReportSuccess(result.DeploymentUsed)
 
-		if respReq.Background && !respResult.IsTerminal() {
-			acc.savePending()
+		if respReq.Background && respResult.Status != "completed" && respResult.Status != "failed" {
 			if store != nil {
-				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq, sessionID, acc.collector.Snapshot(false).ID); err != nil {
-					acc.err = err
+				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq, sessionID); err != nil {
 					operation.fail(err)
 					// The upstream job was already created — the client must not receive a
 					// response_id that GET /v1/responses/{id} can never resolve.
@@ -173,22 +162,17 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 					return
 				}
 			}
-			acc.background = true
-			if acc.inline {
-				respResult.ProxyAccounting = acc.collector.Snapshot(false)
-			}
-			operation.finish(result, nil, acc.cost(nil), acc.hasCost())
+			operation.finish(result, nil, 0)
 			router.SetRouteHeaders(w, result)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(respResult)
 			return
 		}
 
-		cost := acc.cost(respResult.Usage)
-		operation.finish(result, respResult.Usage, cost, acc.hasCost())
+		cost := computeCost(cm, result.DeploymentUsed, respResult.Usage)
+		operation.finish(result, respResult.Usage, cost)
 		if store != nil && respResult.Usage != nil {
-			logRequest(logRequestParams{
-				Accounting:      callAccountingFromContext(ctx),
+			go logRequest(logRequestParams{
 				Store:           store,
 				SpendAcc:        sa,
 				CostMap:         cm,
@@ -211,7 +195,6 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			})
 		}
 
-		respResult.ProxyAccounting = acc.inlineRecord()
 		router.SetRouteHeaders(w, result)
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(respResult); err != nil {
@@ -221,7 +204,6 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 }
 
 func handleResponsesStream(
-	ctx context.Context,
 	w http.ResponseWriter,
 	stream provider.ResponsesStream,
 	result *router.RouteResult,
@@ -256,10 +238,12 @@ func handleResponsesStream(
 		if err == io.EOF {
 			r.ReportSuccess(result.DeploymentUsed)
 			usage := finalUsage
-			cost := callAccountingFromContext(ctx).cost(usage)
+			if usage == nil {
+				usage = &model.Usage{}
+			}
+			cost := computeCost(cm, result.DeploymentUsed, usage)
 			if store != nil {
-				logRequest(logRequestParams{
-					Accounting:      callAccountingFromContext(ctx),
+				go logRequest(logRequestParams{
 					Store:           store,
 					SpendAcc:        sa,
 					CostMap:         cm,
@@ -281,8 +265,6 @@ func handleResponsesStream(
 					ReqBodySnippet:  reqBodySnippet,
 				})
 			}
-			callAccountingFromContext(ctx).emitStream(w, true)
-			flusher.Flush()
 			return usage, cost, nil
 		}
 		if err != nil {
@@ -295,7 +277,6 @@ func handleResponsesStream(
 
 		if event.Response != nil && event.Response.Usage != nil {
 			finalUsage = event.Response.Usage
-			callAccountingFromContext(ctx).collector.ObserveUsage(finalUsage)
 		}
 
 		data, err := json.Marshal(event)
@@ -320,7 +301,7 @@ func handleResponsesStream(
 // subsequent GET /v1/responses/{id} would 404 with no visible error. Uses a
 // detached 5s context (not the request's) so the write isn't aborted by a client
 // disconnect racing the insert.
-func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest, sessionID string, accountingID string) error {
+func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest, sessionID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -335,7 +316,6 @@ func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d
 	respJSONStr := string(respJSON)
 
 	job := &storage.ResponsesJob{
-		AccountingID:  accountingID,
 		ID:            resp.ID,
 		SessionID:     sessionID,
 		APIKeyID:      apiKeyID,
@@ -379,14 +359,13 @@ func GetResponseJob(store storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		setJobAccounting(w, req, store, job, nil)
 		writeResponsesJob(w, job)
 	}
 }
 
 // CancelResponseJob handles DELETE /v1/responses/{id}: cancels an in-progress
 // background job upstream and updates its stored state.
-func CancelResponseJob(r *router.Router, store storage.Storage, accumulators ...*keystore.SpendAccumulator) http.HandlerFunc {
+func CancelResponseJob(r *router.Router, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		id := chi.URLParam(req, "id")
@@ -407,7 +386,6 @@ func CancelResponseJob(r *router.Router, store storage.Storage, accumulators ...
 		}
 
 		if isTerminalStatus(job.Status) {
-			setJobAccounting(w, req, store, job, nil)
 			writeResponsesJob(w, job)
 			return
 		}
@@ -423,33 +401,12 @@ func CancelResponseJob(r *router.Router, store storage.Storage, accumulators ...
 			return
 		}
 
-		ctx, collector, resumeErr := backgroundresponses.ResumeAccounting(ctx, store, job)
-		if resumeErr != nil {
-			model.WriteError(w, model.ErrInternal("cannot resume accounting"))
-			return
-		}
 		resp, err := rp.CancelResponse(ctx, id)
 		if err != nil {
 			model.WriteError(w, model.ErrProviderError(d.ProviderName, err))
 			return
 		}
 
-		var sa *keystore.SpendAccumulator
-		if len(accumulators) > 0 {
-			sa = accumulators[0]
-		}
-		if resp.IsTerminal() {
-			if handled, err := backgroundresponses.FinishAccounting(ctx, store, job, resp, collector, sa, r); handled {
-				if err != nil {
-					model.WriteError(w, model.ErrInternal("failed to finalize cancelled response"))
-					return
-				}
-				setJobAccounting(w, req, store, job, resp)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(resp)
-				return
-			}
-		}
 		respJSON, err := json.Marshal(resp)
 		if err != nil {
 			model.WriteError(w, model.ErrInternal("failed to marshal cancelled response: "+err.Error()))
@@ -457,19 +414,7 @@ func CancelResponseJob(r *router.Router, store storage.Storage, accumulators ...
 		}
 		respJSONStr := string(respJSON)
 		now := time.Now().UTC()
-		var completedAt *time.Time
-		if resp.IsTerminal() {
-			completedAt = &now
-		}
-		if collector != nil {
-			if db, ok := store.(storage.AccountingStorage); ok {
-				if err := db.PutAccounting(ctx, collector.Snapshot(false)); err != nil {
-					model.WriteError(w, model.ErrInternal("failed to save cancellation accounting"))
-					return
-				}
-			}
-		}
-		if updErr := store.UpdateResponsesJob(ctx, id, resp.Status, &respJSONStr, nil, completedAt); updErr != nil {
+		if updErr := store.UpdateResponsesJob(ctx, id, resp.Status, &respJSONStr, nil, &now); updErr != nil {
 			fmt.Fprintf(os.Stderr, "CancelResponseJob: update failed for %s: %v\n", id, updErr)
 		}
 

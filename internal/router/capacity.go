@@ -14,15 +14,7 @@ import (
 // RouteOptions supplies a token estimate for admission before an upstream call.
 // TPM reservations include input and maximum output. Actual usage reconciles
 // the reservation when available; unknown usage retains the estimate.
-type RouteOptions struct {
-	// UsageSnapshot supplies authoritative usage from the current upstream attempt.
-	UsageSnapshot func() *model.Usage
-	// DeferReconcile transfers reconciliation to streaming completion/cancellation.
-	DeferReconcile  func(func(*model.Usage))
-	EstimatedTokens int
-	BeforeAttempt   func(*provider.Deployment, string)
-	AfterAttempt    func(*model.ChatCompletionResponse, error)
-}
+type RouteOptions struct{ EstimatedTokens int }
 type capacityWindow struct {
 	start            time.Time
 	requests, tokens int
@@ -108,7 +100,7 @@ func (s *capacityStream) Recv() (*model.StreamChunk, error) {
 	return chunk, err
 }
 func (s *capacityStream) Close() error { s.reservation.finish(s.usage); return s.Stream.Close() }
-func (r *Router) invoke(d *provider.Deployment, pool string, cb RouteCallback, opts ...RouteOptions) (*model.ChatCompletionResponse, provider.Stream, error) {
+func (r *Router) invoke(d *provider.Deployment, cb RouteCallback, opts ...RouteOptions) (*model.ChatCompletionResponse, provider.Stream, error) {
 	estimate := 1
 	if len(opts) > 0 {
 		estimate = opts[0].EstimatedTokens
@@ -117,36 +109,15 @@ func (r *Router) invoke(d *provider.Deployment, pool string, cb RouteCallback, o
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(opts) > 0 && opts[0].BeforeAttempt != nil {
-		opts[0].BeforeAttempt(d, pool)
-	}
 	response, stream, err := cb(d)
-	if len(opts) > 0 && opts[0].AfterAttempt != nil {
-		opts[0].AfterAttempt(response, err)
-	}
 	if err != nil {
 		// HTTP rejections did not generate tokens. Transport failures may have.
 		var usage *model.Usage
 		if _, ok := err.(interface{ HTTPStatus() int }); ok {
 			usage = &model.Usage{}
 		}
-		if len(opts) > 0 && opts[0].UsageSnapshot != nil {
-			if reported := opts[0].UsageSnapshot(); reported != nil {
-				usage = reported
-			}
-		}
 		reservation.finish(usage)
 		return nil, nil, err
-	}
-	if len(opts) > 0 && opts[0].DeferReconcile != nil {
-		opts[0].DeferReconcile(reservation.finish)
-		return response, stream, nil
-	}
-	if len(opts) > 0 && opts[0].UsageSnapshot != nil {
-		if usage := opts[0].UsageSnapshot(); usage != nil {
-			reservation.finish(usage)
-			return response, stream, nil
-		}
 	}
 	if stream != nil && reservation != nil {
 		return response, &capacityStream{Stream: stream, reservation: reservation}, nil

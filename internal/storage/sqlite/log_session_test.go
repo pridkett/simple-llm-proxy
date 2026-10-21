@@ -61,12 +61,6 @@ func TestSessionMigrationPreservesExistingLogs(t *testing.T) {
 	ctx := context.Background()
 	// Recreate the schema immediately before session attribution was introduced.
 	for _, q := range []string{
-		`DROP TABLE request_accounting`,
-		`ALTER TABLE usage_logs DROP COLUMN accounting_id`,
-		`ALTER TABLE usage_logs DROP COLUMN cost_source`,
-		`ALTER TABLE usage_logs DROP COLUMN cost_known`,
-		`ALTER TABLE usage_logs DROP COLUMN cost_coverage`,
-		`ALTER TABLE responses_jobs DROP COLUMN accounting_id`,
 		`DROP INDEX idx_usage_logs_session_time`,
 		`ALTER TABLE usage_logs DROP COLUMN session_id`,
 		`ALTER TABLE responses_jobs DROP COLUMN session_id`,

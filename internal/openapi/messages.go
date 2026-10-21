@@ -76,7 +76,6 @@ func messagesResponseSchema() *openapi3.SchemaRef {
 	usage := openapi3.NewObjectSchema().WithProperty("input_tokens", openapi3.NewIntegerSchema()).WithProperty("output_tokens", openapi3.NewIntegerSchema()).WithProperty("cache_read_input_tokens", openapi3.NewIntegerSchema()).WithProperty("cache_creation_input_tokens", openapi3.NewIntegerSchema())
 	usage.Required = []string{"input_tokens", "output_tokens"}
 	schema := openapi3.NewObjectSchema().WithProperty("id", openapi3.NewStringSchema()).WithProperty("type", openapi3.NewStringSchema().WithEnum("message")).WithProperty("role", openapi3.NewStringSchema().WithEnum("assistant")).WithProperty("model", openapi3.NewStringSchema()).WithProperty("content", openapi3.NewArraySchema().WithItems(messagesBlockSchema())).WithProperty("stop_reason", openapi3.NewStringSchema().WithNullable()).WithProperty("stop_sequence", openapi3.NewStringSchema().WithNullable()).WithProperty("usage", usage)
-	schema.Properties["proxy_accounting"] = &openapi3.SchemaRef{Ref: "#/components/schemas/AccountingRecord"}
 	schema.Required = []string{"id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "usage"}
 	return &openapi3.SchemaRef{Value: schema}
 }

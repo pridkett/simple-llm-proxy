@@ -24,15 +24,14 @@ type Usage struct {
 }
 
 type Response struct {
-	ProxyAccounting any       `json:"proxy_accounting,omitempty"`
-	ID              string    `json:"id"`
-	Type            string    `json:"type"`
-	Role            string    `json:"role"`
-	Model           string    `json:"model"`
-	Content         []Content `json:"content"`
-	StopReason      *string   `json:"stop_reason"`
-	StopSequence    *string   `json:"stop_sequence"`
-	Usage           Usage     `json:"usage"`
+	ID           string    `json:"id"`
+	Type         string    `json:"type"`
+	Role         string    `json:"role"`
+	Model        string    `json:"model"`
+	Content      []Content `json:"content"`
+	StopReason   *string   `json:"stop_reason"`
+	StopSequence *string   `json:"stop_sequence"`
+	Usage        Usage     `json:"usage"`
 }
 
 func messageID() string { return "msg_" + uuid.NewString() }

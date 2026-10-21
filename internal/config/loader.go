@@ -213,13 +213,6 @@ func parseModelConfig(item any) (ModelConfig, error) {
 	}
 
 	mc := ModelConfig{}
-	if value, exists := m["cost_policy"]; exists {
-		policy, ok := value.(string)
-		if !ok || (policy != "prefer_upstream" && policy != "estimate_only" && policy != "require_upstream") {
-			return mc, fmt.Errorf("cost_policy must be prefer_upstream, estimate_only, or require_upstream")
-		}
-		mc.CostPolicy = policy
-	}
 
 	if v, ok := m["model_name"].(string); ok {
 		mc.ModelName = v

@@ -97,11 +97,6 @@ func (w *Worker) pollJob(ctx context.Context, job *storage.ResponsesJob) {
 		return
 	}
 
-	ctx, collector, resumeErr := ResumeAccounting(ctx, w.Store, job)
-	if resumeErr != nil {
-		log.Warn().Err(resumeErr).Str("job_id", job.ID).Msg("responses worker: cannot resume accounting")
-		return
-	}
 	resp, err := rp.GetResponse(ctx, job.ID)
 	if err != nil {
 		var rlErr *provider.RateLimitError
@@ -131,32 +126,12 @@ func (w *Worker) pollJob(ctx context.Context, job *storage.ResponsesJob) {
 	}
 
 	if !resp.IsTerminal() {
-		if collector != nil {
-			if db, ok := w.Store.(storage.AccountingStorage); ok {
-				if err := db.PutAccounting(ctx, collector.Snapshot(false)); err != nil {
-					log.Warn().Err(err).Str("job_id", job.ID).Msg("responses worker: failed to save accounting")
-					return
-				}
-			}
-		}
 		if updErr := w.Store.UpdateResponsesJob(ctx, job.ID, resp.Status, &respJSONStr, errorJSON, nil); updErr != nil {
 			log.Warn().Err(updErr).Str("job_id", job.ID).Msg("responses worker: failed to update in-progress job")
 		}
 		return
 	}
 
-	if handled, err := FinishAccounting(ctx, w.Store, job, resp, collector, w.SpendAcc, w.Router); handled {
-		if err != nil {
-			log.Warn().Err(err).Str("job_id", job.ID).Msg("responses worker: failed to finalize accounting")
-			return
-		}
-		if resp.Status == "completed" {
-			w.Router.ReportSuccess(d)
-		} else {
-			w.Router.ReportFailure(d)
-		}
-		return
-	}
 	now := time.Now().UTC()
 	if updErr := w.Store.UpdateResponsesJob(ctx, job.ID, resp.Status, &respJSONStr, errorJSON, &now); updErr != nil {
 		// The job's row is still non-terminal in storage, so the next poll will see

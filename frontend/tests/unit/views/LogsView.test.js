@@ -247,19 +247,3 @@ it('ignores a stale fetch after selecting another session', async () => {
   wrapper.unmount()
   await router.push('/logs')
 })
-
-it('shows reported cost even when token usage is unknown, and hides unknown prices', async () => {
-  setupMocks()
-  api.logs.mockResolvedValue({ ...mockLogsData, logs: [
-    { ...mockLogsData.logs[0], usage_known: false, total_cost: 0.25, cost_known: true, cost_source: 'upstream', cost_coverage: 'complete' },
-    { ...mockLogsData.logs[1], usage_known: true, total_cost: 0, cost_known: false, cost_source: 'unknown', cost_coverage: 'unknown' },
-  ] })
-  const wrapper = mount(LogsView, { global: { plugins: [makeRouter()] } })
-  await flushPromises()
-  const rows = wrapper.findAll('tbody > tr')
-  expect(rows[0].text()).toContain('$0.25')
-  expect(rows[0].text()).toContain('Upstream-reported')
-  expect(rows[1].text()).toContain('Unknown')
-  expect(rows[1].text()).not.toContain('$0.000000')
-  wrapper.unmount()
-})

@@ -25,8 +25,6 @@ type streamTool struct {
 // StreamEncoder writes named Anthropic SSE events directly from normalized
 // chunks. It does not buffer response text or wait for all tool arguments.
 type StreamEncoder struct {
-	// BeforeStop emits optional protocol extensions after validation and before message_stop.
-	BeforeStop   func()
 	w            io.Writer
 	alias        string
 	started      bool
@@ -161,9 +159,6 @@ func (s *StreamEncoder) Finish(usage *model.Usage) error {
 	}
 	if err := s.event("message_delta", map[string]any{"delta": map[string]any{"stop_reason": stopReason(s.finish), "stop_sequence": s.stopSequence}, "usage": usageFromChat(usage)}); err != nil {
 		return err
-	}
-	if s.BeforeStop != nil {
-		s.BeforeStop()
 	}
 	return s.event("message_stop", map[string]any{})
 }

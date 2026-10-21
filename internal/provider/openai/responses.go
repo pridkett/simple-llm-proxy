@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
@@ -42,14 +41,13 @@ func (p *Provider) doJSON(ctx context.Context, method, path string, reqBody any,
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := provider.Do(p.Client, httpReq)
+	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("making request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
-	accounting.ObserveJSON(ctx, respBody)
 	if err != nil {
 		return fmt.Errorf("reading response: %w", err)
 	}
@@ -130,7 +128,7 @@ func (p *Provider) CreateResponseStream(ctx context.Context, req *model.Response
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := provider.Do(p.Client, httpReq)
+	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
 	}
@@ -146,7 +144,6 @@ func (p *Provider) CreateResponseStream(ctx context.Context, req *model.Response
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		accounting.ObserveJSON(ctx, respBody)
 		resp.Body.Close()
 		var apiErr model.APIError
 		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
