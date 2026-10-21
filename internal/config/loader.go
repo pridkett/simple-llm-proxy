@@ -220,6 +220,26 @@ func parseModelConfig(item any) (ModelConfig, error) {
 		}
 		mc.CostPolicy = policy
 	}
+	if value, exists := m["decision"]; exists {
+		if _, ok := value.(map[string]any); !ok {
+			return mc, fmt.Errorf("decision must be a map")
+		}
+		data, err := yaml.Marshal(value)
+		if err != nil {
+			return mc, err
+		}
+		var d DecisionConfig
+		// Reject misspelled capability/pricing fields instead of silently enabling defaults.
+		dec := yaml.NewDecoder(strings.NewReader(string(data)))
+		dec.KnownFields(true)
+		if err := dec.Decode(&d); err != nil {
+			return mc, fmt.Errorf("decision: %w", err)
+		}
+		mc.Decision, err = NormalizeDecision(&d)
+		if err != nil {
+			return mc, err
+		}
+	}
 
 	if v, ok := m["model_name"].(string); ok {
 		mc.ModelName = v

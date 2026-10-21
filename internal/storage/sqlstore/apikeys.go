@@ -10,7 +10,7 @@ import (
 )
 
 // CreateAPIKey creates a new key record and its allowlist entries in a transaction.
-func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) (*storage.APIKey, error) {
+func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) (*storage.APIKey, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create api key begin tx: %w", err)
@@ -18,13 +18,17 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 	defer tx.Rollback() //nolint:errcheck
 
 	key := &storage.APIKey{}
+	permission := false
+	if len(allowDecisions) > 0 && allowDecisions[0] != nil {
+		permission = *allowDecisions[0]
+	}
 	err = tx.QueryRowContext(ctx, s.bind(`
-		INSERT INTO api_keys (application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
-	`), appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget).
+		INSERT INTO api_keys (application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, allow_decisions)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
+	`), appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget, permission).
 		Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt)
+			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions)
 	if err != nil {
 		return nil, fmt.Errorf("create api key insert: %w", err)
 	}
@@ -47,13 +51,13 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT k.id, k.application_id, k.name, k.key_prefix, k.key_hash,
 		       k.max_rpm, k.max_rpd, k.max_budget, k.soft_budget, k.is_active,
-		       k.created_at, a.name, t.name
+		       k.created_at, k.allow_decisions, a.name, t.name
 		FROM api_keys k
 		JOIN applications a ON a.id = k.application_id
 		JOIN teams t ON t.id = a.team_id
 		WHERE k.key_hash = ?
 	`), keyHash).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt,
+		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions,
 		&key.AppName, &key.TeamName)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -67,7 +71,7 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 // ListAPIKeys returns all keys for an application, newest first.
 func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, s.bind(`
-		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
+		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
 		FROM api_keys WHERE application_id = ? ORDER BY created_at DESC
 	`), appID)
 	if err != nil {
@@ -79,7 +83,7 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 	for rows.Next() {
 		key := &storage.APIKey{}
 		if err := rows.Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt); err != nil {
+			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions); err != nil {
 			return nil, fmt.Errorf("list api keys scan: %w", err)
 		}
 		keys = append(keys, key)
@@ -91,10 +95,10 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*storage.APIKey, error) {
 	key := &storage.APIKey{}
 	err := s.db.QueryRowContext(ctx, s.bind(`
-		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at
+		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
 		FROM api_keys WHERE id = ?
 	`), id).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt)
+		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -186,7 +190,11 @@ func (s *Storage) UpdateKeyAllowedModels(ctx context.Context, keyID int64, model
 
 // UpdateAPIKey updates the mutable key fields and replaces the allowed model list
 // in a single transaction. Key hash, prefix, and is_active are unchanged.
-func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) error {
+func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) error {
+	var permission *bool
+	if len(allowDecisions) > 0 {
+		permission = allowDecisions[0]
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("update api key begin tx: %w", err)
@@ -194,9 +202,9 @@ func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, ma
 	defer tx.Rollback() //nolint:errcheck
 
 	if _, err := tx.ExecContext(ctx, s.bind(`
-		UPDATE api_keys SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?
+		UPDATE api_keys SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?, allow_decisions=COALESCE(?, allow_decisions)
 		WHERE id=?
-	`), name, maxRPM, maxRPD, maxBudget, softBudget, keyID); err != nil {
+	`), name, maxRPM, maxRPD, maxBudget, softBudget, permission, keyID); err != nil {
 		return fmt.Errorf("update api key: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, s.bind(`DELETE FROM key_allowed_models WHERE key_id=?`), keyID); err != nil {

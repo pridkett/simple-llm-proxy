@@ -176,7 +176,7 @@ func (s *captureStorage) ListApplications(_ context.Context, _ int64) ([]*storag
 	return nil, nil
 }
 func (s *captureStorage) CleanExpiredSessions(_ context.Context) error { return nil }
-func (s *captureStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+func (s *captureStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string, _ ...*bool) (*storage.APIKey, error) {
 	return nil, nil
 }
 func (s *captureStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
@@ -192,7 +192,7 @@ func (s *captureStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]stri
 func (s *captureStorage) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
-func (s *captureStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+func (s *captureStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string, _ ...*bool) error {
 	return nil
 }
 func (s *captureStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }

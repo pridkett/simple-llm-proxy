@@ -15,6 +15,11 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 	whereClauses := []string{"ul.model != '_flush'"}
 	var whereArgs []interface{}
 
+	if filters.RequestType == "decision" {
+		whereClauses = append(whereClauses, "ul.endpoint IN ('/v1/decisions', '/v1/systemone')")
+	} else if filters.RequestType == "other" {
+		whereClauses = append(whereClauses, "ul.endpoint NOT IN ('/v1/decisions', '/v1/systemone')")
+	}
 	if filters.SessionID != "" {
 		// Match the partial-index predicate explicitly so SQLite can use it
 		// with a bound session ID.

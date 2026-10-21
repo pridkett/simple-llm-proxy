@@ -127,7 +127,7 @@ func (m *mockIdentityStorage) ListApplications(_ context.Context, teamID int64) 
 	return m.applications, m.listApplicationsErr
 }
 
-func (m *mockIdentityStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+func (m *mockIdentityStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string, _ ...*bool) (*storage.APIKey, error) {
 	return nil, nil
 }
 func (m *mockIdentityStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {

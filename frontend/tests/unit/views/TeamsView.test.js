@@ -367,9 +367,33 @@ describe('Teams workspace', () => {
     await wrapper.get('input[placeholder="Key name"]').setValue('Worker')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(api.createAPIKey).toHaveBeenCalledWith(1, { name: 'Worker' })
+    expect(api.createAPIKey).toHaveBeenCalledWith(1, { name: 'Worker', allow_decisions: false })
     expect(router.currentRoute.value.path).toBe('/teams/1/applications/1')
     expect(wrapper.get('dialog code').text()).toBe(secret)
+  })
+
+  it('requires explicit decision opt-in and keeps the per-model allowlist', async () => {
+    const { wrapper } = await render('/teams/1/applications/1/keys/new')
+    await wrapper.get('input[placeholder="Key name"]').setValue('Decision worker')
+    const permission = wrapper.get('#key-allow-decisions')
+    expect(permission.element.checked).toBe(false)
+    await permission.setValue(true)
+    await wrapper.get('#key-models').setValue('jev, luna')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.createAPIKey).toHaveBeenCalledWith(1, {
+      name: 'Decision worker', allow_decisions: true, allowed_models: ['jev', 'luna']
+    })
+  })
+
+  it('loads an existing decision permission and can disable it', async () => {
+    keys[1][0].allow_decisions = true
+    const { wrapper } = await render('/teams/1/applications/1/keys/1')
+    expect(wrapper.get('#key-allow-decisions').element.checked).toBe(true)
+    await wrapper.get('#key-allow-decisions').setValue(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.updateAPIKey).toHaveBeenCalledWith(1, expect.objectContaining({ allow_decisions: false }))
   })
 
   it('revokes a key with confirmation and retains a read-only settings view', async () => {

@@ -32,6 +32,15 @@
       </template>
     </div>
 
+    <div class="mb-4">
+      <label for="request-type-filter" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Call type</label>
+      <select id="request-type-filter" v-model="filterRequestType" class="input text-sm py-2 min-w-[180px]">
+        <option value="">All calls</option>
+        <option value="decision">Decision calls only</option>
+        <option value="other">Hide decision calls</option>
+      </select>
+    </div>
+
     <!-- Filters: Row 2 — Dimension dropdowns (D-07, D-08) -->
     <div class="mb-4 flex flex-wrap gap-3 items-end">
       <div>
@@ -57,7 +66,7 @@
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Provider</label>
-        <select v-model="filterProvider" class="input text-sm py-2 min-w-[160px]">
+        <select id="provider-filter" v-model="filterProvider" class="input text-sm py-2 min-w-[160px]">
           <option value="">All Providers</option>
           <option v-for="p in metaProviders" :key="p" :value="p">{{ p }}</option>
         </select>
@@ -356,6 +365,7 @@ const filterKey = ref(null)
 const filterProvider = ref('')
 const filterPool = ref('')
 const filterModel = ref('')
+const filterRequestType = ref('')
 
 // Meta API data for dropdown options (UI-02)
 const metaTeams = ref([])
@@ -378,7 +388,7 @@ const hasActiveFilters = computed(() => {
     filterKey.value !== null ||
     filterProvider.value !== '' ||
     filterPool.value !== '' ||
-    filterModel.value !== '' || filterSession.value !== ''
+    filterRequestType.value !== '' || filterModel.value !== '' || filterSession.value !== ''
 })
 
 function buildDateParams() {
@@ -413,6 +423,7 @@ async function load() {
       limit: pageSize,
       offset: offset.value,
       model: filterModel.value || undefined,
+      request_type: filterRequestType.value || undefined,
       session_id: filterSession.value || undefined,
       team_id: filterTeam.value,
       app_id: filterApp.value,
@@ -448,7 +459,7 @@ async function loadMeta() {
 
 // D-09: any filter change auto-fetches with offset reset
 watch(
-  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterSession],
+  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterRequestType, filterSession],
   () => {
     offset.value = 0
     load()
@@ -495,6 +506,7 @@ function resetDimensions() {
   filterProvider.value = ''
   filterPool.value = ''
   filterModel.value = ''
+  filterRequestType.value = ''
   // watch triggers load() automatically
 }
 

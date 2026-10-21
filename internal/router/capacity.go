@@ -22,7 +22,17 @@ type RouteOptions struct {
 	EstimatedTokens int
 	BeforeAttempt   func(*provider.Deployment, string)
 	AfterAttempt    func(*model.ChatCompletionResponse, error)
+	Eligible        func(*provider.Deployment) bool
 }
+
+func eligibleDeployment(d *provider.Deployment, opts []RouteOptions) bool {
+	if len(opts) > 0 && opts[0].Eligible != nil {
+		return opts[0].Eligible(d)
+	}
+	// Existing API handlers are generation-only. Decision deployments require an explicit filter.
+	return d.Decision == nil
+}
+
 type capacityWindow struct {
 	start            time.Time
 	requests, tokens int

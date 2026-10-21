@@ -77,7 +77,7 @@ func (m *mockAuthStore) DeleteCostOverride(_ context.Context, _ string) error { 
 func (m *mockAuthStore) Close() error { return nil }
 
 // API Key CRUD stubs — required by interface, not exercised by auth tests.
-func (m *mockAuthStore) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+func (m *mockAuthStore) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string, _ ...*bool) (*storage.APIKey, error) {
 	return nil, nil
 }
 func (m *mockAuthStore) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
@@ -93,7 +93,7 @@ func (m *mockAuthStore) GetKeyAllowedModels(_ context.Context, _ int64) ([]strin
 func (m *mockAuthStore) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
-func (m *mockAuthStore) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+func (m *mockAuthStore) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string, _ ...*bool) error {
 	return nil
 }
 func (m *mockAuthStore) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }

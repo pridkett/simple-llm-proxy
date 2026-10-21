@@ -153,7 +153,7 @@ func (m *mockStore) ListApplications(context.Context, int64) ([]*storage.Applica
 	panic("not used")
 }
 func (m *mockStore) CleanExpiredSessions(context.Context) error                       { panic("not used") }
-func (m *mockStore) CreateAPIKey(context.Context, int64, string, string, string, *int, *int, *float64, *float64, []string) (*storage.APIKey, error) {
+func (m *mockStore) CreateAPIKey(context.Context, int64, string, string, string, *int, *int, *float64, *float64, []string, ...*bool) (*storage.APIKey, error) {
 	panic("not used")
 }
 func (m *mockStore) GetAPIKeyByHash(context.Context, string) (*storage.APIKey, error) {
@@ -173,7 +173,7 @@ func (m *mockStore) GetKeyAllowedModels(context.Context, int64) ([]string, error
 func (m *mockStore) UpdateKeyAllowedModels(context.Context, int64, []string) error {
 	panic("not used")
 }
-func (m *mockStore) UpdateAPIKey(context.Context, int64, string, *int, *int, *float64, *float64, []string) error {
+func (m *mockStore) UpdateAPIKey(context.Context, int64, string, *int, *int, *float64, *float64, []string, ...*bool) error {
 	panic("not used")
 }
 func (m *mockStore) RecordKeySpend(context.Context, int64, float64) error             { panic("not used") }

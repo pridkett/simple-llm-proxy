@@ -1,4 +1,19 @@
 model_list:
+  # Decision-only deployments use the same routing, limits, budgets, and logs.
+  # App keys must explicitly enable allow_decisions AND pass their model allowlist.
+  # Full Jev/Granite/Clef/Laya/media examples: docs/decision-models.md.
+  # - model_name: luna-decisions
+  #   litellm_params:
+  #     model: openai/gpt-6-luna
+  #     api_key: os.environ/OPENAI_API_KEY
+  #   decision:
+  #     protocol: decisions   # decisions | systemone | cloudflare
+  #     modalities: [text, image]
+  #     pricing:              # USD per token; use {} to declare free/self-hosted
+  #       input_cost_per_token: 0.0000001
+  #       cache_read_input_token_cost: 0
+  #       cache_creation_input_token_cost: 0
+
   # OpenAI models (standard)
   - model_name: gpt-4
     litellm_params:

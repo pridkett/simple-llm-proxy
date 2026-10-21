@@ -230,6 +230,7 @@
               >All models</span
             >
             <span v-else>{{ viewingKey.allowed_models.join(', ') }}</span>
+            <p class="mt-1">Decision models: {{ viewingKey.allow_decisions ? 'Allowed' : 'Disabled' }}</p>
           </dd>
         </div>
         <div class="flex gap-2">
@@ -330,6 +331,11 @@
           <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-300">
             Models and limits
           </summary>
+          <label class="flex items-center gap-2 text-sm py-2" for="key-allow-decisions">
+            <input id="key-allow-decisions" type="checkbox" v-model="form.allowDecisions" />
+            Allow decision models
+          </label>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">The model allowlist and spending limits also apply to decision calls.</p>
           <!-- Allowed models with autocomplete -->
           <div class="relative">
             <label for="key-models" class="block text-xs text-gray-500 dark:text-gray-400 mb-1"
@@ -501,6 +507,7 @@ const formRef = ref(null)
 const form = ref({
   name: '',
   allowedModels: '',
+  allowDecisions: false,
   maxRPM: '',
   maxRPD: '',
   maxBudget: '',
@@ -596,6 +603,7 @@ function fillKeyForm(key) {
   form.value = {
     name: key.name,
     allowedModels: (key.allowed_models ?? []).join(', '),
+    allowDecisions: key.allow_decisions === true,
     maxRPM: key.max_rpm ?? '',
     maxRPD: key.max_rpd ?? '',
     maxBudget: key.max_budget ?? '',
@@ -613,6 +621,7 @@ function cancelEdit() {
   form.value = {
     name: '',
     allowedModels: '',
+  allowDecisions: false,
     maxRPM: '',
     maxRPD: '',
     maxBudget: '',
@@ -682,7 +691,7 @@ function buildFormBody() {
         .filter((m) => m.length > 0)
     )
   ]
-  const body = { name: form.value.name.trim() }
+  const body = { name: form.value.name.trim(), allow_decisions: form.value.allowDecisions }
   if (allowedModels.length > 0) body.allowed_models = allowedModels
   else body.allowed_models = []
   const rpm = parseOptionalInt(form.value.maxRPM)
@@ -727,6 +736,7 @@ async function handleSubmitForm() {
       form.value = {
         name: '',
         allowedModels: '',
+  allowDecisions: false,
         maxRPM: '',
         maxRPD: '',
         maxBudget: '',

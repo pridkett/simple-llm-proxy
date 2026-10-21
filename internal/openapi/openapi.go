@@ -45,6 +45,7 @@ func (s *Spec) Build() error {
 			SecuritySchemes: buildSecuritySchemes(),
 		},
 		Tags: openapi3.Tags{
+			&openapi3.Tag{Name: "Decisions", Description: "Typed decision models using Decisions or System One protocols"},
 			&openapi3.Tag{
 				Name:        "Health",
 				Description: "Health check endpoints",

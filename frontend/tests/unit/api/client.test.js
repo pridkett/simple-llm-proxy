@@ -76,6 +76,16 @@ describe('api client', () => {
     })
   })
 
+  it('sends the decision log filter with pagination and session attribution', async () => {
+    mockFetch({ logs: [], total: 0 })
+    await api.logs({ request_type: 'decision', limit: 10, offset: 20, session_id: 'play:1' })
+    const [url] = global.fetch.mock.calls[0]
+    const params = new URL(url, 'https://proxy.test').searchParams
+    expect(params.get('request_type')).toBe('decision')
+    expect(params.get('offset')).toBe('20')
+    expect(params.get('session_id')).toBe('play:1')
+  })
+
   describe('status()', () => {
     it('calls GET /admin/status', async () => {
       const payload = { status: 'healthy', uptime_seconds: 42, models: [] }

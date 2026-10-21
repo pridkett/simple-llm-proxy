@@ -675,6 +675,7 @@ func modelInfoSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"id", "object", "created", "owned_by"},
 			Properties: openapi3.Schemas{
+				"decision_deployments": {Value: &openapi3.Schema{Type: &openapi3.Types{"array"}, Items: &openapi3.SchemaRef{Value: openapi3.NewObjectSchema()}, Description: "Declared decision protocols, modalities, question types, and endpoint-specific USD pricing. Present only for decision models."}},
 				"id": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
