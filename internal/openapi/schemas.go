@@ -7,16 +7,19 @@ import (
 // buildSchemas returns all schema definitions for the OpenAPI spec.
 func buildSchemas() openapi3.Schemas {
 	return openapi3.Schemas{
+		"AnthropicMessagesRequest": messagesRequestSchema(),
+		"AnthropicMessage":         messagesResponseSchema(),
+		"AnthropicError":           messagesErrorSchema(),
 		// Request types
-		"ChatCompletionRequest":  chatCompletionRequestSchema(),
-		"ResponsesRequest":       responsesRequestSchema(),
-		"EmbeddingsRequest":      embeddingsRequestSchema(),
-		"Message":                messageSchema(),
-		"ContentPart":            contentPartSchema(),
-		"ImageURL":               imageURLSchema(),
-		"Tool":                   toolSchema(),
-		"FunctionDef":            functionDefSchema(),
-		"ResponseFormat":         responseFormatSchema(),
+		"ChatCompletionRequest": chatCompletionRequestSchema(),
+		"ResponsesRequest":      responsesRequestSchema(),
+		"EmbeddingsRequest":     embeddingsRequestSchema(),
+		"Message":               messageSchema(),
+		"ContentPart":           contentPartSchema(),
+		"ImageURL":              imageURLSchema(),
+		"Tool":                  toolSchema(),
+		"FunctionDef":           functionDefSchema(),
+		"ResponseFormat":        responseFormatSchema(),
 
 		// Response types
 		"ChatCompletionResponse": chatCompletionResponseSchema(),
@@ -34,8 +37,8 @@ func buildSchemas() openapi3.Schemas {
 		"FunctionCall":           functionCallSchema(),
 
 		// Error types
-		"APIError":               apiErrorSchema(),
-		"ErrorDetail":            errorDetailSchema(),
+		"APIError":    apiErrorSchema(),
+		"ErrorDetail": errorDetailSchema(),
 
 		// Admin types
 		"AdminStatusResponse": adminStatusResponseSchema(),
@@ -837,9 +840,9 @@ func modelStatusInfoSchema() *openapi3.SchemaRef {
 		Value: &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
-				"model_name":           {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"total_deployments":    {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"healthy_deployments":  {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"model_name":          {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"total_deployments":   {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"healthy_deployments": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
 				"deployments": {Value: &openapi3.Schema{
 					Type:  &openapi3.Types{"array"},
 					Items: &openapi3.SchemaRef{Ref: "#/components/schemas/DeploymentInfo"},

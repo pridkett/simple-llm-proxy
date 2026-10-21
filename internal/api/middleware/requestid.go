@@ -31,6 +31,9 @@ func RequestID() func(http.Handler) http.Handler {
 
 			// Set the response header so callers can correlate responses.
 			w.Header().Set("X-Request-ID", id)
+			if r.URL.Path == "/v1/messages" {
+				w.Header().Set("request-id", id)
+			}
 
 			ctx := context.WithValue(r.Context(), ContextKeyRequestID, id)
 			next.ServeHTTP(w, r.WithContext(ctx))

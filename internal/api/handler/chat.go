@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	messagesapi "github.com/pwagstro/simple_llm_proxy/internal/anthropic"
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
@@ -26,6 +27,27 @@ import (
 
 // ChatCompletions handles POST /v1/chat/completions requests.
 func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings, tracers ...trace.Tracer) http.HandlerFunc {
+	return chatCompletions(r, store, sa, cm, dispatcher, cfg, false, tracers...)
+}
+
+// Messages handles Anthropic-compatible POST /v1/messages for any chat provider.
+func Messages(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings, tracers ...trace.Tracer) http.HandlerFunc {
+	return chatCompletions(r, store, sa, cm, dispatcher, cfg, true, tracers...)
+}
+
+type chatProtocol struct {
+	messages bool
+	model    string
+}
+
+func (p chatProtocol) endpoint() string {
+	if p.messages {
+		return "/v1/messages"
+	}
+	return "/v1/chat/completions"
+}
+
+func chatCompletions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumulator, cm *costmap.Manager, dispatcher *webhook.WebhookDispatcher, cfg config.GeneralSettings, messages bool, tracers ...trace.Tracer) http.HandlerFunc {
 	var tracer trace.Tracer
 	if len(tracers) > 0 {
 		tracer = tracers[0]
@@ -44,19 +66,47 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		// reqBodySnippet is nil when cfg.BodySnippetLimit == 0 → stored as SQL NULL
 
 		var chatReq model.ChatCompletionRequest
-		sessionID, err := decodeSessionRequest(req, &chatReq)
+		var sessionID string
+		var err error
+		if messages {
+			req.Body = http.MaxBytesReader(w, req.Body, 32<<20)
+			var input messagesapi.Request
+			sessionID, err = decodeSessionRequest(req, &input, true)
+			if err == nil {
+				var translated *model.ChatCompletionRequest
+				translated, err = input.ChatRequest()
+				if err == nil {
+					chatReq = *translated
+				}
+			}
+		} else {
+			sessionID, err = decodeSessionRequest(req, &chatReq)
+		}
+		protocol := chatProtocol{messages: messages, model: chatReq.Model}
+		writeError := func(w http.ResponseWriter, err *model.ProxyError) {
+			if messages {
+				model.WriteAnthropicError(w, err)
+			} else {
+				model.WriteError(w, err)
+			}
+		}
 		if err != nil {
-			model.WriteError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
+			var sizeErr *http.MaxBytesError
+			if messages && errors.As(err, &sizeErr) {
+				writeError(w, &model.ProxyError{StatusCode: http.StatusRequestEntityTooLarge, Message: "request exceeds 32 MiB limit"})
+			} else {
+				writeError(w, model.ErrBadRequest("invalid request body: "+err.Error()))
+			}
 			return
 		}
 
 		if chatReq.Model == "" {
-			model.WriteError(w, model.ErrBadRequest("model is required"))
+			writeError(w, model.ErrBadRequest("model is required"))
 			return
 		}
 
 		if len(chatReq.Messages) == 0 {
-			model.WriteError(w, model.ErrBadRequest("messages is required"))
+			writeError(w, model.ErrBadRequest("messages is required"))
 			return
 		}
 
@@ -72,7 +122,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 				}
 			}
 			if !allowed {
-				model.WriteError(w, model.ErrForbidden("model not allowed: "+chatReq.Model))
+				writeError(w, model.ErrForbidden("model not allowed: "+chatReq.Model))
 				return
 			}
 		}
@@ -89,16 +139,16 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		if chargeHeader := req.Header.Get("X-Charge-Key-ID"); chargeHeader != "" && ck == nil && store != nil {
 			chargeID, parseErr := strconv.ParseInt(chargeHeader, 10, 64)
 			if parseErr != nil {
-				model.WriteError(w, model.ErrBadRequest("invalid X-Charge-Key-ID"))
+				writeError(w, model.ErrBadRequest("invalid X-Charge-Key-ID"))
 				return
 			}
 			chargeKey, lookupErr := store.GetAPIKeyByID(ctx, chargeID)
 			if lookupErr != nil || chargeKey == nil {
-				model.WriteError(w, model.ErrBadRequest("API key not found"))
+				writeError(w, model.ErrBadRequest("API key not found"))
 				return
 			}
 			if !chargeKey.IsActive {
-				model.WriteError(w, model.ErrBadRequest("API key is revoked"))
+				writeError(w, model.ErrBadRequest("API key is revoked"))
 				return
 			}
 			// Non-admin users must have access to the key via team membership.
@@ -106,7 +156,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			if user != nil && !user.IsAdmin {
 				accessible, accessErr := store.ListUserAccessibleKeys(ctx, user.ID)
 				if accessErr != nil {
-					model.WriteError(w, model.ErrInternal("failed to verify key access"))
+					writeError(w, model.ErrInternal("failed to verify key access"))
 					return
 				}
 				found := false
@@ -117,7 +167,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 					}
 				}
 				if !found {
-					model.WriteError(w, model.ErrForbidden("you do not have access to this API key"))
+					writeError(w, model.ErrForbidden("you do not have access to this API key"))
 					return
 				}
 			}
@@ -158,11 +208,11 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			// Check for budget exhaustion specifically (BUDGET-04).
 			for _, reason := range result.FailoverReasons {
 				if reason == router.FailoverBudgetExhausted {
-					model.WriteError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
+					writeError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
 					return
 				}
 			}
-			model.WriteError(w, model.ErrProviderError("all providers", result.Error))
+			writeError(w, model.ErrProviderError("all providers", result.Error))
 			return
 		}
 
@@ -170,7 +220,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, sessionID, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
+			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, sessionID, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage, protocol)
 			operation.finish(result, usage, cost)
 			operation.fail(err)
 		} else {
@@ -179,8 +229,9 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 				usage = result.Response.Usage
 			}
 			cost := computeCost(cm, result.DeploymentUsed, usage)
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost, sessionID)
+			err := handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost, sessionID, protocol)
 			operation.finish(result, usage, cost)
+			operation.fail(err)
 		}
 	}
 }
@@ -200,7 +251,18 @@ func handleNonStreamingResponse(
 	reqBodySnippet *string,
 	cost float64,
 	sessionID string,
-) {
+	protocol chatProtocol,
+) error {
+	var output any = result.Response
+	if protocol.messages {
+		response, err := messagesapi.FromChat(result.Response, protocol.model)
+		if err != nil {
+			r.ReportFailure(result.DeploymentUsed)
+			model.WriteAnthropicError(w, model.ErrProviderError(result.DeploymentUsed.ProviderName, err))
+			return err
+		}
+		output = response
+	}
 	r.ReportSuccess(result.DeploymentUsed)
 
 	// Log the request if storage is available
@@ -215,7 +277,7 @@ func handleNonStreamingResponse(
 			PoolName:        poolName,
 			APIKeyID:        apiKeyID,
 			Deployment:      result.DeploymentUsed,
-			Endpoint:        "/v1/chat/completions",
+			Endpoint:        protocol.endpoint(),
 			Usage:           result.Response.Usage,
 			Status:          http.StatusOK,
 			StartTime:       startTime,
@@ -230,9 +292,11 @@ func handleNonStreamingResponse(
 
 	router.SetRouteHeaders(w, result)
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(result.Response); err != nil {
+	if err := json.NewEncoder(w).Encode(output); err != nil {
 		fmt.Fprintf(os.Stderr, "handleNonStreamingResponse: encode error (request_id=%s): %v\n", requestID, err)
+		return err
 	}
+	return nil
 }
 
 func handleStreamingResponse(
@@ -252,6 +316,7 @@ func handleStreamingResponse(
 	reqBodySnippet *string,
 	sessionID string,
 	includeUsage bool,
+	protocol chatProtocol,
 ) (*model.Usage, float64, error) {
 	stream := result.Stream
 	defer stream.Close()
@@ -274,6 +339,16 @@ func handleStreamingResponse(
 		return nil, 0, fmt.Errorf("streaming response writer does not support flushing")
 	}
 
+	var encoder *messagesapi.StreamEncoder
+	if protocol.messages {
+		encoder = messagesapi.NewStreamEncoder(w, protocol.model)
+	}
+	streamError := func(err error) {
+		if encoder != nil {
+			_ = encoder.Error(model.ErrProviderError(result.DeploymentUsed.ProviderName, err), requestID)
+			flusher.Flush()
+		}
+	}
 	var streamUsage *model.Usage       // accumulated from chunks that carry Usage (Anthropic message_delta)
 	var ttftMs *int64                  // INSTR-01: nil until first successful Recv()
 	var ttftSet bool                   // set to true after first Recv() success
@@ -283,7 +358,21 @@ func handleStreamingResponse(
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			// Stream completed successfully.
-			fmt.Fprintf(w, "data: [DONE]\n\n")
+			if encoder != nil {
+				if err := encoder.Finish(streamUsage); err != nil {
+					var writeErr *messagesapi.WriteError
+					if errors.As(err, &writeErr) || ctx.Err() != nil {
+						return streamUsage, 0, err
+					}
+					r.ReportFailure(result.DeploymentUsed)
+					streamError(err)
+					return streamUsage, 0, err
+				}
+			} else {
+				if _, err := fmt.Fprintf(w, "data: [DONE]\n\n"); err != nil {
+					return streamUsage, 0, err
+				}
+			}
 			flusher.Flush()
 
 			// STREAM-01: ReportSuccess fires here, after all chunks received.
@@ -303,7 +392,7 @@ func handleStreamingResponse(
 					PoolName:        poolName,
 					APIKeyID:        apiKeyID,
 					Deployment:      result.DeploymentUsed,
-					Endpoint:        "/v1/chat/completions",
+					Endpoint:        protocol.endpoint(),
 					Usage:           usage,
 					Status:          http.StatusOK,
 					StartTime:       startTime,
@@ -325,6 +414,7 @@ func handleStreamingResponse(
 			}
 			// Mid-stream error from provider — report failure.
 			r.ReportFailure(result.DeploymentUsed)
+			streamError(err)
 			return nil, 0, err
 		}
 
@@ -355,6 +445,22 @@ func handleStreamingResponse(
 			streamUsage = chunk.Usage
 		}
 
+		if encoder != nil {
+			if err := encoder.WriteChunk(chunk); err != nil {
+				var writeErr *messagesapi.WriteError
+				if errors.As(err, &writeErr) || ctx.Err() != nil {
+					return streamUsage, 0, err
+				}
+				r.ReportFailure(result.DeploymentUsed)
+				streamError(err)
+				return streamUsage, 0, err
+			}
+			flusher.Flush()
+			continue
+		}
+		if chunk == nil {
+			return streamUsage, 0, fmt.Errorf("upstream returned a nil stream chunk")
+		}
 		output := *chunk
 		if !includeUsage {
 			output.Usage = nil
