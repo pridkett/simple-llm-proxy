@@ -1,10 +1,10 @@
 <template>
-  <header v-if="route.name !== 'login'" class="bg-white border-b border-gray-200">
+  <header v-if="route.name !== 'login'" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex h-16 items-center justify-between gap-4">
         <router-link
           to="/"
-          class="flex shrink-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+          class="flex shrink-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-indigo-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
           aria-label="LLM Proxy dashboard"
         >
           <div class="w-8 h-8 shrink-0 bg-indigo-600 rounded-md flex items-center justify-center">
@@ -13,7 +13,7 @@
                 d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span class="whitespace-nowrap text-lg font-semibold text-gray-900">LLM Proxy</span>
+          <span class="whitespace-nowrap text-lg font-semibold text-gray-900 dark:text-gray-100">LLM Proxy</span>
         </router-link>
 
         <div v-if="isAuthenticated" class="flex shrink-0 items-center gap-3">
@@ -23,7 +23,7 @@
             aria-controls="primary-navigation"
             :aria-expanded="navigationOpen"
             :aria-label="navigationOpen ? 'Close navigation' : 'Open navigation'"
-            class="flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 md:hidden"
+            class="flex h-11 w-11 items-center justify-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-indigo-400 md:hidden"
             @click="toggleNavigation"
           >
             <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,7 +39,7 @@
               aria-label="Account options"
               aria-controls="account-options"
               :aria-expanded="accountOpen"
-              class="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              class="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900 text-sm font-semibold text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800 hover:bg-indigo-200 dark:hover:bg-indigo-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-indigo-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
               @click="toggleAccount"
             >
               <span aria-hidden="true">{{ initials }}</span>
@@ -49,23 +49,23 @@
             <div
               v-if="accountOpen"
               id="account-options"
-              class="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+              class="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1 shadow-lg"
             >
-              <div class="border-b border-gray-100 px-4 py-3 text-sm [overflow-wrap:anywhere]">
-                <p v-if="currentUser?.name" class="font-medium text-gray-900">{{ currentUser.name }}</p>
-                <p class="text-gray-500">{{ currentUser?.email }}</p>
+              <div class="border-b border-gray-100 dark:border-gray-700 px-4 py-3 text-sm [overflow-wrap:anywhere]">
+                <p v-if="currentUser?.name" class="font-medium text-gray-900 dark:text-gray-100">{{ currentUser.name }}</p>
+                <p class="text-gray-500 dark:text-gray-400">{{ currentUser?.email }}</p>
               </div>
               <router-link
                 ref="settingsLink"
                 to="/settings"
-                class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:bg-indigo-50 focus-visible:text-indigo-700"
+                class="block px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900 focus-visible:outline-none focus-visible:bg-indigo-50 dark:focus-visible:bg-indigo-950 focus-visible:text-indigo-700 dark:focus-visible:text-indigo-300"
                 @click="closeAccount(true)"
               >
                 Proxy settings
               </router-link>
               <button
                 type="button"
-                class="block w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:bg-indigo-50 focus-visible:text-indigo-700"
+                class="block w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900 focus-visible:outline-none focus-visible:bg-indigo-50 dark:focus-visible:bg-indigo-950 focus-visible:text-indigo-700 dark:focus-visible:text-indigo-300"
                 @click="handleLogout"
               >
                 Logout
@@ -79,17 +79,17 @@
         v-if="isAuthenticated"
         id="primary-navigation"
         aria-label="Main navigation"
-        class="flex-wrap gap-1 border-t border-gray-100 py-2 md:flex"
+        class="flex-wrap gap-1 border-t border-gray-100 dark:border-gray-700 py-2 md:flex"
         :class="navigationOpen ? 'flex' : 'hidden'"
       >
         <router-link
           v-for="link in visibleLinks"
           :key="link.to"
           :to="link.to"
-          class="relative whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          class="relative whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-indigo-400"
           :class="(route.path === link.to || (link.to === '/teams' && route.path.startsWith('/teams/')))
-            ? 'bg-indigo-50 text-indigo-700'
-            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'"
+            ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900'"
           @click="closeNavigation(true)"
           :aria-current="(route.path === link.to || (link.to === '/teams' && route.path.startsWith('/teams/'))) ? 'page' : undefined"
         >

@@ -60,6 +60,33 @@ describe('CostView', () => {
     vi.clearAllMocks()
   })
 
+  it('updates both chart types and tooltips with the browser color preference', async () => {
+    const media = new EventTarget()
+    media.matches = true
+    vi.stubGlobal('matchMedia', vi.fn(() => media))
+    api.spend.mockResolvedValue(emptySpendResponse)
+    const chart = { name: 'ChartProbe', props: ['options'], template: '<div />' }
+    const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: chart } } })
+    await flushPromises()
+    const options = () => wrapper.findComponent({ name: 'ChartProbe' }).props('options')
+    expect(options().theme.mode).toBe('dark')
+    expect(options().tooltip.theme).toBe('dark')
+    media.matches = false
+    media.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(options().theme.mode).toBe('light')
+    expect(options().tooltip.theme).toBe('light')
+    await wrapper.findAll('button').find(b => b.text() === 'Over Time').trigger('click')
+    expect(options().chart.type).toBe('area')
+    media.matches = true
+    media.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(options().theme.mode).toBe('dark')
+    expect(options().tooltip.theme).toBe('dark')
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
   it('renders ErrorAlert on API failure', async () => {
     api.spend.mockRejectedValue(new Error('Network error'))
     const router = makeRouter()

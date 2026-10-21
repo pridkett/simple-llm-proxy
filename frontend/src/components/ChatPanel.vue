@@ -1,10 +1,10 @@
 <template>
-  <div class="flex flex-col h-full min-h-0 border border-gray-200 rounded-lg bg-white overflow-hidden">
+  <div class="flex flex-col h-full min-h-0 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 overflow-hidden">
     <!-- Panel header -->
-    <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-      <span class="text-sm font-semibold text-gray-800 truncate">{{ modelName }}</span>
+    <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
+      <span class="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{{ modelName }}</span>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <span v-if="isStreaming" class="text-xs text-indigo-600 flex items-center gap-1">
+        <span v-if="isStreaming" class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
           Streaming
         </span>
@@ -28,15 +28,15 @@
       <!-- Completed turns -->
       <template v-for="(turn, i) in turns" :key="i">
         <div class="flex justify-end">
-          <div class="max-w-[85%] bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
-            <pre class="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">{{ turn.userContent }}</pre>
+          <div class="max-w-[85%] bg-indigo-50 dark:bg-indigo-950 border border-indigo-100 dark:border-indigo-900 rounded-lg px-3 py-2">
+            <pre class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-sans leading-relaxed">{{ turn.userContent }}</pre>
           </div>
         </div>
         <div class="flex justify-start">
-          <div class="max-w-[85%] bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
-            <pre class="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">{{ turn.assistantContent || '…' }}</pre>
+          <div class="max-w-[85%] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 shadow-sm">
+            <pre class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-sans leading-relaxed">{{ turn.assistantContent || '…' }}</pre>
             <!-- Stats on last completed turn -->
-            <div v-if="i === turns.length - 1 && lastStats && !isStreaming" class="mt-2 flex gap-3 text-xs text-gray-400 border-t border-gray-100 pt-1.5">
+            <div v-if="i === turns.length - 1 && lastStats && !isStreaming" class="mt-2 flex gap-3 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-1.5">
               <span v-if="lastStats.promptTokens">In: {{ lastStats.promptTokens }}</span>
               <span v-if="lastStats.completionTokens">Out: {{ lastStats.completionTokens }}</span>
               <span v-if="lastStats.latencyMs">{{ lastStats.latencyMs }}ms</span>
@@ -48,13 +48,13 @@
       <!-- Streaming turn (in progress) -->
       <template v-if="isStreaming">
         <div class="flex justify-end">
-          <div class="max-w-[85%] bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
-            <pre class="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">{{ currentUserContent }}</pre>
+          <div class="max-w-[85%] bg-indigo-50 dark:bg-indigo-950 border border-indigo-100 dark:border-indigo-900 rounded-lg px-3 py-2">
+            <pre class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-sans leading-relaxed">{{ currentUserContent }}</pre>
           </div>
         </div>
         <div class="flex justify-start">
-          <div class="max-w-[85%] bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
-            <pre class="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed min-h-[1.5rem]">{{ streamingText }}<span class="inline-block w-2 h-4 bg-indigo-500 animate-pulse ml-0.5 align-text-bottom" /></pre>
+          <div class="max-w-[85%] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 shadow-sm">
+            <pre class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-sans leading-relaxed min-h-[1.5rem]">{{ streamingText }}<span class="inline-block w-2 h-4 bg-indigo-500 animate-pulse ml-0.5 align-text-bottom" /></pre>
           </div>
         </div>
       </template>

@@ -1,38 +1,38 @@
 <template>
   <section>
-    <div v-if="loadingMembers" class="text-gray-500 text-sm">
+    <div v-if="loadingMembers" class="text-gray-500 dark:text-gray-400 text-sm">
       Loading members...
     </div>
     <div v-else>
       <!-- Members table -->
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 mb-6">
-          <thead class="bg-gray-50">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mb-6">
+          <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
               <th
-                class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
               >
                 Name
               </th>
               <th
-                class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
               >
                 Email
               </th>
               <th
-                class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
               >
                 Role
               </th>
               <th
                 v-if="isAdmin"
-                class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
               >
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             <tr v-if="members.length === 0">
               <td
                 :colspan="isAdmin ? 4 : 3"
@@ -44,10 +44,10 @@
               </td>
             </tr>
             <tr v-for="member in members" :key="member.user_id">
-              <td class="px-4 py-3 text-sm font-medium text-gray-900">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                 {{ member.user_name }}
               </td>
-              <td class="px-4 py-3 text-sm text-gray-500">
+              <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                 {{ member.user_email }}
               </td>
               <td class="px-4 py-3 text-sm">
@@ -55,28 +55,28 @@
                   v-if="isAdmin"
                   :value="member.role"
                   @change="handleRoleChange(member, $event.target.value)"
-                  class="border border-gray-300 rounded px-2 py-1 text-sm"
+                  class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm"
                 >
                   <option value="admin">admin</option>
                   <option value="member">member</option>
                   <option value="viewer">viewer</option>
                 </select>
-                <span v-else class="text-gray-600">{{ member.role }}</span>
+                <span v-else class="text-gray-600 dark:text-gray-300">{{ member.role }}</span>
               </td>
               <td v-if="isAdmin" class="px-4 py-3 text-sm">
                 <template v-if="pendingRemoveMemberId === member.user_id">
-                  <span class="text-xs text-gray-500 mr-1"
+                  <span class="text-xs text-gray-500 dark:text-gray-400 mr-1"
                     >Remove {{ member.user_name }}?</span
                   >
                   <button
                     @click="confirmRemoveMember(member)"
-                    class="text-xs text-red-600 hover:text-red-800 mr-1 font-medium"
+                    class="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 mr-1 font-medium"
                   >
                     Yes
                   </button>
                   <button
                     @click="pendingRemoveMemberId = null"
-                    class="text-xs text-gray-500 hover:text-gray-700"
+                    class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                   >
                     No
                   </button>
@@ -84,7 +84,7 @@
                 <button
                   v-else
                   @click="startRemoveMember(member.user_id)"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                 >
                   Remove
                 </button>
@@ -98,27 +98,27 @@
       <div
         v-if="membersError"
         role="alert"
-        class="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-600 flex justify-between items-center"
+        class="mb-4 px-3 py-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400 flex justify-between items-center"
       >
         <span>{{ membersError }}</span>
         <button
           @click="membersError = null"
-          class="ml-3 text-red-400 hover:text-red-600"
+          class="ml-3 text-red-400 hover:text-red-600 dark:hover:text-red-400"
         >
           ✕
         </button>
       </div>
 
       <!-- Add member form (admin only) -->
-      <div v-if="isAdmin" class="border-t border-gray-200 pt-4">
-        <h3 class="text-sm font-medium text-gray-700 mb-3">Add Member</h3>
+      <div v-if="isAdmin" class="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">Add Member</h3>
         <form
           @submit.prevent="handleAddMember"
           class="flex flex-wrap items-end gap-3"
         >
           <!-- User search combobox -->
           <div class="relative" ref="userSearchContainer">
-            <label class="block text-xs text-gray-500 mb-1">User</label>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">User</label>
             <input
               v-model="addMemberSearch"
               type="text"
@@ -126,7 +126,7 @@
               autocomplete="off"
               data-1p-ignore
               data-lpignore="true"
-              class="w-64 max-w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              class="w-64 max-w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
               @input="onUserSearchInput"
               @focus="onUserSearchFocus"
               @keydown.escape="closeUserDropdown"
@@ -137,7 +137,7 @@
             <!-- Dropdown -->
             <ul
               v-if="userDropdownOpen && filteredUsers.length > 0"
-              class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+              class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
             >
               <li
                 v-for="(user, idx) in filteredUsers"
@@ -145,8 +145,8 @@
                 class="px-3 py-2 text-sm cursor-pointer"
                 :class="
                   idx === highlightedIndex
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900'
                 "
                 @mousedown.prevent="selectUser(user)"
                 @mouseover="highlightedIndex = idx"
@@ -162,16 +162,16 @@
                 addMemberSearch &&
                 filteredUsers.length === 0
               "
-              class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm px-3 py-2 text-xs text-gray-400"
+              class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm px-3 py-2 text-xs text-gray-400"
             >
               No users found
             </p>
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Role</label>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
             <select
               v-model="addMemberRole"
-              class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              class="border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm"
             >
               <option value="admin">admin</option>
               <option value="member">member</option>

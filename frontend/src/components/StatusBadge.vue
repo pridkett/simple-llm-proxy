@@ -33,13 +33,13 @@ const label = computed(() => {
 
 const classes = computed(() => {
   switch (props.status) {
-    case 'healthy': return 'bg-green-50 text-green-700'
-    case 'cooldown': return 'bg-red-50 text-red-700'
-    case 'backoff': return 'bg-amber-50 text-amber-700'
-    case 'ok': return 'bg-green-50 text-green-700'
-    case 'warning': return 'bg-amber-50 text-amber-700'
-    case 'over': return 'bg-red-50 text-red-700'
-    default: return 'bg-gray-100 text-gray-600'
+    case 'healthy': return 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300'
+    case 'cooldown': return 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'
+    case 'backoff': return 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+    case 'ok': return 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300'
+    case 'warning': return 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+    case 'over': return 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'
+    default: return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
   }
 })
 
@@ -51,7 +51,7 @@ const dotClass = computed(() => {
     case 'ok': return 'bg-green-500'
     case 'warning': return 'bg-amber-500'
     case 'over': return 'bg-red-500'
-    default: return 'bg-gray-400'
+    default: return 'bg-gray-400 dark:bg-gray-500'
   }
 })
 </script>

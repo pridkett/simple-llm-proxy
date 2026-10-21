@@ -11,36 +11,36 @@
           <RouterLink
             v-if="crumb.to"
             :to="crumb.to"
-            class="text-indigo-600 hover:underline"
+            class="text-indigo-600 dark:text-indigo-400 hover:underline"
             >{{ crumb.label }}</RouterLink
           >
-          <span v-else aria-current="page" class="text-gray-900">{{
+          <span v-else aria-current="page" class="text-gray-900 dark:text-gray-100">{{
             crumb.label
           }}</span>
         </li>
       </ol>
     </nav>
 
-    <p v-if="loadingTeams" role="status" class="text-sm text-gray-500">
+    <p v-if="loadingTeams" role="status" class="text-sm text-gray-500 dark:text-gray-400">
       Loading teams…
     </p>
-    <div v-else-if="teamsError" role="alert" class="text-sm text-red-600">
+    <div v-else-if="teamsError" role="alert" class="text-sm text-red-600 dark:text-red-400">
       {{ teamsError }}
       <button class="underline ml-2" @click="loadContext">Retry</button>
     </div>
     <template v-else-if="isOverview">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 class="text-2xl font-semibold text-gray-900">Teams</h1>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">Teams</h1>
         <RouterLink v-if="isAdmin" to="/teams/new" class="btn btn-primary"
           >Create team</RouterLink
         >
       </div>
-      <p v-if="actionError" role="alert" class="mb-4 text-sm text-red-600">
+      <p v-if="actionError" role="alert" class="mb-4 text-sm text-red-600 dark:text-red-400">
         {{ actionError }}
       </p>
       <div class="overflow-x-auto">
-        <table class="min-w-full text-sm text-left divide-y divide-gray-200">
-          <thead class="bg-gray-50 text-gray-500">
+        <table class="min-w-full text-sm text-left divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
             <tr>
               <th class="px-4 py-3 font-medium">Name</th>
               <th class="px-4 py-3 font-medium">Applications</th>
@@ -51,12 +51,12 @@
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             <tr v-for="team in teams" :key="team.id">
               <td class="px-4 py-4">
                 <RouterLink
                   :to="teamPath(team.id)"
-                  class="font-medium text-indigo-600 hover:underline"
+                  class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
                   >{{ team.name }}</RouterLink
                 >
               </td>
@@ -73,14 +73,14 @@
                     Delete {{ team.name }} and all its applications and keys?
                   </p>
                   <button
-                    class="text-red-600 mr-3"
+                    class="text-red-600 dark:text-red-400 mr-3"
                     :disabled="busy"
                     @click="deleteTeam(team)"
                   >
                     Delete
                   </button>
                   <button
-                    class="text-gray-600"
+                    class="text-gray-600 dark:text-gray-300"
                     :disabled="busy"
                     @click="pendingDeleteTeam = null"
                   >
@@ -89,7 +89,7 @@
                 </template>
                 <button
                   v-else
-                  class="text-red-600"
+                  class="text-red-600 dark:text-red-400"
                   :aria-label="`Delete ${team.name}`"
                   @click="pendingDeleteTeam = team.id"
                 >
@@ -98,7 +98,7 @@
               </td>
             </tr>
             <tr v-if="!teams.length">
-              <td :colspan="isAdmin ? 5 : 3" class="px-4 py-8 text-gray-500">
+              <td :colspan="isAdmin ? 5 : 3" class="px-4 py-8 text-gray-500 dark:text-gray-400">
                 No teams yet.
               </td>
             </tr>
@@ -108,13 +108,13 @@
     </template>
 
     <template v-else-if="isNewTeam">
-      <h1 class="text-2xl font-semibold text-gray-900 mb-6">Create team</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Create team</h1>
       <form
         v-if="isAdmin"
         class="card p-5 max-w-lg space-y-4"
         @submit.prevent="createTeam"
       >
-        <label class="block text-sm text-gray-700" for="team-name">Name</label>
+        <label class="block text-sm text-gray-700 dark:text-gray-200" for="team-name">Name</label>
         <input
           id="team-name"
           ref="nameInput"
@@ -123,7 +123,7 @@
           autocomplete="off"
           class="input"
         />
-        <p v-if="actionError" role="alert" class="text-sm text-red-600">
+        <p v-if="actionError" role="alert" class="text-sm text-red-600 dark:text-red-400">
           {{ actionError }}
         </p>
         <div class="flex items-center gap-3">
@@ -132,19 +132,19 @@
             :disabled="busy || !newTeamName.trim()"
           >
             Create team</button
-          ><RouterLink to="/teams" class="text-sm text-gray-600"
+          ><RouterLink to="/teams" class="text-sm text-gray-600 dark:text-gray-300"
             >Cancel</RouterLink
           >
         </div>
       </form>
-      <p v-else role="alert" class="text-sm text-gray-600">
+      <p v-else role="alert" class="text-sm text-gray-600 dark:text-gray-300">
         An administrator can create teams.
       </p>
     </template>
 
     <template v-else-if="currentTeam">
       <template v-if="isNewApplication">
-        <h1 class="text-2xl font-semibold text-gray-900 mb-6">
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
           Create application
         </h1>
         <form
@@ -152,7 +152,7 @@
           class="card p-5 max-w-lg space-y-4"
           @submit.prevent="createApplication"
         >
-          <label class="block text-sm text-gray-700" for="application-name"
+          <label class="block text-sm text-gray-700 dark:text-gray-200" for="application-name"
             >Name</label
           >
           <input
@@ -164,10 +164,10 @@
             autocomplete="off"
             class="input"
           />
-          <p v-if="actionError" role="alert" class="text-sm text-red-600">
+          <p v-if="actionError" role="alert" class="text-sm text-red-600 dark:text-red-400">
             {{ actionError }}
           </p>
-          <p v-if="partialApplication" class="text-sm text-gray-600">
+          <p v-if="partialApplication" class="text-sm text-gray-600 dark:text-gray-300">
             The application exists. You can retry key creation or open its keys
             to check the result.
           </p>
@@ -186,28 +186,28 @@
                   ? applicationPath(partialApplication.id)
                   : teamPath(currentTeam.id)
               "
-              class="text-sm text-gray-600"
+              class="text-sm text-gray-600 dark:text-gray-300"
               >{{
                 partialApplication ? 'Open application' : 'Cancel'
               }}</RouterLink
             >
           </div>
         </form>
-        <p v-else role="alert" class="text-sm text-gray-600">
+        <p v-else role="alert" class="text-sm text-gray-600 dark:text-gray-300">
           An administrator can create applications.
         </p>
       </template>
       <template v-else>
         <div class="flex flex-wrap items-center justify-between gap-4">
-          <h1 class="text-2xl font-semibold text-gray-900">
+          <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
             {{ currentTeam.name }}
           </h1>
-          <label v-if="teams.length > 1" class="text-sm text-gray-600"
+          <label v-if="teams.length > 1" class="text-sm text-gray-600 dark:text-gray-300"
             >Switch team
             <select
               :value="currentTeam.id"
               aria-label="Switch team"
-              class="ml-2 border border-gray-300 rounded-md px-3 py-2 bg-white"
+              class="ml-2 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800"
               @change="router.push(teamPath(Number($event.target.value)))"
             >
               <option v-for="team in teams" :key="team.id" :value="team.id">
@@ -218,15 +218,15 @@
         </div>
         <nav
           aria-label="Team sections"
-          class="flex gap-6 border-b border-gray-200 mt-6 mb-6"
+          class="flex gap-6 border-b border-gray-200 dark:border-gray-700 mt-6 mb-6"
         >
           <RouterLink
             :to="teamPath(currentTeam.id)"
             class="pb-3 text-sm"
             :class="
               isMembers
-                ? 'text-gray-600'
-                : 'border-b-2 border-indigo-600 text-indigo-600'
+                ? 'text-gray-600 dark:text-gray-300'
+                : 'border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
             "
             :aria-current="!isMembers ? 'page' : undefined"
             >Applications</RouterLink
@@ -237,8 +237,8 @@
             class="pb-3 text-sm"
             :class="
               isMembers
-                ? 'border-b-2 border-indigo-600 text-indigo-600'
-                : 'text-gray-600'
+                ? 'border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
+                : 'text-gray-600 dark:text-gray-300'
             "
             :aria-current="isMembers ? 'page' : undefined"
             >Members</RouterLink
@@ -249,13 +249,13 @@
           :key="currentTeam.id"
           :team="currentTeam"
         />
-        <p v-else-if="isMembers" role="alert" class="text-sm text-gray-600">
+        <p v-else-if="isMembers" role="alert" class="text-sm text-gray-600 dark:text-gray-300">
           An administrator can manage team members.
         </p>
-        <p v-else-if="loadingApps" role="status" class="text-sm text-gray-500">
+        <p v-else-if="loadingApps" role="status" class="text-sm text-gray-500 dark:text-gray-400">
           Loading applications…
         </p>
-        <div v-else-if="appsError" role="alert" class="text-sm text-red-600">
+        <div v-else-if="appsError" role="alert" class="text-sm text-red-600 dark:text-red-400">
           {{ appsError }}
           <button
             class="underline ml-2"
@@ -267,7 +267,7 @@
         <p
           v-else-if="route.params.appId && !currentApplication"
           role="alert"
-          class="text-sm text-gray-600"
+          class="text-sm text-gray-600 dark:text-gray-300"
         >
           Application not found in this team.
         </p>
@@ -277,7 +277,7 @@
         >
           <aside
             aria-label="Applications"
-            class="border-b md:border-b-0 md:border-r border-gray-200 pb-4 md:pr-4"
+            class="border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 pb-4 md:pr-4"
           >
             <RouterLink
               v-for="app in applications"
@@ -286,8 +286,8 @@
               class="block rounded-md px-3 py-3 text-sm mb-1"
               :class="
                 app.id === currentApplication.id
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-700 hover:bg-gray-50'
+                  ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900'
               "
               :aria-current="
                 app.id === currentApplication.id ? 'page' : undefined
@@ -297,7 +297,7 @@
             <RouterLink
               v-if="isAdmin"
               :to="`${teamPath(currentTeam.id)}/applications/new`"
-              class="inline-block mt-3 text-sm text-indigo-600"
+              class="inline-block mt-3 text-sm text-indigo-600 dark:text-indigo-400"
               >+ Create application</RouterLink
             >
           </aside>
@@ -319,14 +319,14 @@
               >Create application</RouterLink
             >
           </div>
-          <p v-if="actionError" role="alert" class="mb-4 text-sm text-red-600">
+          <p v-if="actionError" role="alert" class="mb-4 text-sm text-red-600 dark:text-red-400">
             {{ actionError }}
           </p>
           <div class="overflow-x-auto">
             <table
-              class="min-w-full text-sm text-left divide-y divide-gray-200"
+              class="min-w-full text-sm text-left divide-y divide-gray-200 dark:divide-gray-700"
             >
-              <thead class="bg-gray-50 text-gray-500">
+              <thead class="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
                 <tr>
                   <th class="px-4 py-3 font-medium">Name</th>
                   <th class="px-4 py-3 font-medium">Active keys</th>
@@ -336,12 +336,12 @@
                   </th>
                 </tr>
               </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 <tr v-for="app in applications" :key="app.id">
                   <td class="px-4 py-4">
                     <RouterLink
                       :to="applicationPath(app.id)"
-                      class="text-indigo-600 hover:underline"
+                      class="text-indigo-600 dark:text-indigo-400 hover:underline"
                       >{{ app.name }}</RouterLink
                     >
                   </td>
@@ -355,13 +355,13 @@
                         Delete {{ app.name }} and all its keys?
                       </p>
                       <button
-                        class="text-red-600 mr-3"
+                        class="text-red-600 dark:text-red-400 mr-3"
                         :disabled="busy"
                         @click="deleteApplication(app)"
                       >
                         Delete</button
                       ><button
-                        class="text-gray-600"
+                        class="text-gray-600 dark:text-gray-300"
                         :disabled="busy"
                         @click="pendingDeleteApp = null"
                       >
@@ -370,7 +370,7 @@
                     >
                     <button
                       v-else
-                      class="text-red-600"
+                      class="text-red-600 dark:text-red-400"
                       :aria-label="`Delete ${app.name}`"
                       @click="pendingDeleteApp = app.id"
                     >
@@ -381,7 +381,7 @@
                 <tr v-if="!applications.length">
                   <td
                     :colspan="isAdmin ? 4 : 3"
-                    class="px-4 py-8 text-gray-500"
+                    class="px-4 py-8 text-gray-500 dark:text-gray-400"
                   >
                     No applications yet.
                   </td>
@@ -392,7 +392,7 @@
         </template>
       </template>
     </template>
-    <p v-else role="alert" class="text-sm text-gray-600">Team not found.</p>
+    <p v-else role="alert" class="text-sm text-gray-600 dark:text-gray-300">Team not found.</p>
     <KeyCreatedDialog v-if="newKey" :value="newKey" @close="newKey = null" />
   </div>
 </template>
