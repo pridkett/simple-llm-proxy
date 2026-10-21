@@ -129,12 +129,16 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		if ck != nil {
 			stickyKey = ck.Key.KeyHash
 		}
+		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, chatReq.Model, "/v1/chat/completions", sessionID, apiKeyID, chatReq.Stream)
+		defer acc.close()
 		ctx, operation := beginOperation(ctx, tracer, "chat", chatReq.Model, chatReq.Stream)
 		defer operation.end()
+		acc.ctx = ctx
 
 		// Route() owns all retry/failover logic. The callback performs the
 		// actual provider call; Route selects deployments and handles failover.
 		result := r.Route(ctx, chatReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
+			ctx := acc.attemptCtx
 			providerReq := chatReq
 			providerReq.Model = d.ActualModel
 			if chatReq.Stream {
@@ -145,7 +149,7 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 			resp, err := d.Provider.ChatCompletion(ctx, &providerReq)
 			operation.failedAttempt(d, err)
 			return resp, nil, err
-		}, router.RouteOptions{EstimatedTokens: chatReq.EstimatedTokens()})
+		}, acc.options(chatReq.EstimatedTokens()))
 
 		requestID := middleware.RequestIDFromContext(ctx)
 
@@ -153,7 +157,10 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		emitRoutingEvents(dispatcher, r, result, chatReq.Model, requestID)
 
 		if result.Error != nil {
-			operation.finish(result, nil, 0)
+			acc.err = result.Error
+			acc.streaming = false
+			acc.complete()
+			operation.finish(result, nil, acc.cost(nil), acc.hasCost())
 			operation.fail(result.Error)
 			// Check for budget exhaustion specifically (BUDGET-04).
 			for _, reason := range result.FailoverReasons {
@@ -170,22 +177,24 @@ func ChatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 
 		bodySnippetLimit := cfg.BodySnippetLimit
 		if chatReq.Stream {
-			usage, cost, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, sessionID, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
-			operation.finish(result, usage, cost)
+			usage, _, err := handleStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, bodySnippetLimit, reqBodySnippet, sessionID, chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage)
+			operation.finish(result, usage, acc.cost(usage), acc.hasCost())
+			acc.err = err
 			operation.fail(err)
 		} else {
 			var usage *model.Usage
 			if result.Response != nil {
 				usage = result.Response.Usage
 			}
-			cost := computeCost(cm, result.DeploymentUsed, usage)
-			handleNonStreamingResponse(w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost, sessionID)
-			operation.finish(result, usage, cost)
+			cost := callAccountingFromContext(ctx).cost(usage)
+			handleNonStreamingResponse(ctx, w, result, r, store, sa, cm, budget, result.PoolName, apiKeyID, startTime, requestID, reqBodySnippet, cost, sessionID)
+			operation.finish(result, usage, acc.cost(usage), acc.hasCost())
 		}
 	}
 }
 
 func handleNonStreamingResponse(
+	ctx context.Context,
 	w http.ResponseWriter,
 	result *router.RouteResult,
 	r *router.Router,
@@ -205,7 +214,8 @@ func handleNonStreamingResponse(
 
 	// Log the request if storage is available
 	if store != nil && result.Response != nil {
-		go logRequest(logRequestParams{
+		logRequest(logRequestParams{
+			Accounting:      callAccountingFromContext(ctx),
 			Store:           store,
 			SpendAcc:        sa,
 			CostMap:         cm,
@@ -228,6 +238,7 @@ func handleNonStreamingResponse(
 		})
 	}
 
+	result.Response.ProxyAccounting = callAccountingFromContext(ctx).inlineRecord()
 	router.SetRouteHeaders(w, result)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result.Response); err != nil {
@@ -283,17 +294,16 @@ func handleStreamingResponse(
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			// Stream completed successfully.
-			fmt.Fprintf(w, "data: [DONE]\n\n")
-			flusher.Flush()
 
 			// STREAM-01: ReportSuccess fires here, after all chunks received.
 			r.ReportSuccess(result.DeploymentUsed)
 
 			// Retain missing usage as unknown instead of manufacturing zero tokens.
 			usage := streamUsage
-			cost := computeCost(cm, result.DeploymentUsed, usage)
+			cost := callAccountingFromContext(ctx).cost(usage)
 			if store != nil {
-				go logRequest(logRequestParams{
+				logRequest(logRequestParams{
+					Accounting:      callAccountingFromContext(ctx),
 					Store:           store,
 					SpendAcc:        sa,
 					CostMap:         cm,
@@ -315,6 +325,9 @@ func handleStreamingResponse(
 					ReqBodySnippet:  reqBodySnippet,
 				})
 			}
+			callAccountingFromContext(ctx).emitStream(w, false)
+			fmt.Fprint(w, "data: [DONE]\n\n")
+			flusher.Flush()
 			return usage, cost, nil
 		}
 		if err != nil {
@@ -353,6 +366,7 @@ func handleStreamingResponse(
 		// Accumulate usage from any chunk that carries it (Anthropic sends on message_delta).
 		if chunk != nil && chunk.Usage != nil {
 			streamUsage = chunk.Usage
+			callAccountingFromContext(ctx).collector.ObserveUsage(chunk.Usage)
 		}
 
 		output := *chunk
@@ -377,6 +391,7 @@ func handleStreamingResponse(
 // logRequestParams holds all parameters for logRequest, replacing the 15-param positional signature.
 // Phase 14 adds ReqBodySnippet as *string; nil means capture was disabled → SQL NULL.
 type logRequestParams struct {
+	Accounting      *callAccounting
 	Store           storage.Storage
 	SpendAcc        *keystore.SpendAccumulator
 	CostMap         *costmap.Manager
@@ -409,6 +424,10 @@ type logRequestParams struct {
 // respBodySnippet is empty for non-streaming requests; accumulated Delta.Content for streaming.
 // reqBodySnippet is nil when capture is disabled (limit=0) → stored as SQL NULL.
 func logRequest(p logRequestParams) {
+	if p.Accounting != nil {
+		p.Accounting.logParams = &p
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	usageKnown := p.Usage != nil

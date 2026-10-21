@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
@@ -13,6 +14,12 @@ import (
 // logDetailEntry is a superset of logEntry with all telemetry fields.
 // Fields are copied explicitly (not embedded) to avoid JSON serialization ambiguity.
 type logDetailEntry struct {
+	Accounting   *accounting.Record `json:"accounting,omitempty"`
+	AccountingID string             `json:"accounting_id,omitempty"`
+	CostSource   string             `json:"cost_source,omitempty"`
+	CostKnown    *bool              `json:"cost_known"`
+	CostCoverage string             `json:"cost_coverage,omitempty"`
+
 	// --- logEntry fields (verbatim copy — do not embed) ---
 	RequestID     string    `json:"request_id"`
 	SessionID     string    `json:"session_id"`
@@ -62,7 +69,8 @@ func AdminLogDetail(store storage.Storage) http.HandlerFunc {
 			return
 		}
 		entry := logDetailEntry{
-			RequestID:        log.RequestID,
+			RequestID:    log.RequestID,
+			AccountingID: log.AccountingID, CostSource: log.CostSource, CostKnown: log.CostKnown, CostCoverage: log.CostCoverage,
 			SessionID:        log.SessionID,
 			Model:            log.Model,
 			Provider:         log.Provider,
@@ -87,6 +95,9 @@ func AdminLogDetail(store storage.Storage) http.HandlerFunc {
 			RespBodySnippet:  log.RespBodySnippet,
 			CacheReadTokens:  log.CacheReadTokens,
 			CacheWriteTokens: log.CacheWriteTokens,
+		}
+		if db, ok := store.(storage.AccountingStorage); ok && log.AccountingID != "" {
+			entry.Accounting, _ = db.GetAccounting(req.Context(), log.AccountingID)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(entry)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 )
 
 func TestSpec_Build(t *testing.T) {
@@ -256,5 +257,27 @@ func TestSpec_HealthRouteIsPublic(t *testing.T) {
 
 	if pathItem.Get.Security != nil && len(*pathItem.Get.Security) > 0 {
 		t.Error("Health endpoint should be public (no security requirements)")
+	}
+}
+
+func TestAccountingSchemaAcceptsUnknownValues(t *testing.T) {
+	spec := New()
+	if err := spec.Build(); err != nil {
+		t.Fatal(err)
+	}
+	record := accounting.New("request", nil).Snapshot(false)
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value any
+	if err = json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	if err := spec.Doc().Components.Schemas["AccountingRecord"].Value.VisitJSON(value); err != nil {
+		t.Fatalf("canonical record does not match API schema: %v", err)
+	}
+	if spec.Doc().Paths.Value("/v1/accounting/{id}") == nil {
+		t.Fatal("missing accounting route")
 	}
 }

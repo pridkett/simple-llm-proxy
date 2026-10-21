@@ -25,7 +25,7 @@ func (s *Storage) GetLogByID(ctx context.Context, requestID string) (*storage.Re
 		       ul.req_body_snippet,
 		       COALESCE(ul.resp_body_snippet, ''),
 		       ul.cache_read_tokens,
-		       ul.cache_write_tokens, ul.usage_known, ul.session_id
+		       ul.cache_write_tokens, ul.usage_known, ul.session_id, ul.accounting_id, ul.cost_source, ul.cost_known, ul.cost_coverage
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
@@ -48,7 +48,7 @@ func (s *Storage) GetLogByID(ctx context.Context, requestID string) (*storage.Re
 		&entry.RespBodySnippet,
 		&entry.CacheReadTokens,
 		&entry.CacheWriteTokens,
-		&entry.UsageKnown, &entry.SessionID,
+		&entry.UsageKnown, &entry.SessionID, &entry.AccountingID, &entry.CostSource, &entry.CostKnown, &entry.CostCoverage,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil

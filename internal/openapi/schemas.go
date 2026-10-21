@@ -8,21 +8,22 @@ import (
 func buildSchemas() openapi3.Schemas {
 	return openapi3.Schemas{
 		// Request types
-		"ChatCompletionRequest":  chatCompletionRequestSchema(),
-		"ResponsesRequest":       responsesRequestSchema(),
-		"EmbeddingsRequest":      embeddingsRequestSchema(),
-		"Message":                messageSchema(),
-		"ContentPart":            contentPartSchema(),
-		"ImageURL":               imageURLSchema(),
-		"Tool":                   toolSchema(),
-		"FunctionDef":            functionDefSchema(),
-		"ResponseFormat":         responseFormatSchema(),
+		"ChatCompletionRequest": chatCompletionRequestSchema(),
+		"ResponsesRequest":      responsesRequestSchema(),
+		"EmbeddingsRequest":     embeddingsRequestSchema(),
+		"Message":               messageSchema(),
+		"ContentPart":           contentPartSchema(),
+		"ImageURL":              imageURLSchema(),
+		"Tool":                  toolSchema(),
+		"FunctionDef":           functionDefSchema(),
+		"ResponseFormat":        responseFormatSchema(),
 
 		// Response types
 		"ChatCompletionResponse": chatCompletionResponseSchema(),
 		"ResponsesResponse":      responsesResponseSchema(),
 		"EmbeddingsResponse":     embeddingsResponseSchema(),
 		"ModelsResponse":         modelsResponseSchema(),
+		"AccountingRecord":       accountingSchema(),
 		"HealthResponse":         healthResponseSchema(),
 		"StreamChunk":            streamChunkSchema(),
 		"Choice":                 choiceSchema(),
@@ -34,8 +35,8 @@ func buildSchemas() openapi3.Schemas {
 		"FunctionCall":           functionCallSchema(),
 
 		// Error types
-		"APIError":               apiErrorSchema(),
-		"ErrorDetail":            errorDetailSchema(),
+		"APIError":    apiErrorSchema(),
+		"ErrorDetail": errorDetailSchema(),
 
 		// Admin types
 		"AdminStatusResponse": adminStatusResponseSchema(),
@@ -367,6 +368,7 @@ func chatCompletionResponseSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"id", "object", "created", "model", "choices"},
 			Properties: openapi3.Schemas{
+				"proxy_accounting": {Ref: "#/components/schemas/AccountingRecord"},
 				"id": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
@@ -419,6 +421,7 @@ func embeddingsResponseSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"object", "data", "model"},
 			Properties: openapi3.Schemas{
+				"proxy_accounting": {Ref: "#/components/schemas/AccountingRecord"},
 				"object": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
@@ -497,6 +500,7 @@ func streamChunkSchema() *openapi3.SchemaRef {
 			Description: "A streaming response chunk sent as Server-Sent Events (SSE)",
 			Required:    []string{"id", "object", "created", "model", "choices"},
 			Properties: openapi3.Schemas{
+				"proxy_accounting": {Ref: "#/components/schemas/AccountingRecord"},
 				"id": &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:        &openapi3.Types{"string"},
@@ -837,9 +841,9 @@ func modelStatusInfoSchema() *openapi3.SchemaRef {
 		Value: &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
-				"model_name":           {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"total_deployments":    {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"healthy_deployments":  {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"model_name":          {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"total_deployments":   {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"healthy_deployments": {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
 				"deployments": {Value: &openapi3.Schema{
 					Type:  &openapi3.Types{"array"},
 					Items: &openapi3.SchemaRef{Ref: "#/components/schemas/DeploymentInfo"},
@@ -1043,9 +1047,10 @@ func responsesResponseSchema() *openapi3.SchemaRef {
 			Type:     &openapi3.Types{"object"},
 			Required: []string{"id", "status"},
 			Properties: openapi3.Schemas{
-				"id":     {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"object": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				"model":  {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"proxy_accounting": {Ref: "#/components/schemas/AccountingRecord"},
+				"id":               {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"object":           {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				"model":            {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
 				"status": {Value: &openapi3.Schema{
 					Type:        &openapi3.Types{"string"},
 					Description: "queued|in_progress|completed|failed|cancelled|incomplete",

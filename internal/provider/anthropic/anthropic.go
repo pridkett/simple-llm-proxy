@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
@@ -149,13 +150,14 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 	httpReq.Header.Set("x-api-key", p.apiKey)
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := provider.Do(p.client, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
+	accounting.ObserveJSON(ctx, respBody)
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
@@ -194,7 +196,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := provider.Do(p.client, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
 	}
@@ -202,6 +204,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		accounting.ObserveJSON(ctx, respBody)
 		return nil, provider.NewHTTPError(p.Name(), resp.StatusCode, resp.Header, respBody)
 	}
 
@@ -232,6 +235,7 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 				}
 				return
 			}
+			accounting.ObserveJSON(ctx, data)
 			var event anthropicStreamEvent
 			if err := json.Unmarshal(data, &event); err != nil {
 				errs <- fmt.Errorf("anthropic stream: %w", err)

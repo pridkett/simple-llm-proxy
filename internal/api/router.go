@@ -73,7 +73,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
 		mux.Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Get("/v1/responses/{id}", handler.GetResponseJob(store))
-		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store))
+		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store, sa))
 		mux.Get("/v1/models", handler.Models(r))
 		mux.Get("/v1/models/{model}", handler.ModelDetail(r, cm))
 		mux.Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
@@ -81,11 +81,18 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Delete("/v1/models/{model}/costs", handler.DeleteModelCosts(cm, store))
 	})
 
+	// Accounting reads remain accessible after generation limits have been exhausted.
+	mux.Group(func(mux chi.Router) {
+		mux.Use(middleware.KeyAuthReadOnly(reloader.Config().GeneralSettings.MasterKey, store, cache))
+		mux.Get("/v1/accounting/{id}", handler.AccountingDetail(store, false))
+	})
+
 	// Group 2: /admin/* — browser clients, session auth
 	mux.Group(func(mux chi.Router) {
 		mux.Use(sm.LoadAndSave)
 		mux.Use(middleware.RequireSession(store, sm))
 
+		mux.Get("/admin/accounting/{id}", handler.AccountingDetail(store, true))
 		mux.Get("/admin/status", handler.AdminStatus(r, startTime))
 		mux.Get("/admin/config", handler.AdminConfig(reloader.Config))
 		mux.Post("/admin/reload", handler.AdminReload(reloader, r))

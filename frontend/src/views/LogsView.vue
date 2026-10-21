@@ -140,7 +140,8 @@
                   <td class="px-4 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs">{{ log.endpoint }}</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.usage_known === false ? '—' : (log.prompt_tokens || 0).toLocaleString() }}</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.usage_known === false ? '—' : (log.completion_tokens || 0).toLocaleString() }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-mono text-xs">{{ log.usage_known === false ? 'Unknown' : formatCost(log.total_cost) }}</td>
+                  <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-mono text-xs">{{ log.cost_known === false || (log.cost_known == null && log.usage_known === false) ? 'Unknown' : formatCost(log.total_cost) }}
+ <span v-if="log.cost_source" class="block text-gray-500 text-[10px]">{{ costSourceLabel(log.cost_source) }}{{ log.cost_coverage === 'partial' ? ' · Partial' : '' }}</span></td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{{ log.latency_ms }}ms</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
                     {{ log.ttft_ms != null ? log.ttft_ms + 'ms' : '—' }}
@@ -229,8 +230,34 @@
                                ? detailCache.get(log.request_id).ttft_ms + 'ms' : '—' }}
                           </span>
                           <span class="text-gray-500 dark:text-gray-400">Cost</span>
-                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).usage_known === false ? 'Unknown' : formatCost(detailCache.get(log.request_id).total_cost) }}</span>
+                          <span class="text-gray-800 dark:text-gray-200 font-bold">{{ detailCache.get(log.request_id).cost_known === false || (detailCache.get(log.request_id).cost_known == null && detailCache.get(log.request_id).usage_known === false) ? 'Unknown' : formatCost(detailCache.get(log.request_id).total_cost) }}</span>
                         </div>
+                        <template v-if="detailCache.get(log.request_id).accounting">
+                          <p class="text-xs font-bold text-gray-500 dark:text-gray-400 mt-4 mb-2">Accounting</p>
+                          <p class="text-xs text-gray-600 dark:text-gray-300 mb-2">{{ costSourceLabel(detailCache.get(log.request_id).cost_source) }} · {{ detailCache.get(log.request_id).accounting.coverage }} coverage</p>
+                          <details class="text-xs">
+                            <summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">Token types, pricing, and upstream attempts</summary>
+                            <div v-for="(attempt, index) in detailCache.get(log.request_id).accounting.attempts" :key="index"
+                                 class="mt-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded">
+                              <p class="font-semibold text-gray-800 dark:text-gray-200">{{ index + 1 }}. {{ attempt.provider }} / {{ attempt.model }} · {{ attempt.status }}</p>
+                              <dl class="grid grid-cols-2 gap-1 mt-2 text-gray-600 dark:text-gray-300">
+                                <dt>Selected cost</dt><dd>{{ decimalCost(attempt.cost.amount) }} · {{ costSourceLabel(attempt.cost.source) }}</dd>
+                                <dt>Upstream report</dt><dd>{{ decimalCost(attempt.cost.reported_amount) }}</dd>
+                                <dt>Local estimate</dt><dd>{{ decimalCost(attempt.cost.estimated_amount) }}</dd>
+                                <dt>Input / output tokens</dt><dd>{{ attempt.usage.input_tokens ?? 'Unknown' }} / {{ attempt.usage.output_tokens ?? 'Unknown' }}</dd>
+                                <dt>Cache read / write</dt><dd>{{ attempt.usage.input_details.cache_read_tokens ?? 'Unknown' }} / {{ attempt.usage.input_details.cache_write_tokens ?? 'Unknown' }}</dd>
+                                <dt>Reasoning tokens</dt><dd>{{ attempt.usage.output_details.reasoning_tokens ?? 'Unknown' }}</dd>
+                              </dl>
+                              <table v-if="attempt.cost.components?.length" class="w-full mt-3 text-left text-gray-600 dark:text-gray-300">
+                                <thead><tr><th>Token type</th><th>Tokens</th><th>USD / token</th><th>Cost</th></tr></thead>
+                                <tbody><tr v-for="component in attempt.cost.components" :key="component.type">
+                                  <td>{{ component.type.replaceAll('_', ' ') }}</td><td>{{ component.tokens }}</td><td>{{ component.rate_per_token }}</td><td>{{ decimalCost(component.amount) }}</td>
+                                </tr></tbody>
+                              </table>
+                              <p v-for="warning in attempt.warnings" :key="warning" class="text-amber-700 dark:text-amber-400 mt-2">{{ warning }}</p>
+                            </div>
+                          </details>
+                        </template>
                       </div>
                     </div>
                   </td>
@@ -282,6 +309,12 @@
 </template>
 
 <script setup>
+function decimalCost(amount) { return amount == null ? 'Unknown' : `$${amount}` }
+
+function costSourceLabel(source) {
+ return { upstream: 'Upstream-reported', estimate: 'Estimated', mixed: 'Mixed sources', unknown: 'Unknown' }[source] || 'Legacy'
+}
+
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { api } from '../api/client.js'

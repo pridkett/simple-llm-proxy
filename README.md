@@ -4,6 +4,9 @@ A Go proxy for apps using OpenAI-compatible chat completions. Keep upstream Open
 
 For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
 
+Per-request usage and cost provenance, upstream reports, streaming accounting, and
+client examples are documented in [Request accounting](docs/accounting.md).
+
 ## Features
 
 - **OpenAI-compatible API** - Chat completions, streamed tools, and embeddings
