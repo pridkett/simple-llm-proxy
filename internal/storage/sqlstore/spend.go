@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -36,9 +36,9 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
           AND ul.request_time >= ?
           AND ul.request_time < ?
           AND k.is_active = TRUE
-          AND (? IS NULL OR t.id = ?)
-          AND (? IS NULL OR a.id = ?)
-          AND (? IS NULL OR k.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)
         GROUP BY ul.model
         ORDER BY total_spend DESC
     `
@@ -48,7 +48,7 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
 		filters.AppID, filters.AppID,
 		filters.KeyID, filters.KeyID,
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, s.bind(q), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get model spend: %w", err)
 	}
@@ -69,9 +69,13 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
 // GetDailySpend returns spend grouped by calendar day for the given date range and filters.
 // Days with zero spend are not returned — the frontend fills gaps.
 func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.DailySpendRow, error) {
-	const q = `
+	day := "SUBSTR(ul.request_time, 1, 10)"
+	if s.dialect == PostgreSQL {
+		day = "to_char(ul.request_time AT TIME ZONE 'UTC', 'YYYY-MM-DD')"
+	}
+	query := fmt.Sprintf(`
         SELECT
-            SUBSTR(ul.request_time, 1, 10)   AS day,
+            %s AS day,
             COALESCE(SUM(ul.total_cost), 0)  AS total_spend,
             COUNT(*)                          AS request_count
         FROM usage_logs ul
@@ -82,19 +86,19 @@ func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters
           AND ul.request_time >= ?
           AND ul.request_time < ?
           AND k.is_active = TRUE
-          AND (? IS NULL OR t.id = ?)
-          AND (? IS NULL OR a.id = ?)
-          AND (? IS NULL OR k.id = ?)
-        GROUP BY SUBSTR(ul.request_time, 1, 10)
+          AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)
+        GROUP BY %s
         ORDER BY day
-    `
+    `, day, day)
 	args := []any{
 		from, to,
 		filters.TeamID, filters.TeamID,
 		filters.AppID, filters.AppID,
 		filters.KeyID, filters.KeyID,
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, s.bind(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get daily spend: %w", err)
 	}
@@ -113,7 +117,7 @@ func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters
 
 func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.SpendRow, error) {
 	// Build the query with optional filter predicates.
-	// Uses the double-bind pattern: (? IS NULL OR col = ?) — binds the pointer value twice.
+	// Uses the double-bind pattern: (CAST(? AS BIGINT) IS NULL OR col = ?) — binds the pointer value twice.
 	// This is correct ONLY when Go passes nil for absent filters (not 0).
 	// SpendFilters uses *int64 pointer types to enforce this contract.
 	//
@@ -140,9 +144,9 @@ func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filte
             AND ul.request_time >= ?
             AND ul.request_time < ?
         WHERE k.is_active = TRUE
-          AND (? IS NULL OR t.id = ?)
-          AND (? IS NULL OR a.id = ?)
-          AND (? IS NULL OR k.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
+          AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)
         GROUP BY k.id, k.name, k.max_budget, k.soft_budget, a.id, a.name, t.id, t.name
         ORDER BY total_spend DESC
     `
@@ -154,7 +158,7 @@ func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filte
 		filters.KeyID, filters.KeyID,
 	}
 
-	rows, err := s.db.QueryContext(ctx, baseQuery, args...)
+	rows, err := s.db.QueryContext(ctx, s.bind(baseQuery), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get spend summary: %w", err)
 	}

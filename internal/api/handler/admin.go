@@ -10,6 +10,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage/database"
 )
 
 type adminStatusResponse struct {
@@ -101,7 +102,7 @@ func AdminConfig(getCfg func() *config.Config) http.HandlerFunc {
 			},
 		}
 		resp.GeneralSettings.MasterKeySet = cfg.GeneralSettings.MasterKey != ""
-		resp.GeneralSettings.DatabaseURL = cfg.GeneralSettings.DatabaseURL
+		resp.GeneralSettings.DatabaseURL = database.RedactedURL(cfg.GeneralSettings.DatabaseURL)
 		resp.GeneralSettings.Port = cfg.GeneralSettings.Port
 
 		w.Header().Set("Content-Type", "application/json")

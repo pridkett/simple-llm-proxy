@@ -285,6 +285,28 @@ func TestAdminConfig_ReflectsReloadedConfig(t *testing.T) {
 	}
 }
 
+func TestAdminConfig_RedactsDatabaseCredentials(t *testing.T) {
+	cfg := configForTest()
+	cfg.GeneralSettings.DatabaseURL = "postgresql://private-user:private-password@db.home/proxy?password=query-secret&sslmode=verify-full"
+	rr := httptest.NewRecorder()
+	AdminConfig(func() *config.Config { return cfg })(rr, httptest.NewRequest(http.MethodGet, "/admin/config", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d", rr.Code)
+	}
+	for _, secret := range []string{"private-user", "private-password", "query-secret"} {
+		if contains(rr.Body.String(), secret) {
+			t.Fatalf("database secret leaked: %s", secret)
+		}
+	}
+	var resp adminConfigResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.GeneralSettings.DatabaseURL != "postgresql://[redacted]" {
+		t.Fatalf("unexpected database display: %q", resp.GeneralSettings.DatabaseURL)
+	}
+}
+
 func TestAdminReload_Success(t *testing.T) {
 	// Write an initial config file
 	dir := t.TempDir()

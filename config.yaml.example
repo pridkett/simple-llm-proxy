@@ -91,5 +91,8 @@ router_settings:
 
 general_settings:
   master_key: os.environ/PROXY_MASTER_KEY
-  database_url: ./proxy.db
+  database_url: ./proxy.db # SQLite path (default), or postgres:// / postgresql:// URL
+  # For PostgreSQL: database_url: os.environ/PROXY_DATABASE_URL
+  # Example env value: postgresql://proxy:password@postgres.home/llm_proxy?sslmode=verify-full
+  # Switching databases does not import SQLite data. See README.md and ADR 014.
   port: 8080

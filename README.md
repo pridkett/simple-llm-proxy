@@ -103,7 +103,7 @@ router_settings:
 
 general_settings:
   master_key: os.environ/PROXY_MASTER_KEY
-  database_url: ./proxy.db               # SQLite path
+  database_url: ./proxy.db               # SQLite path, or a PostgreSQL URL
   port: 8080
 ```
 
@@ -115,6 +115,57 @@ Use `os.environ/VAR_NAME` syntax to reference environment variables:
 api_key: os.environ/OPENAI_API_KEY
 master_key: os.environ/PROXY_MASTER_KEY
 ```
+
+### PostgreSQL storage
+
+SQLite remains the default. To use PostgreSQL 17 or newer, create a dedicated
+database owned by the proxy's database role and configure:
+
+```yaml
+general_settings:
+  database_url: os.environ/PROXY_DATABASE_URL
+```
+
+Set `PROXY_DATABASE_URL` in the proxy process's environment, for example
+`postgresql://proxy:URL_ENCODED_PASSWORD@postgres.home:5432/llm_proxy?sslmode=verify-full`.
+Configure a trusted CA with `sslrootcert` when required. Both `postgres://` and
+`postgresql://` are accepted. The role needs schema creation/migration permissions;
+tables and indexes are created automatically at startup. Connection and migration
+failures stop startup. Storage changes require a restart.
+
+PostgreSQL stores the same data as SQLite, including login sessions, usage logs,
+configured body snippets, and background Responses jobs. It uses a pool of up
+to 10 connections per process, with 5 idle connections and a 30-minute connection
+lifetime. Keep this within the database's connection budget. For an encrypted
+home-network connection, prefer `sslmode=verify-full`; `sslmode=disable` is an
+explicit option for trusted development networks. Keep database credentials in
+your environment/secret manager and include them in container environment
+configuration if using Docker.
+
+**Switching backends does not copy data.** Back up the SQLite database and stop
+the proxy before changing the URL. PostgreSQL starts empty: sign in again and
+recreate teams, applications, and API keys. If you need existing identities,
+keys, history, or pending jobs, keep SQLite until you have a separately verified
+data-import process. No automatic importer is provided. Verify login, key
+creation, a request log, and spend after cutover. To roll back, stop the proxy,
+restore the SQLite URL, and restart; PostgreSQL-only writes will not be copied
+back. Operate and test PostgreSQL backups/restores separately from proxy backups.
+
+PostgreSQL allows concurrent database operations and independent database
+management. It does **not** yet make running multiple proxy replicas safe:
+budgets, rate limits, caches, and worker coordination still have process-local
+state. Full request/response archival is also separate from existing bounded
+snippets. See [ADR 014](adr/014-postgresql-storage.md) for the design and limits.
+
+To run integration tests against a dedicated PostgreSQL test database:
+
+```sh
+TEST_POSTGRES_URL='postgresql://proxy_test:password@localhost:5432/proxy_test?sslmode=disable' go test -race ./...
+```
+
+Tests create and remove isolated schemas within that database. CI runs them
+against PostgreSQL 17; local runs skip PostgreSQL integration tests when the
+variable is unset.
 
 ### OpenTelemetry traces
 
