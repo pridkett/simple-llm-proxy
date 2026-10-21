@@ -24,7 +24,11 @@ var migrations = []string{baseline, `
  ALTER TABLE usage_logs ADD COLUMN cost_source TEXT NOT NULL DEFAULT '';
  ALTER TABLE usage_logs ADD COLUMN cost_known BOOLEAN;
  ALTER TABLE usage_logs ADD COLUMN cost_coverage TEXT NOT NULL DEFAULT '';
- `}
+ `,
+	// Decision access is opt-in for existing and newly created app keys.
+	`ALTER TABLE api_keys ADD COLUMN allow_decisions BOOLEAN NOT NULL DEFAULT FALSE;
+     CREATE INDEX idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC);`,
+}
 
 func (s *Storage) migrate(ctx context.Context) error {
 	tx, err := s.DB().BeginTx(ctx, nil)

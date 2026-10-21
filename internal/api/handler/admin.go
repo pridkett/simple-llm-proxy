@@ -52,13 +52,14 @@ func AdminStatus(r *router.Router, startTime time.Time) http.HandlerFunc {
 
 // configModelEntry is a sanitized model config for the API response.
 type configModelEntry struct {
-	ModelName   string `json:"model_name"`
-	Provider    string `json:"provider"`
-	ActualModel string `json:"actual_model"`
-	APIKeySet   bool   `json:"api_key_set"`
-	APIBase     string `json:"api_base,omitempty"`
-	RPM         int    `json:"rpm,omitempty"`
-	TPM         int    `json:"tpm,omitempty"`
+	Decision    *config.DecisionConfig `json:"decision,omitempty"`
+	ModelName   string                 `json:"model_name"`
+	Provider    string                 `json:"provider"`
+	ActualModel string                 `json:"actual_model"`
+	APIKeySet   bool                   `json:"api_key_set"`
+	APIBase     string                 `json:"api_base,omitempty"`
+	RPM         int                    `json:"rpm,omitempty"`
+	TPM         int                    `json:"tpm,omitempty"`
 }
 
 type adminConfigResponse struct {
@@ -82,6 +83,7 @@ func AdminConfig(getCfg func() *config.Config) http.HandlerFunc {
 			parsed := config.ParseModelString(mc.LiteLLMParams.Model)
 			models = append(models, configModelEntry{
 				ModelName:   mc.ModelName,
+				Decision:    mc.Decision,
 				Provider:    parsed.Provider,
 				ActualModel: parsed.ModelName,
 				APIKeySet:   mc.LiteLLMParams.APIKey != "",
@@ -193,6 +195,11 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 
 		// Parse optional filter params.
 		var filters storage.LogsFilter
+		filters.RequestType = req.URL.Query().Get("request_type")
+		if filters.RequestType != "" && filters.RequestType != "decision" && filters.RequestType != "other" {
+			model.WriteError(w, model.ErrBadRequest("request_type must be decision or other"))
+			return
+		}
 		filters.Model = req.URL.Query().Get("model")
 		filters.SessionID = req.URL.Query().Get("session_id")
 		if v := req.URL.Query().Get("team_id"); v != "" {

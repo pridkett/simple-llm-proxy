@@ -25,7 +25,7 @@
             </div>
             <div class="flex items-center gap-3">
               <StatusBadge :status="model.healthy_deployments > 0 ? 'healthy' : 'cooldown'" />
-              <button class="btn-secondary text-xs" @click="togglePlayground(model.model_name)">
+              <button v-if="!model.deployments?.some(d => d.decision)" class="btn-secondary text-xs" @click="togglePlayground(model.model_name)">
                 {{ openPlaygrounds.has(model.model_name) ? 'Hide test' : 'Test' }}
               </button>
             </div>
@@ -47,7 +47,12 @@
               <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
                 <tr v-for="(dep, i) in model.deployments" :key="i">
                   <td class="px-6 py-3 font-medium capitalize">{{ dep.provider }}</td>
-                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{{ dep.actual_model }}</td>
+                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{{ dep.actual_model }}
+                    <div v-if="dep.decision" class="mt-1 text-xs text-indigo-700 dark:text-indigo-300 font-sans">
+                      Decision · {{ dep.decision.modalities.join(', ') }} · {{ dep.decision.question_types.join(', ') }}
+                      <p class="mt-1 text-gray-500 dark:text-gray-400">Input: {{ formatCostPerToken(dep.decision.pricing.input_cost_per_token) }} · Output: {{ formatCostPerToken(dep.decision.pricing.output_cost_per_token) }} · ${{ dep.decision.pricing.cost_per_request }} / call</p>
+                    </div>
+                  </td>
                   <td class="px-6 py-3">
                     <StatusBadge :status="dep.status" />
                     <span v-if="dep.cooldown_until" class="ml-2 text-xs text-gray-400">
@@ -63,7 +68,7 @@
           </div>
 
           <!-- Cost information section -->
-          <div class="border-t border-gray-100 dark:border-gray-700">
+          <div v-if="!model.deployments?.some(d => d.decision)" class="border-t border-gray-100 dark:border-gray-700">
             <div class="px-6 py-3 bg-white dark:bg-gray-800 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Info</span>
@@ -531,7 +536,7 @@ function formatTime(iso) {
 }
 
 function formatCostPerToken(val) {
-  if (!val) return '—'
+  if (val == null) return '—'
   return `$${(val * PER_MTOK).toFixed(4)}/MTok`
 }
 </script>

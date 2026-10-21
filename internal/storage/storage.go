@@ -113,7 +113,8 @@ type Storage interface {
 	// keyPrefix is the first 8 hex chars (display only). keyHash is SHA-256 hex (lookup).
 	// allowedModels is stored in key_allowed_models; empty slice = all models allowed.
 	// Returns the created key record (full plaintext key is NOT stored or returned here).
-	CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) (*APIKey, error)
+	// The optional decision permission defaults to false when absent or nil.
+	CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) (*APIKey, error)
 
 	// GetAPIKeyByHash looks up a key by its SHA-256 hash. Returns (nil, nil) if not found.
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
@@ -142,7 +143,8 @@ type Storage interface {
 
 	// UpdateAPIKey updates the mutable fields of a key and replaces its allowed
 	// model list atomically. Key hash, prefix, and is_active are never changed here.
-	UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string) error
+	// An absent/nil decision permission preserves the current value.
+	UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) error
 
 	// RecordKeySpend adds the given cost to usage_logs for the given key.
 	// This is a direct INSERT — the spend accumulator (in-memory) is the hot-path; this is the flush mechanism.
@@ -290,19 +292,20 @@ type Application struct {
 // APIKey represents a per-application API key with enforcement limits.
 // Full plaintext key is NEVER stored — only the prefix (first 8 hex chars) and SHA-256 hash.
 type APIKey struct {
-	ID            int64     `json:"id"`
-	ApplicationID int64     `json:"application_id"`
-	AppName       string    `json:"-"` // populated on key-cache lookup
-	TeamName      string    `json:"-"` // populated on key-cache lookup
-	Name          string    `json:"name"`
-	KeyPrefix     string    `json:"key_prefix"`  // first 8 chars after "sk-app-"
-	KeyHash       string    `json:"-"`           // SHA-256 hex — never serialized to JSON
-	MaxRPM        *int      `json:"max_rpm"`     // nil = unlimited
-	MaxRPD        *int      `json:"max_rpd"`     // nil = unlimited
-	MaxBudget     *float64  `json:"max_budget"`  // nil = unlimited (hard cap)
-	SoftBudget    *float64  `json:"soft_budget"` // nil = no alert threshold
-	IsActive      bool      `json:"is_active"`
-	CreatedAt     time.Time `json:"created_at"`
+	AllowDecisions bool      `json:"allow_decisions"`
+	ID             int64     `json:"id"`
+	ApplicationID  int64     `json:"application_id"`
+	AppName        string    `json:"-"` // populated on key-cache lookup
+	TeamName       string    `json:"-"` // populated on key-cache lookup
+	Name           string    `json:"name"`
+	KeyPrefix      string    `json:"key_prefix"`  // first 8 chars after "sk-app-"
+	KeyHash        string    `json:"-"`           // SHA-256 hex — never serialized to JSON
+	MaxRPM         *int      `json:"max_rpm"`     // nil = unlimited
+	MaxRPD         *int      `json:"max_rpd"`     // nil = unlimited
+	MaxBudget      *float64  `json:"max_budget"`  // nil = unlimited (hard cap)
+	SoftBudget     *float64  `json:"soft_budget"` // nil = no alert threshold
+	IsActive       bool      `json:"is_active"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // AccessibleKey is an API key enriched with team and application context,
@@ -376,10 +379,11 @@ type RequestLog struct {
 // All pointer fields are nil when no filter is applied.
 // String fields use empty-string sentinel: empty = no filter (consistent with Model).
 type LogsFilter struct {
-	SessionID string // exact match; empty = no session filter
-	Model     string // empty string means no filter
-	TeamID    *int64
-	AppID     *int64
+	RequestType string // empty = all; decision or other, derived from canonical endpoint
+	SessionID   string // exact match; empty = no session filter
+	Model       string // empty string means no filter
+	TeamID      *int64
+	AppID       *int64
 	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
 	Provider string     // empty string = no filter (same pattern as Model)
 	PoolName string     // empty string = no filter (same pattern as Model)

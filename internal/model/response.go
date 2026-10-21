@@ -1,6 +1,10 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
+)
 
 // ChatCompletionResponse represents an OpenAI-compatible chat completion response.
 type ChatCompletionResponse struct {
@@ -71,10 +75,11 @@ type ModelsResponse struct {
 
 // ModelInfo represents a model in the models list.
 type ModelInfo struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
+	DecisionDeployments []*config.DecisionConfig `json:"decision_deployments,omitempty"`
+	ID                  string                   `json:"id"`
+	Object              string                   `json:"object"`
+	Created             int64                    `json:"created"`
+	OwnedBy             string                   `json:"owned_by"`
 }
 
 // CostsInfo holds cost and context window data for a model.
@@ -102,11 +107,12 @@ type CostsInfo struct {
 // ModelDetailResponse is the response for GET /v1/models/{model}.
 // It extends the basic model info with cost and capability data.
 type ModelDetailResponse struct {
-	ID      string    `json:"id"`
-	Object  string    `json:"object"`
-	Created int64     `json:"created"`
-	OwnedBy string    `json:"owned_by"`
-	Costs   CostsInfo `json:"costs"`
+	DecisionDeployments []*config.DecisionConfig `json:"decision_deployments,omitempty"`
+	ID                  string                   `json:"id"`
+	Object              string                   `json:"object"`
+	Created             int64                    `json:"created"`
+	OwnedBy             string                   `json:"owned_by"`
+	Costs               CostsInfo                `json:"costs"`
 }
 
 // StreamChunk represents a streaming response chunk.

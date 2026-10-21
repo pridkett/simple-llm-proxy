@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 )
 
@@ -28,6 +29,11 @@ type Provider interface {
 
 	// SupportsEmbeddings returns true if this provider supports embeddings.
 	SupportsEmbeddings() bool
+}
+
+// DecisionsProvider is an optional capability, separate from chat generation.
+type DecisionsProvider interface {
+	Decide(context.Context, *model.DecisionRequest) (*model.DecisionResponse, error)
 }
 
 // ResponsesProvider is implemented by providers that support the OpenAI
@@ -70,15 +76,16 @@ type Stream interface {
 
 // Deployment represents a specific model deployment.
 type Deployment struct {
-	CostPolicy   string   // prefer_upstream (default), estimate_only, require_upstream
-	ModelName    string   // User-facing model name
-	Provider     Provider // The provider instance
-	ProviderName string   // Provider name (e.g., "openai")
-	ActualModel  string   // Actual model name sent to provider
-	APIKey       string   // API key for this deployment
-	APIBase      string   // Optional custom API base URL
-	RPM          int      // Rate limit (requests per minute)
-	TPM          int      // Rate limit (tokens per minute)
+	CostPolicy   string                 // prefer_upstream (default), estimate_only, require_upstream
+	Decision     *config.DecisionConfig // nil for existing generation deployments
+	ModelName    string                 // User-facing model name
+	Provider     Provider               // The provider instance
+	ProviderName string                 // Provider name (e.g., "openai")
+	ActualModel  string                 // Actual model name sent to provider
+	APIKey       string                 // API key for this deployment
+	APIBase      string                 // Optional custom API base URL
+	RPM          int                    // Rate limit (requests per minute)
+	TPM          int                    // Rate limit (tokens per minute)
 }
 
 // DeploymentKey returns the stable string identity for this deployment.
@@ -88,6 +95,9 @@ type Deployment struct {
 // Note: usage_logs.deployment_key column exists in the schema but is populated in Phase 5/6,
 // not in this phase. This method is the contract; wiring to the DB column is deferred.
 func (d *Deployment) DeploymentKey() string {
+	if d.Decision != nil {
+		return d.ProviderName + ":" + d.ActualModel + ":" + d.APIBase + ":decision:" + d.Decision.Protocol + ":" + d.Decision.Path
+	}
 	return d.ProviderName + ":" + d.ActualModel + ":" + d.APIBase
 }
 

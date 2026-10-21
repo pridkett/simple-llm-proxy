@@ -70,7 +70,7 @@ func TestSessionMigrationPreservesExistingLogs(t *testing.T) {
 		`DROP INDEX idx_usage_logs_session_time`,
 		`ALTER TABLE usage_logs DROP COLUMN session_id`,
 		`ALTER TABLE responses_jobs DROP COLUMN session_id`,
-		`DELETE FROM schema_migrations WHERE version >= 48`,
+		`DELETE FROM schema_migrations WHERE version BETWEEN 48 AND 58`,
 		`INSERT INTO usage_logs (request_id,model,provider,endpoint,status_code,latency_ms,request_time) VALUES ('old','m','p','/v1/chat/completions',200,10,datetime('now'))`,
 	} {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {

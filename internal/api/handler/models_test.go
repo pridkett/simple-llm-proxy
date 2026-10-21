@@ -90,7 +90,7 @@ func (m *mockStorage) ListApplications(_ context.Context, _ int64) ([]*storage.A
 func (m *mockStorage) CleanExpiredSessions(_ context.Context) error { return nil }
 
 // API Key CRUD stubs — required by interface, not exercised by handler tests.
-func (m *mockStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+func (m *mockStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string, _ ...*bool) (*storage.APIKey, error) {
 	return nil, nil
 }
 func (m *mockStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
@@ -106,7 +106,7 @@ func (m *mockStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]string,
 func (m *mockStorage) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
-func (m *mockStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+func (m *mockStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string, _ ...*bool) error {
 	return nil
 }
 func (m *mockStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error { return nil }

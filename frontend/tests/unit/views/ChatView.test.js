@@ -81,6 +81,22 @@ describe('ChatView', () => {
     expect(input.attributes('placeholder')).toContain('Search and select models')
   })
 
+  it('keeps decision-only deployments out of the chat selector', async () => {
+    mockModels.mockResolvedValue({ data: [
+      { id: 'chat-model' },
+      { id: 'jev', decision_deployments: [{ protocol: 'systemone' }] }
+    ] })
+    const router = makeRouter()
+    await router.push('/chat')
+    const wrapper = mount(ChatView, { global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.find('input[type="text"]').trigger('focus')
+    const names = wrapper.findAll('.max-h-48 button').map(b => b.text())
+    expect(names).toContain('chat-model')
+    expect(names).not.toContain('jev')
+    wrapper.unmount()
+  })
+
   it('shows loading state while fetching models', async () => {
     mockModels.mockReturnValue(new Promise(() => {})) // never resolves
     const router = makeRouter()

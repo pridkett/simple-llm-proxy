@@ -101,7 +101,7 @@ func TestMigrationIdempotency(t *testing.T) {
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 58 {
-		t.Errorf("expected 58 rows in schema_migrations, got %d", count)
+	if count != 60 {
+		t.Errorf("expected 60 rows in schema_migrations, got %d", count)
 	}
 }

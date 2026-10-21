@@ -234,7 +234,7 @@ onMounted(async () => {
   ])
 
   if (modelsResult.status === 'fulfilled' && modelsResult.value) {
-    availableModels.value = (modelsResult.value.data ?? []).map(m => m.id).sort((a, b) => a.localeCompare(b))
+    availableModels.value = (modelsResult.value.data ?? []).filter(m => !m.decision_deployments?.length).map(m => m.id).sort((a, b) => a.localeCompare(b))
   }
   loadingModels.value = false
 

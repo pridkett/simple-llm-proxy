@@ -26,6 +26,10 @@ func Models(r *router.Router) http.HandlerFunc {
 				Created: time.Now().Unix(),
 				OwnedBy: "simple-llm-proxy",
 			}
+			deps, _ := r.DecisionDeployments(name)
+			for _, d := range deps {
+				data[i].DecisionDeployments = append(data[i].DecisionDeployments, d.Decision)
+			}
 		}
 
 		resp := model.ModelsResponse{
@@ -77,6 +81,14 @@ func ModelDetail(r *router.Router, cm *costmap.Manager) http.HandlerFunc {
 		}
 
 		resp := buildModelDetailResponse(modelName, cm, candidates)
+		deps, _ := r.DecisionDeployments(modelName)
+		for _, d := range deps {
+			resp.DecisionDeployments = append(resp.DecisionDeployments, d.Decision)
+		}
+		if len(resp.DecisionDeployments) > 0 {
+			// Exact prices are per deployment and endpoint, never generic chat costs.
+			resp.Costs = model.CostsInfo{Mode: "decision", Source: "config"}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	}
@@ -166,7 +178,10 @@ func DeleteModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFu
 // buildModelDetailResponse constructs a ModelDetailResponse for the given model name,
 // resolving cost data from the cost map using the provided candidate actual model strings.
 func buildModelDetailResponse(modelName string, cm *costmap.Manager, candidates []string) model.ModelDetailResponse {
-	result := cm.GetEffectiveSpec(modelName, candidates)
+	result := costmap.EffectiveSpecResult{}
+	if cm != nil {
+		result = cm.GetEffectiveSpec(modelName, candidates)
+	}
 	costs := model.CostsInfo{}
 	if result.Found {
 		s := result.Spec

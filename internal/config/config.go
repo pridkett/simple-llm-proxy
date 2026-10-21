@@ -52,11 +52,32 @@ type LogSettings struct {
 
 // ModelConfig represents a model deployment configuration.
 type ModelConfig struct {
-	CostPolicy    string        `yaml:"cost_policy,omitempty"`
-	ModelName     string        `yaml:"model_name"`
-	LiteLLMParams LiteLLMParams `yaml:"litellm_params"`
-	RPM           int           `yaml:"rpm,omitempty"`
-	TPM           int           `yaml:"tpm,omitempty"`
+	CostPolicy    string          `yaml:"cost_policy,omitempty"`
+	Decision      *DecisionConfig `yaml:"decision,omitempty"`
+	ModelName     string          `yaml:"model_name"`
+	LiteLLMParams LiteLLMParams   `yaml:"litellm_params"`
+	RPM           int             `yaml:"rpm,omitempty"`
+	TPM           int             `yaml:"tpm,omitempty"`
+}
+
+// DecisionConfig explicitly opts a deployment into the decision-only API.
+// Protocol describes the upstream wire format, independently of the provider name.
+type DecisionConfig struct {
+	Protocol      string           `yaml:"protocol" json:"protocol"`             // decisions, systemone, cloudflare
+	Path          string           `yaml:"path,omitempty" json:"path,omitempty"` // relative to api_base
+	Modalities    []string         `yaml:"modalities,omitempty" json:"modalities"`
+	QuestionTypes []string         `yaml:"question_types,omitempty" json:"question_types"`
+	Pricing       *DecisionPricing `yaml:"pricing" json:"pricing"`
+}
+
+// DecisionPricing is endpoint-specific USD pricing. An explicit empty block
+// declares free/self-hosted inference. Nil cache rates inherit the input rate.
+type DecisionPricing struct {
+	InputCostPerToken           float64  `yaml:"input_cost_per_token" json:"input_cost_per_token"`
+	OutputCostPerToken          float64  `yaml:"output_cost_per_token" json:"output_cost_per_token"`
+	CacheReadInputTokenCost     *float64 `yaml:"cache_read_input_token_cost,omitempty" json:"cache_read_input_token_cost,omitempty"`
+	CacheCreationInputTokenCost *float64 `yaml:"cache_creation_input_token_cost,omitempty" json:"cache_creation_input_token_cost,omitempty"`
+	CostPerRequest              float64  `yaml:"cost_per_request" json:"cost_per_request"`
 }
 
 // LiteLLMParams contains provider-specific parameters.

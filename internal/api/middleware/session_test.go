@@ -98,7 +98,7 @@ func (m *mockSessionStorage) ListApplications(ctx context.Context, teamID int64)
 func (m *mockSessionStorage) CleanExpiredSessions(ctx context.Context) error { return nil }
 
 // API Key CRUD stubs — required by interface, not exercised by session tests.
-func (m *mockSessionStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string) (*storage.APIKey, error) {
+func (m *mockSessionStorage) CreateAPIKey(_ context.Context, _ int64, _, _, _ string, _, _ *int, _, _ *float64, _ []string, _ ...*bool) (*storage.APIKey, error) {
 	return nil, nil
 }
 func (m *mockSessionStorage) GetAPIKeyByHash(_ context.Context, _ string) (*storage.APIKey, error) {
@@ -114,7 +114,7 @@ func (m *mockSessionStorage) GetKeyAllowedModels(_ context.Context, _ int64) ([]
 func (m *mockSessionStorage) UpdateKeyAllowedModels(_ context.Context, _ int64, _ []string) error {
 	return nil
 }
-func (m *mockSessionStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string) error {
+func (m *mockSessionStorage) UpdateAPIKey(_ context.Context, _ int64, _ string, _ *int, _ *int, _ *float64, _ *float64, _ []string, _ ...*bool) error {
 	return nil
 }
 func (m *mockSessionStorage) RecordKeySpend(_ context.Context, _ int64, _ float64) error {

@@ -65,6 +65,12 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 			return reloader.Config().GeneralSettings.BodySnippetLimit
 		})) // Phase 14: capture req body snippet before json.NewDecoder; reload-aware getter
 
+		for _, format := range []string{"decisions", "systemone"} {
+			h := handler.Decisions(r, store, sa, dispatcher, func() config.GeneralSettings { return reloader.Config().GeneralSettings }, format, tracer)
+			mux.Post("/v1/"+format, h)
+			mux.Post("/"+format, h)
+		}
+
 		// OpenAI-compatible endpoints
 		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/v1/messages", handler.Messages(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))

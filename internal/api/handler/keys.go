@@ -67,12 +67,13 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 		}
 
 		var body struct {
-			Name          string   `json:"name"`
-			AllowedModels []string `json:"allowed_models"`
-			MaxRPM        *int     `json:"max_rpm"`
-			MaxRPD        *int     `json:"max_rpd"`
-			MaxBudget     *float64 `json:"max_budget"`
-			SoftBudget    *float64 `json:"soft_budget"`
+			AllowDecisions *bool    `json:"allow_decisions"`
+			Name           string   `json:"name"`
+			AllowedModels  []string `json:"allowed_models"`
+			MaxRPM         *int     `json:"max_rpm"`
+			MaxRPD         *int     `json:"max_rpd"`
+			MaxBudget      *float64 `json:"max_budget"`
+			SoftBudget     *float64 `json:"soft_budget"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 			model.WriteError(w, model.ErrBadRequest("name is required"))
@@ -94,7 +95,7 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 		keyHash := hex.EncodeToString(hashBytes[:])
 
 		key, err := store.CreateAPIKey(r.Context(), appID, body.Name, keyPrefix, keyHash,
-			body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels)
+			body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, body.AllowDecisions)
 		if err != nil {
 			model.WriteError(w, model.ErrInternal("failed to create key"))
 			return
@@ -102,17 +103,18 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 
 		// Return full key ONCE. key.KeyHash is json:"-" — not serialized.
 		resp := map[string]interface{}{
-			"key":            fullKey, // plaintext — shown once only
-			"id":             key.ID,
-			"name":           key.Name,
-			"key_prefix":     fmt.Sprintf("sk-app-%s...", key.KeyPrefix),
-			"application_id": key.ApplicationID,
-			"max_rpm":        key.MaxRPM,
-			"max_rpd":        key.MaxRPD,
-			"max_budget":     key.MaxBudget,
-			"soft_budget":    key.SoftBudget,
-			"is_active":      key.IsActive,
-			"created_at":     key.CreatedAt,
+			"key":             fullKey, // plaintext — shown once only
+			"id":              key.ID,
+			"name":            key.Name,
+			"key_prefix":      fmt.Sprintf("sk-app-%s...", key.KeyPrefix),
+			"application_id":  key.ApplicationID,
+			"max_rpm":         key.MaxRPM,
+			"max_rpd":         key.MaxRPD,
+			"max_budget":      key.MaxBudget,
+			"soft_budget":     key.SoftBudget,
+			"is_active":       key.IsActive,
+			"allow_decisions": key.AllowDecisions,
+			"created_at":      key.CreatedAt,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -137,18 +139,19 @@ func AdminUpdateKey(store storage.Storage, cache *keystore.Cache) http.HandlerFu
 			return
 		}
 		var body struct {
-			Name          string   `json:"name"`
-			AllowedModels []string `json:"allowed_models"`
-			MaxRPM        *int     `json:"max_rpm"`
-			MaxRPD        *int     `json:"max_rpd"`
-			MaxBudget     *float64 `json:"max_budget"`
-			SoftBudget    *float64 `json:"soft_budget"`
+			AllowDecisions *bool    `json:"allow_decisions"`
+			Name           string   `json:"name"`
+			AllowedModels  []string `json:"allowed_models"`
+			MaxRPM         *int     `json:"max_rpm"`
+			MaxRPD         *int     `json:"max_rpd"`
+			MaxBudget      *float64 `json:"max_budget"`
+			SoftBudget     *float64 `json:"soft_budget"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 			model.WriteError(w, model.ErrBadRequest("name is required"))
 			return
 		}
-		if err := store.UpdateAPIKey(r.Context(), id, body.Name, body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels); err != nil {
+		if err := store.UpdateAPIKey(r.Context(), id, body.Name, body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, body.AllowDecisions); err != nil {
 			model.WriteError(w, model.ErrInternal("failed to update key"))
 			return
 		}

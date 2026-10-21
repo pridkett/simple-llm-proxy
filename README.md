@@ -18,6 +18,7 @@ client examples are documented in [Request accounting](docs/accounting.md).
 - **LiteLLM-compatible config** - Uses familiar `model_list` YAML format with `os.environ/` expansion
 - **Usage logging** - SQLite-based request tracking
 - **App keys** - Per-app keys with model restrictions, revocation, and usage attribution; OIDC protects administration
+- **Decision models** - Decisions and System One APIs for Jev, OpenAI, Granite, Clef, and compatible Laya/Ollaya servers, with multimodal input, explicit key permissions, cost tracking, and log filters. See [the decision model guide](docs/decision-models.md).
 - **OpenAPI specification** - Dynamic OpenAPI 3.0 spec available at `/openapi.json`
 
 ## Installation

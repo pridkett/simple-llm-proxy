@@ -345,6 +345,9 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`ALTER TABLE usage_logs ADD COLUMN cost_source TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE usage_logs ADD COLUMN cost_known BOOLEAN`,
 		`ALTER TABLE usage_logs ADD COLUMN cost_coverage TEXT NOT NULL DEFAULT ''`,
+		// Explicit opt-in: adding decision models must not expand existing key privileges.
+		`ALTER TABLE api_keys ADD COLUMN allow_decisions BOOLEAN NOT NULL DEFAULT FALSE`,
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC)`,
 	}
 
 	for i, sql := range migrations {

@@ -87,13 +87,14 @@ export const api = {
    * GET /admin/logs
    * @param {{ limit?: number, offset?: number, model?: string, team_id?: number, app_id?: number,
    *           provider?: string, pool_name?: string, key_id?: number,
-   *           date_from?: string, date_to?: string, session_id?: string }} params
+   *           date_from?: string, date_to?: string, session_id?: string, request_type?: string }} params
    */
   logs(params = {}) {
     const qs = new URLSearchParams()
     if (params.limit) qs.set('limit', String(params.limit))
     if (params.offset != null && params.offset !== '') qs.set('offset', String(params.offset))
     if (params.model) qs.set('model', params.model)
+    if (params.request_type) qs.set('request_type', params.request_type)
     if (params.session_id) qs.set('session_id', params.session_id)
     if (params.team_id > 0) qs.set('team_id', String(params.team_id))
     if (params.app_id > 0) qs.set('app_id', String(params.app_id))

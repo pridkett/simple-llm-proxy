@@ -65,8 +65,9 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 			return result
 		}
 
-		// If budget exhausted, try other pools that serve this model (BUDGET-03).
-		if r.budget != nil && !r.budget.HasBudget(pool.Name) {
+		// A budget-exhausted or incompatible primary pool can use another pool
+		// serving this alias. Incompatible candidates never consume upstream quota.
+		if (r.budget != nil && !r.budget.HasBudget(pool.Name)) || !poolHasEligibleDeployment(pool, opts) {
 			r.mu.RLock()
 			altPools := make([]*Pool, 0)
 			for _, p := range r.pools {
@@ -108,6 +109,15 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 	return r.routeLegacy(ctx, modelName, cb, result, opts...)
 }
 
+func poolHasEligibleDeployment(pool *Pool, opts []RouteOptions) bool {
+	for _, d := range pool.Members {
+		if eligibleDeployment(d, opts) {
+			return true
+		}
+	}
+	return false
+}
+
 // routePool routes through a pool's member deployments, trying each healthy
 // member in the order determined by the pool's strategy until one succeeds.
 // If stickyKey is non-empty and a cached mapping exists, the sticky deployment
@@ -127,7 +137,7 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 	// Build healthy member list: filter members not in cooldown and not in backoff.
 	healthy := make([]*provider.Deployment, 0, len(pool.Members))
 	for _, d := range pool.Members {
-		if !r.cooldown.InCooldown(d) && !r.backoff.InBackoff(d.DeploymentKey()) {
+		if eligibleDeployment(d, opts) && !r.cooldown.InCooldown(d) && !r.backoff.InBackoff(d.DeploymentKey()) {
 			healthy = append(healthy, d)
 		}
 	}
@@ -249,6 +259,13 @@ func findDeploymentByKey(deployments []*provider.Deployment, key string) *provid
 // backward compatibility with models not assigned to any pool.
 func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCallback, result *RouteResult, opts ...RouteOptions) *RouteResult {
 	tried := make(map[*provider.Deployment]bool)
+	r.mu.RLock()
+	for _, d := range r.deployments[modelName] {
+		if !eligibleDeployment(d, opts) {
+			tried[d] = true
+		}
+	}
+	r.mu.RUnlock()
 	var lastErr error
 
 	for attempt := 0; attempt <= r.NumRetries(); attempt++ {

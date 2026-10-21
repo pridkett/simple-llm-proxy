@@ -16,6 +16,10 @@ func buildPaths() *openapi3.Paths {
 	paths.Set("/v1/responses", responsesPath())
 	paths.Set("/v1/responses/{id}", responseByIDPath())
 	paths.Set("/v1/embeddings", embeddingsPath())
+	paths.Set("/v1/decisions", decisionsPath(false, "createDecision"))
+	paths.Set("/decisions", decisionsPath(false, "createDecisionAlias"))
+	paths.Set("/v1/systemone", decisionsPath(true, "createSystemOneDecision"))
+	paths.Set("/systemone", decisionsPath(true, "createSystemOneDecisionAlias"))
 	paths.Set("/v1/models", modelsPath())
 	paths.Set("/v1/completions", completionsPath())
 	paths.Set("/admin/status", adminStatusPath())
@@ -370,6 +374,7 @@ func adminLogsPath() *openapi3.PathItem {
 			OperationID: "getAdminLogs",
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			Parameters: openapi3.Parameters{
+				{Value: &openapi3.Parameter{Name: "request_type", In: "query", Description: "Show only decision calls or hide them; omit for all calls", Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema().WithEnum("decision", "other")}}},
 				{Value: &openapi3.Parameter{
 					Name: "session_id", In: "query", Description: "Exact client-supplied session ID; combines with other log filters",
 					Schema: sessionIDSchema(),

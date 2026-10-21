@@ -9,6 +9,7 @@ import (
 
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
+	decisionprovider "github.com/pwagstro/simple_llm_proxy/internal/provider/decision"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
@@ -58,7 +59,16 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
 
 		opts := buildProviderOptions(mc)
-		prov, err := provider.Get(parsed.Provider, opts)
+		decisionConfig, err := config.NormalizeDecision(mc.Decision)
+		if err != nil {
+			return nil, fmt.Errorf("model %s: %w", mc.ModelName, err)
+		}
+		var prov provider.Provider
+		if decisionConfig != nil {
+			prov, err = decisionprovider.New(parsed.Provider, opts, decisionConfig)
+		} else {
+			prov, err = provider.Get(parsed.Provider, opts)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
 		}
@@ -66,6 +76,7 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 		deployment := &provider.Deployment{
 			ModelName:    mc.ModelName,
 			CostPolicy:   mc.CostPolicy,
+			Decision:     decisionConfig,
 			Provider:     prov,
 			ProviderName: parsed.Provider,
 			ActualModel:  parsed.ModelName,
@@ -75,6 +86,11 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 			TPM:          mc.TPM,
 		}
 
+		for _, existing := range r.deployments[mc.ModelName] {
+			if (existing.Decision == nil) != (deployment.Decision == nil) {
+				return nil, fmt.Errorf("model %q cannot mix decision and generation deployments; use separate aliases", mc.ModelName)
+			}
+		}
 		r.deployments[mc.ModelName] = append(r.deployments[mc.ModelName], deployment)
 	}
 
@@ -231,14 +247,15 @@ type ModelStatusInfo struct {
 
 // DeploymentInfoItem holds status information for a single deployment.
 type DeploymentInfoItem struct {
-	ProviderName  string     `json:"provider"`
-	ActualModel   string     `json:"actual_model"`
-	APIBase       string     `json:"api_base,omitempty"`
-	Status        string     `json:"status"` // "healthy", "cooldown", or "backoff"
-	FailureCount  int        `json:"failure_count"`
-	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
-	RPM           int        `json:"rpm,omitempty"`
-	TPM           int        `json:"tpm,omitempty"`
+	Decision      *config.DecisionConfig `json:"decision,omitempty"`
+	ProviderName  string                 `json:"provider"`
+	ActualModel   string                 `json:"actual_model"`
+	APIBase       string                 `json:"api_base,omitempty"`
+	Status        string                 `json:"status"` // "healthy", "cooldown", or "backoff"
+	FailureCount  int                    `json:"failure_count"`
+	CooldownUntil *time.Time             `json:"cooldown_until,omitempty"`
+	RPM           int                    `json:"rpm,omitempty"`
+	TPM           int                    `json:"tpm,omitempty"`
 }
 
 // PoolStatusInfo holds status information for a single provider pool.
@@ -270,13 +287,23 @@ func (r *Router) Reload(cfg *config.Config) error {
 		}
 		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
 		opts := buildProviderOptions(mc)
-		prov, err := provider.Get(parsed.Provider, opts)
+		decisionConfig, err := config.NormalizeDecision(mc.Decision)
+		if err != nil {
+			return fmt.Errorf("model %s: %w", mc.ModelName, err)
+		}
+		var prov provider.Provider
+		if decisionConfig != nil {
+			prov, err = decisionprovider.New(parsed.Provider, opts, decisionConfig)
+		} else {
+			prov, err = provider.Get(parsed.Provider, opts)
+		}
 		if err != nil {
 			return fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
 		}
 		deployment := &provider.Deployment{
 			ModelName:    mc.ModelName,
 			CostPolicy:   mc.CostPolicy,
+			Decision:     decisionConfig,
 			Provider:     prov,
 			ProviderName: parsed.Provider,
 			ActualModel:  parsed.ModelName,
@@ -284,6 +311,11 @@ func (r *Router) Reload(cfg *config.Config) error {
 			APIBase:      mc.LiteLLMParams.APIBase,
 			RPM:          mc.RPM,
 			TPM:          mc.TPM,
+		}
+		for _, existing := range newDeployments[mc.ModelName] {
+			if (existing.Decision == nil) != (deployment.Decision == nil) {
+				return fmt.Errorf("model %q cannot mix decision and generation deployments; use separate aliases", mc.ModelName)
+			}
 		}
 		newDeployments[mc.ModelName] = append(newDeployments[mc.ModelName], deployment)
 	}
@@ -372,6 +404,7 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 			s := r.cooldown.GetStatus(d)
 			item := DeploymentInfoItem{
 				ProviderName: d.ProviderName,
+				Decision:     d.Decision,
 				ActualModel:  d.ActualModel,
 				APIBase:      d.APIBase,
 				FailureCount: s.FailureCount,
