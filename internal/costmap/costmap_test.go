@@ -2,6 +2,7 @@ package costmap
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -292,5 +293,57 @@ func TestLoad_Concurrency(t *testing.T) {
 
 	if !m.Status().Loaded {
 		t.Error("expected Loaded=true after concurrent loads")
+	}
+}
+
+func TestKnownRatesDownloadedAndCustom(t *testing.T) {
+	body := `{"priced":{"input_cost_per_token":0.000001,"output_cost_per_token":0,"cache_read_input_token_cost":null},"unknown":{"input_cost_per_token":"unknown","output_cost_per_token":null,"cache_read_input_token_cost":false,"cache_creation_input_token_cost":1e400}}`
+	srv := newTestServer(http.StatusOK, body)
+	defer srv.Close()
+	m := New()
+	m.sourceURL = srv.URL
+	if err := m.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	priced, ok := m.GetModel("priced")
+	if !ok || !priced.KnownRates["input_cost_per_token"] || !priced.KnownRates["output_cost_per_token"] {
+		t.Fatalf("numeric rates, including zero, must be known: %+v", priced)
+	}
+	if priced.KnownRates["cache_read_input_token_cost"] || priced.KnownRates["cache_creation_input_token_cost"] {
+		t.Fatalf("null and absent rates must be unknown: %+v", priced)
+	}
+	unknown, _ := m.GetModel("unknown")
+	for field, known := range unknown.KnownRates {
+		if known {
+			t.Errorf("invalid rate %s must be unknown", field)
+		}
+	}
+	var custom ModelSpec
+	if err := json.Unmarshal([]byte(`{"input_cost_per_token":0,"output_cost_per_token":0.000002}`), &custom); err != nil {
+		t.Fatal(err)
+	}
+	if !custom.KnownRates["input_cost_per_token"] || !custom.KnownRates["output_cost_per_token"] || custom.KnownRates["cache_read_input_token_cost"] {
+		t.Fatalf("custom rates must preserve present/absent semantics: %+v", custom)
+	}
+}
+
+func TestOverrideModesReplaceEachOther(t *testing.T) {
+	m := New()
+	m.models = map[string]ModelSpec{"mapped": {InputCostPerToken: 0.000002}}
+	m.SetCustomSpec("alias", ModelSpec{InputCostPerToken: 0.000001})
+	m.SetOverrideKey("alias", "mapped")
+	if result := m.GetEffectiveSpec("alias", nil); result.Source != "override" || result.Spec.InputCostPerToken != 0.000002 {
+		t.Fatalf("mapping must replace custom spec immediately: %+v", result)
+	}
+	m.SetCustomSpec("alias", ModelSpec{InputCostPerToken: 0.000003})
+	if result := m.GetEffectiveSpec("alias", nil); result.Source != "custom" || result.Spec.InputCostPerToken != 0.000003 {
+		t.Fatalf("custom spec must replace mapping immediately: %+v", result)
+	}
+	if _, exists := m.overrideKeys["alias"]; exists {
+		t.Fatal("custom spec left a stale mapping")
+	}
+	m.ClearOverride("alias")
+	if result := m.GetEffectiveSpec("alias", nil); result.Found {
+		t.Fatalf("clear must remove both modes: %+v", result)
 	}
 }

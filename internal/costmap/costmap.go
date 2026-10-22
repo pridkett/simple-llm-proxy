@@ -260,6 +260,7 @@ func (m *Manager) GetModel(name string) (ModelSpec, bool) {
 // SetOverrideKey sets a cost map lookup key override for a proxy model name.
 // When GetEffectiveSpec is called for this model, it will look up this key in the
 // cost map instead of auto-detecting from candidate actual model strings.
+// A non-empty key replaces any custom spec, matching persisted override semantics.
 // Pass key="" to clear a previous override (treated as no override).
 func (m *Manager) SetOverrideKey(proxyModel, key string) {
 	m.mu.Lock()
@@ -268,16 +269,19 @@ func (m *Manager) SetOverrideKey(proxyModel, key string) {
 		delete(m.overrideKeys, proxyModel)
 	} else {
 		m.overrideKeys[proxyModel] = key
+		delete(m.customSpecs, proxyModel)
 	}
 }
 
 // SetCustomSpec stores a fully custom ModelSpec for a proxy model name.
 // When GetEffectiveSpec is called for this model, this spec is returned directly
 // without consulting the cost map.
+// Replaces any cost map key override for the same model.
 func (m *Manager) SetCustomSpec(proxyModel string, spec ModelSpec) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.customSpecs[proxyModel] = spec
+	delete(m.overrideKeys, proxyModel)
 }
 
 // ClearOverride removes any override (key or custom) for the given proxy model name,
@@ -329,8 +333,16 @@ var rateFields = []string{"input_cost_per_token", "output_cost_per_token", "cach
 func knownRates(entry map[string]interface{}) map[string]bool {
 	result := make(map[string]bool, len(rateFields))
 	for _, key := range rateFields {
-		_, ok := entry[key].(float64)
-		result[key] = ok
+		switch value := entry[key].(type) {
+		case json.Number:
+			// Downloaded cost maps use Decoder.UseNumber; custom specs use float64.
+			_, err := value.Float64()
+			result[key] = err == nil
+		case float64:
+			result[key] = true
+		default:
+			result[key] = false
+		}
 	}
 	return result
 }
