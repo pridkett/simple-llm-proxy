@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,7 +47,10 @@ func Models(r *router.Router) http.HandlerFunc {
 // Returns model detail with cost information from the cost map when available.
 func ModelDetail(r *router.Router, cm *costmap.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		modelName := chi.URLParam(req, "model")
+		modelName, ok := modelNameFromRequest(w, req)
+		if !ok {
+			return
+		}
 
 		// Find the model in the router's current status.
 		var found *router.ModelStatusInfo
@@ -99,7 +103,10 @@ func ModelDetail(r *router.Router, cm *costmap.Manager) http.HandlerFunc {
 // The model need not exist in the router (supports novel/unmapped models per ADR 002).
 func PatchModelMapping(cm *costmap.Manager, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		modelName := chi.URLParam(req, "model")
+		modelName, ok := modelNameFromRequest(w, req)
+		if !ok {
+			return
+		}
 
 		var body struct {
 			CostMapKey string `json:"cost_map_key"`
@@ -132,7 +139,10 @@ func PatchModelMapping(cm *costmap.Manager, store storage.Storage) http.HandlerF
 // The model need not exist in the router (supports novel/unmapped models per ADR 002).
 func PatchModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		modelName := chi.URLParam(req, "model")
+		modelName, ok := modelNameFromRequest(w, req)
+		if !ok {
+			return
+		}
 
 		var spec costmap.ModelSpec
 		if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
@@ -162,7 +172,10 @@ func PatchModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFun
 // reverting to auto-detection behaviour.
 func DeleteModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		modelName := chi.URLParam(req, "model")
+		modelName, ok := modelNameFromRequest(w, req)
+		if !ok {
+			return
+		}
 
 		if err := store.DeleteCostOverride(req.Context(), modelName); err != nil {
 			model.WriteError(w, model.ErrInternalServer("Failed to delete cost override", err))
@@ -173,6 +186,21 @@ func DeleteModelCosts(cm *costmap.Manager, store storage.Storage) http.HandlerFu
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"model": modelName, "status": "cleared"}) //nolint:errcheck
 	}
+}
+
+// chi routes against RawPath when present, otherwise the already-decoded Path.
+// Decode only raw parameters so literal percent sequences in names stay intact.
+func modelNameFromRequest(w http.ResponseWriter, req *http.Request) (string, bool) {
+	name := chi.URLParam(req, "model")
+	if req.URL.RawPath == "" {
+		return name, true
+	}
+	name, err := url.PathUnescape(name)
+	if err != nil {
+		model.WriteError(w, model.ErrBadRequest("Invalid model name encoding"))
+		return "", false
+	}
+	return name, true
 }
 
 // buildModelDetailResponse constructs a ModelDetailResponse for the given model name,
