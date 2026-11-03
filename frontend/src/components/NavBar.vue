@@ -144,7 +144,7 @@ const links = [
 const adminLinks = [
   { to: '/users', label: 'Users' },
   { to: '/teams', label: 'Teams' },
-  { to: '/cost', label: 'Cost' },
+  { to: '/cost', label: 'Usage & Cost' },
   { to: '/pools', label: 'Pools' },
   { to: '/webhooks', label: 'Webhooks' },
   { to: '/events', label: 'Events' },

@@ -155,3 +155,19 @@ func TestAdminLogsMeta(t *testing.T) {
 		t.Errorf("Providers: got %d items, want 2", len(resp.Providers))
 	}
 }
+
+func TestAdminLogsReportingBounds(t *testing.T) {
+	store := &filterCaptureMock{}
+	w := httptest.NewRecorder()
+	AdminLogs(store)(w, httptest.NewRequest("GET", "/admin/logs?date_before=2026-11-02T05:00:00Z&unattributed=key", nil))
+	if w.Code != 200 || store.capturedFilter.DateBefore == nil || store.capturedFilter.Unattributed != "key" {
+		t.Fatal("reporting filters lost", w.Body.String())
+	}
+	for _, query := range []string{"date_before=invalid", "unattributed=invalid"} {
+		w = httptest.NewRecorder()
+		AdminLogs(store)(w, httptest.NewRequest("GET", "/admin/logs?"+query, nil))
+		if w.Code != 400 {
+			t.Fatalf("invalid %s returned %d", query, w.Code)
+		}
+	}
+}

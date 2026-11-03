@@ -103,6 +103,8 @@ export const api = {
     if (params.key_id > 0) qs.set('key_id', String(params.key_id))
     if (params.date_from) qs.set('date_from', params.date_from)
     if (params.date_to) qs.set('date_to', params.date_to)
+    if (params.date_before) qs.set('date_before', params.date_before)
+    if (params.unattributed) qs.set('unattributed', params.unattributed)
     const query = qs.toString() ? `?${qs}` : ''
     return request(`/admin/logs${query}`)
   },
@@ -353,6 +355,18 @@ export const api = {
     if (params.keyId && params.keyId > 0) qs.set('key_id', String(params.keyId))
     const query = qs.toString() ? `?${qs}` : ''
     return request(`/admin/spend${query}`)
+  },
+
+  /** GET /admin/usage — reporting over finalized logged calls; until is exclusive. */
+  usage(params = {}) {
+    const qs = new URLSearchParams()
+    for (const field of ['from', 'to', 'since', 'until', 'timezone', 'interval', 'group_by', 'model', 'unattributed']) {
+      if (params[field]) qs.set(field, params[field])
+    }
+    for (const field of ['team_id', 'app_id', 'key_id']) {
+      if (Number.isInteger(params[field]) && params[field] > 0) qs.set(field, String(params[field]))
+    }
+    return request(`/admin/usage?${qs}`)
   },
 
   /** GET /admin/webhooks — returns merged YAML + UI webhooks */

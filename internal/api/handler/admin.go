@@ -231,6 +231,21 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 			}
 		}
 
+		if v := req.URL.Query().Get("date_before"); v != "" {
+			parsed, err := time.Parse(time.RFC3339Nano, v)
+			if err != nil {
+				model.WriteError(w, model.ErrBadRequest("date_before must be an RFC3339 timestamp"))
+				return
+			}
+			filters.DateBefore = &parsed
+		}
+		filters.Unattributed = req.URL.Query().Get("unattributed")
+		switch filters.Unattributed {
+		case "", "team", "app", "key":
+		default:
+			model.WriteError(w, model.ErrBadRequest("invalid unattributed filter"))
+			return
+		}
 		logs, total, err := store.GetLogs(req.Context(), limit, offset, filters)
 		if err != nil {
 			http.Error(w, `{"error":{"message":"failed to fetch logs","type":"server_error"}}`, http.StatusInternalServerError)

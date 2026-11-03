@@ -62,7 +62,7 @@ describe('NavBar', () => {
     const navigation = wrapper.get('nav[aria-label="Main navigation"]')
     expect(navigation.findAll('a').map(link => link.text())).toEqual([
       'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs',
-      'Users', 'Teams', 'Cost', 'Pools', 'Webhooks', 'Events',
+      'Users', 'Teams', 'Usage & Cost', 'Pools', 'Webhooks', 'Events',
     ])
     expect(navigation.get('a[href="/models"]').attributes('aria-current')).toBe('page')
   })

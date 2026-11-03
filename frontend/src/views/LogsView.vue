@@ -7,11 +7,11 @@
 
     <!-- Filters: Row 1 — Date range presets (D-04) -->
     <div class="mb-4 flex flex-wrap gap-3 items-end">
-      <div class="flex gap-1">
+      <div class="flex flex-wrap gap-1">
         <button
           v-for="range in [null, 'today', '7d', '30d', 'custom']"
           :key="range || 'all'"
-          @click="datePreset = range"
+          @click="reportBounds = null; datePreset = range"
           :class="datePreset === range ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold' : 'btn-secondary'"
           class="btn-secondary text-xs py-2"
         >
@@ -108,6 +108,11 @@
       <p class="text-xs mt-1">{{ loading ? 'Loading requests…' : `${logsData?.total || 0} requests matching current filters` }} · {{ datePreset === null ? 'All time' : 'Selected date range' }}</p>
     </div>
 
+    <p v-if="filterUnattributed" class="mb-3 text-sm text-gray-500 dark:text-gray-400">Unattributed {{ filterUnattributed }} traffic</p>
+    <div v-if="reportBounds" class="mb-4 break-words text-sm text-gray-600 dark:text-gray-300" role="status">
+      Reporting interval: {{ reportBounds.date_from }} – {{ reportBounds.date_before }} (exclusive end)
+      <button class="ml-2 text-indigo-700 dark:text-indigo-300 underline" @click="reportBounds = null">Clear interval</button>
+    </div>
     <LoadingSpinner v-if="loading" />
     <ErrorAlert v-else-if="error" title="Failed to load logs" :message="error" />
 
@@ -321,7 +326,7 @@
 function decimalCost(amount) { return amount == null ? 'Unknown' : `$${amount}` }
 
 function costSourceLabel(source) {
- return { upstream: 'Upstream-reported', estimate: 'Estimated', mixed: 'Mixed sources', unknown: 'Unknown' }[source] || 'Legacy'
+ return { upstream: 'Upstream-reported', estimate: 'Estimated', estimated: 'Estimated', mixed: 'Mixed sources', unknown: 'Unknown' }[source] || 'Legacy'
 }
 
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
@@ -329,6 +334,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { api } from '../api/client.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
+import { formatMoney } from '../utils/usage.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -366,6 +372,19 @@ const filterProvider = ref('')
 const filterPool = ref('')
 const filterModel = ref('')
 const filterRequestType = ref('')
+const filterUnattributed = ref('')
+const reportBounds = ref(null)
+
+function applyReportingQuery(query) {
+  for (const [key, target] of [['team_id', filterTeam], ['app_id', filterApp], ['key_id', filterKey]]) {
+    const value = Number(query[key]); target.value = Number.isInteger(value) && value > 0 ? value : null
+  }
+  filterModel.value = typeof query.model === 'string' ? query.model : ''
+  filterUnattributed.value = ['team', 'app', 'key'].includes(query.unattributed) ? query.unattributed : ''
+  reportBounds.value = typeof query.date_from === 'string' && typeof query.date_before === 'string' ? { date_from: query.date_from, date_before: query.date_before } : null
+}
+applyReportingQuery(route.query)
+watch(['team_id', 'app_id', 'key_id', 'model', 'date_from', 'date_before', 'unattributed'].map(key => () => route.query[key]), () => applyReportingQuery(route.query))
 
 // Meta API data for dropdown options (UI-02)
 const metaTeams = ref([])
@@ -388,10 +407,11 @@ const hasActiveFilters = computed(() => {
     filterKey.value !== null ||
     filterProvider.value !== '' ||
     filterPool.value !== '' ||
-    filterRequestType.value !== '' || filterModel.value !== '' || filterSession.value !== ''
+    filterRequestType.value !== '' || filterModel.value !== '' || filterSession.value !== '' || filterUnattributed.value !== '' || reportBounds.value != null
 })
 
 function buildDateParams() {
+  if (reportBounds.value) return reportBounds.value
   const now = new Date()
   if (datePreset.value === 'today') {
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -430,6 +450,7 @@ async function load() {
       key_id: filterKey.value,
       provider: filterProvider.value || undefined,
       pool_name: filterPool.value || undefined,
+      unattributed: filterUnattributed.value || undefined,
       ...dateParams,
     })
     if (sequence === loadSequence) logsData.value = result
@@ -459,7 +480,7 @@ async function loadMeta() {
 
 // D-09: any filter change auto-fetches with offset reset
 watch(
-  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterRequestType, filterSession],
+  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterRequestType, filterSession, filterUnattributed, reportBounds],
   () => {
     offset.value = 0
     load()
@@ -473,6 +494,7 @@ watch(filterSession, (value) => {
 
 let customDateDebounceTimer = null
 function onCustomDateChange() {
+  reportBounds.value = null
   clearTimeout(customDateDebounceTimer)
   customDateDebounceTimer = setTimeout(() => {
     offset.value = 0
@@ -497,6 +519,8 @@ function clearFilters() {
 }
 
 function resetDimensions() {
+  reportBounds.value = null
+  filterUnattributed.value = ''
   datePreset.value = null
   customFrom.value = ''
   customTo.value = ''
@@ -555,11 +579,7 @@ function truncateID(id) {
   return id.length > 8 ? id.slice(0, 8) + '...' : id
 }
 
-function formatCost(cost) {
-  if (cost == null || cost === 0) return '-'
-  if (cost < 0.01) return '$' + cost.toFixed(4)
-  return '$' + cost.toFixed(2)
-}
+function formatCost(cost) { return formatMoney(cost) }
 
 function formatKeyLabel(log) {
   if (!log.api_key_id) return 'Master Key'
