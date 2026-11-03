@@ -737,6 +737,12 @@ const chartOptions = computed(() => ({
   chart: {
     type: 'bar',
     stacked: true,
+    // Render complete stacks immediately, including on metric/filter changes.
+    animations: {
+      enabled: false,
+      animateGradually: { enabled: false },
+      dynamicAnimation: { enabled: false }
+    },
     background: 'transparent',
     foreColor: isDark.value ? '#d1d5db' : '#4b5563',
     toolbar: { show: false },
