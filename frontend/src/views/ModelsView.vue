@@ -10,249 +10,251 @@
 
     <template v-else-if="data">
       <div class="space-y-4">
-        <div
-          v-for="model in data.models"
-          :key="model.model_name"
+        <section
+          v-for="group in providerGroups"
+          :key="group.provider"
+          :aria-label="`${providerLabel(group.provider)} models`"
           class="card overflow-hidden"
         >
-          <!-- Model header -->
-          <div class="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <div>
-              <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ model.model_name }}</h2>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{ model.total_deployments }} deployment{{ model.total_deployments !== 1 ? 's' : '' }}
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <StatusBadge :status="model.healthy_deployments > 0 ? 'healthy' : 'cooldown'" />
-              <button v-if="!model.deployments?.some(d => d.decision)" class="btn-secondary text-xs" @click="togglePlayground(model.model_name)">
-                {{ openPlaygrounds.has(model.model_name) ? 'Hide test' : 'Test' }}
-              </button>
-            </div>
+          <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ providerLabel(group.provider) }}</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ group.models.length }} model{{ group.models.length !== 1 ? 's' : '' }}
+              · {{ group.deploymentCount }} deployment{{ group.deploymentCount !== 1 ? 's' : '' }}
+            </p>
           </div>
 
-          <!-- Deployments table -->
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
               <thead class="bg-white dark:bg-gray-800">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Provider</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Failures</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">RPM</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">TPM</th>
+                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Model</th>
+                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deployment</th>
+                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                  <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Failures</th>
+                  <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">RPM</th>
+                  <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">TPM</th>
+                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost / MTok</th>
+                  <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-50 dark:divide-gray-700">
-                <tr v-for="(dep, i) in model.deployments" :key="i">
-                  <td class="px-6 py-3 font-medium capitalize">{{ dep.provider }}</td>
-                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{{ dep.actual_model }}
-                    <div v-if="dep.decision" class="mt-1 text-xs text-indigo-700 dark:text-indigo-300 font-sans">
-                      Decision · {{ dep.decision.modalities.join(', ') }} · {{ dep.decision.question_types.join(', ') }}
-                      <p class="mt-1 text-gray-500 dark:text-gray-400">Input: {{ formatCostPerToken(dep.decision.pricing.input_cost_per_token) }} · Output: {{ formatCostPerToken(dep.decision.pricing.output_cost_per_token) }} · ${{ dep.decision.pricing.cost_per_request }} / call</p>
-                    </div>
-                  </td>
-                  <td class="px-6 py-3">
-                    <StatusBadge :status="dep.status" />
-                    <span v-if="dep.cooldown_until" class="ml-2 text-xs text-gray-400">
-                      until {{ formatTime(dep.cooldown_until) }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.failure_count }}</td>
-                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.rpm || '—' }}</td>
-                  <td class="px-6 py-3 text-gray-600 dark:text-gray-300">{{ dep.tpm || '—' }}</td>
-                </tr>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                <template v-for="model in group.models" :key="model.model_name">
+                  <tr v-for="(dep, i) in model.deployments" :key="`${model.model_name}-${i}`">
+                    <th v-if="i === 0" scope="rowgroup" :rowspan="model.deployments.length" class="px-4 py-3 text-left align-top font-medium text-gray-900 dark:text-gray-100 break-words">
+                      {{ model.model_name }}
+                    </th>
+                    <td class="px-4 py-3 align-top text-gray-600 dark:text-gray-300 font-mono text-xs break-words">
+                      {{ dep.actual_model || '—' }}
+                      <div v-if="dep.decision" class="mt-1 text-xs text-indigo-700 dark:text-indigo-300 font-sans">
+                        Decision · {{ dep.decision.modalities.join(', ') }} · {{ dep.decision.question_types.join(', ') }}
+                        <p class="mt-1 text-gray-500 dark:text-gray-400">Input: {{ formatCostPerToken(dep.decision.pricing.input_cost_per_token) }} · Output: {{ formatCostPerToken(dep.decision.pricing.output_cost_per_token) }} · ${{ dep.decision.pricing.cost_per_request }} / call</p>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 align-top whitespace-nowrap">
+                      <StatusBadge :status="dep.status" />
+                      <span v-if="dep.cooldown_until" class="block mt-1 text-xs text-gray-400">until {{ formatTime(dep.cooldown_until) }}</span>
+                    </td>
+                    <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.failure_count ?? '—' }}</td>
+                    <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.rpm || '—' }}</td>
+                    <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.tpm || '—' }}</td>
+                    <td v-if="i === 0" :rowspan="model.deployments.length" class="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                      <template v-if="!model.isDecision">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span
+                            v-if="model.costs?.source"
+                            class="text-xs px-1.5 py-0.5 rounded"
+                            :class="{
+                              'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300': model.costs.source === 'auto',
+                              'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300': model.costs.source === 'override',
+                              'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300': model.costs.source === 'custom',
+                            }"
+                          >{{ model.costs.source }}</span>
+                          <span v-else class="text-gray-400">not mapped</span>
+                        </div>
+                        <div v-if="model.costs?.input_cost_per_token != null">In: {{ formatCostPerToken(model.costs.input_cost_per_token) }}</div>
+                        <div v-if="model.costs?.output_cost_per_token != null">Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}</div>
+                        <div v-if="model.costs?.max_tokens" class="text-gray-400">Max: {{ model.costs.max_tokens.toLocaleString() }} tok</div>
+                      </template>
+                      <span v-else class="text-gray-400">Per deployment</span>
+                    </td>
+                    <td v-if="i === 0" :rowspan="model.deployments.length" class="px-4 py-3 align-top text-right">
+                      <div v-if="!model.isDecision" class="flex items-center justify-end gap-2">
+                        <button class="btn-secondary text-xs" :aria-label="`Test ${model.model_name}`" :aria-expanded="openPlaygrounds.get(model.model_name) === group.provider" @click="togglePlayground(model.model_name, group.provider)">
+                          {{ openPlaygrounds.get(model.model_name) === group.provider ? 'Hide test' : 'Test' }}
+                        </button>
+                        <button class="btn-secondary text-xs" :aria-label="`Edit costs for ${model.model_name}`" :aria-expanded="openCostEditors.get(model.model_name) === group.provider" @click="toggleCostEditor(model.model_name, group.provider)">
+                          {{ openCostEditors.get(model.model_name) === group.provider ? 'Hide' : 'Edit' }}
+                        </button>
+                        <button
+                          v-if="model.costs?.source && model.costs.source !== 'auto'"
+                          class="btn-secondary text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                          :disabled="clearing[model.model_name]"
+                          :aria-label="`Clear cost override for ${model.model_name}`"
+                          @click="clearCostOverride(model.model_name)"
+                        >{{ clearing[model.model_name] ? 'Clearing…' : 'Clear' }}</button>
+                      </div>
+                      <p v-if="saveErrors[model.model_name] && openCostEditors.get(model.model_name) !== group.provider" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
+                    </td>
+                  </tr>
+                  <tr v-if="!model.isDecision && openCostEditors.get(model.model_name) === group.provider">
+                    <td colspan="8" class="px-4 pb-4 bg-gray-50 dark:bg-gray-900">
+                      <!-- Tab switcher -->
+                      <div class="flex gap-2 mt-3 mb-4 border-b border-gray-200 dark:border-gray-700">
+                        <button
+                          class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
+                          :class="activeCostTab(model.model_name) === 'key' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                          @click="setCostTab(model.model_name, 'key')"
+                        >Cost Map Key</button>
+                        <button
+                          class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
+                          :class="activeCostTab(model.model_name) === 'custom' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                          @click="setCostTab(model.model_name, 'custom')"
+                        >Custom Costs</button>
+                      </div>
+
+                      <!-- Cost map key tab — autocomplete combobox -->
+                      <div v-if="activeCostTab(model.model_name) === 'key'" class="space-y-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                          Select the LiteLLM cost map entry for this model. Type to filter.
+                        </p>
+                        <div class="flex gap-2">
+                          <input
+                            :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
+                            class="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 font-mono"
+                            placeholder="e.g. openai/gpt-4"
+                            autocomplete="off"
+                            @input="onCostKeyInput(model.model_name, $event.target.value, $event)"
+                            @focus="openDropdown(model.model_name, $event)"
+                            @blur="scheduleCloseDropdown(model.model_name)"
+                          />
+                          <button
+                            class="btn-primary text-xs"
+                            :disabled="saving[model.model_name]"
+                            @click="saveCostMapKey(model.model_name)"
+                          >{{ saving[model.model_name] ? 'Saving…' : 'Save' }}</button>
+                        </div>
+                        <!-- Dropdown teleported to <body> to escape card's overflow:hidden -->
+                        <Teleport to="body">
+                          <div
+                            v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
+                            class="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-xl overflow-y-auto"
+                            :style="{
+                              top: (dropdownPos[model.model_name]?.top ?? 0) + 'px',
+                              left: (dropdownPos[model.model_name]?.left ?? 0) + 'px',
+                              width: (dropdownPos[model.model_name]?.width ?? 300) + 'px',
+                              maxHeight: '240px',
+                            }"
+                          >
+                            <button
+                              v-for="entry in filteredCostMapModels(model.model_name)"
+                              :key="entry.name"
+                              type="button"
+                              class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                              @mousedown.prevent="selectCostMapKey(model.model_name, entry)"
+                            >
+                              <div class="font-mono text-xs text-gray-900 dark:text-gray-100 truncate">{{ entry.name }}</div>
+                              <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
+                                <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
+                                <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
+                                <span v-if="entry.max_tokens">{{ entry.max_tokens.toLocaleString() }} tok</span>
+                              </div>
+                            </button>
+                          </div>
+                        </Teleport>
+                        <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
+                      </div>
+
+                      <!-- Custom costs tab — inputs in $/MTok -->
+                      <div v-if="activeCostTab(model.model_name) === 'custom'" class="space-y-3">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                          Define fully custom cost values, bypassing the cost map.
+                          Cost fields are in <strong>$ per million tokens ($/MTok)</strong>.
+                        </p>
+                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Input cost ($/MTok)</span>
+                            <input
+                              type="number" step="0.0001" min="0"
+                              :value="getCustomMTok(model.model_name, 'input_cost_per_token', model.costs)"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomMTokField(model.model_name, 'input_cost_per_token', $event.target.value)"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Output cost ($/MTok)</span>
+                            <input
+                              type="number" step="0.0001" min="0"
+                              :value="getCustomMTok(model.model_name, 'output_cost_per_token', model.costs)"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomMTokField(model.model_name, 'output_cost_per_token', $event.target.value)"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Cache read ($/MTok)</span>
+                            <input
+                              type="number" step="0.0001" min="0"
+                              :value="getCustomMTok(model.model_name, 'cache_read_input_token_cost', model.costs)"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomMTokField(model.model_name, 'cache_read_input_token_cost', $event.target.value)"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Cache write ($/MTok)</span>
+                            <input
+                              type="number" step="0.0001" min="0"
+                              :value="getCustomMTok(model.model_name, 'cache_creation_input_token_cost', model.costs)"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomMTokField(model.model_name, 'cache_creation_input_token_cost', $event.target.value)"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Max tokens</span>
+                            <input
+                              type="number" step="1" min="0"
+                              :value="customCostInputs[model.model_name]?.max_tokens ?? model.costs?.max_tokens ?? ''"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomField(model.model_name, 'max_tokens', parseInt($event.target.value))"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Max input tokens</span>
+                            <input
+                              type="number" step="1" min="0"
+                              :value="customCostInputs[model.model_name]?.max_input_tokens ?? model.costs?.max_input_tokens ?? ''"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomField(model.model_name, 'max_input_tokens', parseInt($event.target.value))"
+                            />
+                          </label>
+                          <label class="block">
+                            <span class="text-xs text-gray-600 dark:text-gray-300">Max output tokens</span>
+                            <input
+                              type="number" step="1" min="0"
+                              :value="customCostInputs[model.model_name]?.max_output_tokens ?? model.costs?.max_output_tokens ?? ''"
+                              class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
+                              @input="setCustomField(model.model_name, 'max_output_tokens', parseInt($event.target.value))"
+                            />
+                          </label>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                          <button
+                            class="btn-primary text-xs"
+                            :disabled="saving[model.model_name]"
+                            @click="saveCustomCosts(model.model_name, model.costs)"
+                          >{{ saving[model.model_name] ? 'Saving…' : 'Save custom costs' }}</button>
+                        </div>
+                        <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="openPlaygrounds.get(model.model_name) === group.provider">
+                    <td colspan="8" class="p-0"><ModelPlayground :model-name="model.model_name" /></td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
-
-          <!-- Cost information section -->
-          <div v-if="!model.deployments?.some(d => d.decision)" class="border-t border-gray-100 dark:border-gray-700">
-            <div class="px-6 py-3 bg-white dark:bg-gray-800 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Info</span>
-                <span
-                  v-if="model.costs?.source"
-                  class="text-xs px-1.5 py-0.5 rounded"
-                  :class="{
-                    'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300': model.costs.source === 'auto',
-                    'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300': model.costs.source === 'override',
-                    'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300': model.costs.source === 'custom',
-                  }"
-                >{{ model.costs.source }}</span>
-                <span v-else class="text-xs text-gray-400">not mapped</span>
-              </div>
-              <div class="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
-                <span v-if="model.costs?.input_cost_per_token">In: {{ formatCostPerToken(model.costs.input_cost_per_token) }}</span>
-                <span v-if="model.costs?.output_cost_per_token">Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}</span>
-                <span v-if="model.costs?.max_tokens">Max: {{ model.costs.max_tokens.toLocaleString() }} tok</span>
-                <button
-                  v-if="model.costs?.source && model.costs.source !== 'auto'"
-                  class="btn-secondary text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                  :disabled="clearing[model.model_name]"
-                  @click="clearCostOverride(model.model_name)"
-                >{{ clearing[model.model_name] ? 'Clearing…' : 'Clear' }}</button>
-                <button class="btn-secondary text-xs" @click="toggleCostEditor(model.model_name)">
-                  {{ openCostEditors.has(model.model_name) ? 'Hide' : 'Edit' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Cost editor (collapsible) -->
-            <div v-if="openCostEditors.has(model.model_name)" class="px-6 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
-              <!-- Tab switcher -->
-              <div class="flex gap-2 mt-3 mb-4 border-b border-gray-200 dark:border-gray-700">
-                <button
-                  class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'key' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
-                  @click="setCostTab(model.model_name, 'key')"
-                >Cost Map Key</button>
-                <button
-                  class="px-3 py-1.5 text-xs font-medium border-b-2 -mb-px"
-                  :class="activeCostTab(model.model_name) === 'custom' ? 'border-indigo-500 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
-                  @click="setCostTab(model.model_name, 'custom')"
-                >Custom Costs</button>
-              </div>
-
-              <!-- Cost map key tab — autocomplete combobox -->
-              <div v-if="activeCostTab(model.model_name) === 'key'" class="space-y-2">
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  Select the LiteLLM cost map entry for this model. Type to filter.
-                </p>
-                <div class="flex gap-2">
-                  <input
-                    :value="costKeyInputs[model.model_name] ?? model.costs?.cost_map_key ?? ''"
-                    class="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 font-mono"
-                    placeholder="e.g. openai/gpt-4"
-                    autocomplete="off"
-                    @input="onCostKeyInput(model.model_name, $event.target.value, $event)"
-                    @focus="openDropdown(model.model_name, $event)"
-                    @blur="scheduleCloseDropdown(model.model_name)"
-                  />
-                  <button
-                    class="btn-primary text-xs"
-                    :disabled="saving[model.model_name]"
-                    @click="saveCostMapKey(model.model_name)"
-                  >{{ saving[model.model_name] ? 'Saving…' : 'Save' }}</button>
-                </div>
-                <!-- Dropdown teleported to <body> to escape card's overflow:hidden -->
-                <Teleport to="body">
-                  <div
-                    v-if="showDropdowns[model.model_name] && filteredCostMapModels(model.model_name).length"
-                    class="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-xl overflow-y-auto"
-                    :style="{
-                      top: (dropdownPos[model.model_name]?.top ?? 0) + 'px',
-                      left: (dropdownPos[model.model_name]?.left ?? 0) + 'px',
-                      width: (dropdownPos[model.model_name]?.width ?? 300) + 'px',
-                      maxHeight: '240px',
-                    }"
-                  >
-                    <button
-                      v-for="entry in filteredCostMapModels(model.model_name)"
-                      :key="entry.name"
-                      type="button"
-                      class="w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                      @mousedown.prevent="selectCostMapKey(model.model_name, entry)"
-                    >
-                      <div class="font-mono text-xs text-gray-900 dark:text-gray-100 truncate">{{ entry.name }}</div>
-                      <div class="text-xs text-gray-400 mt-0.5 flex gap-3">
-                        <span v-if="entry.input_cost_per_token">In: {{ formatCostPerToken(entry.input_cost_per_token) }}</span>
-                        <span v-if="entry.output_cost_per_token">Out: {{ formatCostPerToken(entry.output_cost_per_token) }}</span>
-                        <span v-if="entry.max_tokens">{{ entry.max_tokens.toLocaleString() }} tok</span>
-                      </div>
-                    </button>
-                  </div>
-                </Teleport>
-                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
-              </div>
-
-              <!-- Custom costs tab — inputs in $/MTok -->
-              <div v-if="activeCostTab(model.model_name) === 'custom'" class="space-y-3">
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  Define fully custom cost values, bypassing the cost map.
-                  Cost fields are in <strong>$ per million tokens ($/MTok)</strong>.
-                </p>
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Input cost ($/MTok)</span>
-                    <input
-                      type="number" step="0.0001" min="0"
-                      :value="getCustomMTok(model.model_name, 'input_cost_per_token', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomMTokField(model.model_name, 'input_cost_per_token', $event.target.value)"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Output cost ($/MTok)</span>
-                    <input
-                      type="number" step="0.0001" min="0"
-                      :value="getCustomMTok(model.model_name, 'output_cost_per_token', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomMTokField(model.model_name, 'output_cost_per_token', $event.target.value)"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Cache read ($/MTok)</span>
-                    <input
-                      type="number" step="0.0001" min="0"
-                      :value="getCustomMTok(model.model_name, 'cache_read_input_token_cost', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomMTokField(model.model_name, 'cache_read_input_token_cost', $event.target.value)"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Cache write ($/MTok)</span>
-                    <input
-                      type="number" step="0.0001" min="0"
-                      :value="getCustomMTok(model.model_name, 'cache_creation_input_token_cost', model.costs)"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomMTokField(model.model_name, 'cache_creation_input_token_cost', $event.target.value)"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Max tokens</span>
-                    <input
-                      type="number" step="1" min="0"
-                      :value="customCostInputs[model.model_name]?.max_tokens ?? model.costs?.max_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomField(model.model_name, 'max_tokens', parseInt($event.target.value))"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Max input tokens</span>
-                    <input
-                      type="number" step="1" min="0"
-                      :value="customCostInputs[model.model_name]?.max_input_tokens ?? model.costs?.max_input_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomField(model.model_name, 'max_input_tokens', parseInt($event.target.value))"
-                    />
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-gray-600 dark:text-gray-300">Max output tokens</span>
-                    <input
-                      type="number" step="1" min="0"
-                      :value="customCostInputs[model.model_name]?.max_output_tokens ?? model.costs?.max_output_tokens ?? ''"
-                      class="mt-0.5 w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5"
-                      @input="setCustomField(model.model_name, 'max_output_tokens', parseInt($event.target.value))"
-                    />
-                  </label>
-                </div>
-                <div class="flex gap-2 items-center">
-                  <button
-                    class="btn-primary text-xs"
-                    :disabled="saving[model.model_name]"
-                    @click="saveCustomCosts(model.model_name, model.costs)"
-                  >{{ saving[model.model_name] ? 'Saving…' : 'Save custom costs' }}</button>
-                </div>
-                <p v-if="saveErrors[model.model_name]" class="text-xs text-red-600 dark:text-red-400">{{ saveErrors[model.model_name] }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Inline playground (toggleable) -->
-          <ModelPlayground v-if="openPlaygrounds.has(model.model_name)" :model-name="model.model_name" />
-        </div>
+        </section>
 
         <div v-if="!data.models?.length" class="card px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
           No models configured. Add models to your config.yaml.
@@ -263,7 +265,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { computed, ref, reactive, onMounted, onUnmounted } from 'vue'
 import { api } from '../api/client.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
@@ -273,8 +275,8 @@ import ModelPlayground from '../components/ModelPlayground.vue'
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
-const openPlaygrounds = reactive(new Set())
-const openCostEditors = reactive(new Set())
+const openPlaygrounds = reactive(new Map())
+const openCostEditors = reactive(new Map())
 const costTabs = reactive({})
 const costKeyInputs = reactive({})
 const customCostInputs = reactive({})
@@ -285,6 +287,34 @@ const showDropdowns = reactive({})
 const dropdownPos = reactive({}) // modelName → {top, left, width} in viewport px
 const activeScrollModelName = ref(null) // string | null — which dropdown is tracking scroll
 const activeScrollEl = ref(null)         // HTMLElement | null — the tracked input element
+
+// Group by the deployment provider, not the model alias or cost-map provider.
+// A model routed through several providers appears in each relevant table.
+const providerGroups = computed(() => {
+  const groups = new Map()
+  for (const model of data.value?.models ?? []) {
+    const deploymentsByProvider = new Map()
+    for (const dep of model.deployments ?? []) {
+      const provider = dep.provider || 'unknown'
+      if (!deploymentsByProvider.has(provider)) deploymentsByProvider.set(provider, [])
+      deploymentsByProvider.get(provider).push(dep)
+    }
+    if (!deploymentsByProvider.size) deploymentsByProvider.set('unknown', [])
+    for (const [provider, deployments] of deploymentsByProvider) {
+      if (!groups.has(provider)) groups.set(provider, { provider, models: [], deploymentCount: 0 })
+      const group = groups.get(provider)
+      group.models.push({
+        ...model,
+        isDecision: model.deployments?.some(dep => dep.decision),
+        deployments: deployments.length ? deployments : [{ status: 'unknown' }],
+      })
+      group.deploymentCount += deployments.length
+    }
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.provider.localeCompare(b.provider))
+    .map(group => ({ ...group, models: group.models.sort((a, b) => a.model_name.localeCompare(b.model_name)) }))
+})
 
 // Cost map model list for autocomplete — loaded once on first editor open.
 const costMapModelList = ref([])
@@ -326,17 +356,22 @@ async function load() {
 onMounted(load)
 onUnmounted(() => { detachScrollListener() })
 
-function togglePlayground(modelName) {
-  if (openPlaygrounds.has(modelName)) openPlaygrounds.delete(modelName)
-  else openPlaygrounds.add(modelName)
+function providerLabel(provider) {
+  const names = { openai: 'OpenAI', openrouter: 'OpenRouter', minimax: 'MiniMax', vllm: 'vLLM' }
+  return names[provider] || provider.charAt(0).toUpperCase() + provider.slice(1)
 }
 
-function toggleCostEditor(modelName) {
-  if (openCostEditors.has(modelName)) {
+function togglePlayground(modelName, provider) {
+  if (openPlaygrounds.get(modelName) === provider) openPlaygrounds.delete(modelName)
+  else openPlaygrounds.set(modelName, provider)
+}
+
+function toggleCostEditor(modelName, provider) {
+  if (openCostEditors.get(modelName) === provider) {
     openCostEditors.delete(modelName)
     scheduleCloseDropdown(modelName)
   } else {
-    openCostEditors.add(modelName)
+    openCostEditors.set(modelName, provider)
     if (!costTabs[modelName]) costTabs[modelName] = 'key'
     loadCostMapModels()
   }
