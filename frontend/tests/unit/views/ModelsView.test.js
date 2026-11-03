@@ -91,6 +91,122 @@ describe('ModelsView', () => {
     expect(wrapper.text()).toContain('1 deployment')
   })
 
+  it('clusters models by deployment provider with one shared table per provider', async () => {
+    const deployment = (provider, actual_model, extra = {}) => ({
+      provider, actual_model, status: 'healthy', failure_count: 0, ...extra,
+    })
+    const models = [
+      { model_name: 'z-chat', deployments: [deployment('openai', 'gpt-4')] },
+      { model_name: 'anthropic/claude-via-router', deployments: [deployment('openrouter', 'anthropic/claude')] },
+      { model_name: 'b-claude', deployments: [deployment('anthropic', 'claude-b')] },
+      { model_name: 'a-claude', deployments: [deployment('anthropic', 'claude-a')] },
+      { model_name: 'shared', deployments: [
+        deployment('openai', 'gpt-primary', { rpm: 100, tpm: 1000 }),
+        deployment('anthropic', 'claude-fallback'),
+        deployment('openai', 'gpt-backup', { status: 'cooldown', failure_count: 3, cooldown_until: '2026-11-03T20:00:00Z' }),
+      ] },
+    ]
+    fetchMock.mockResolvedValueOnce(okResponse({ ...mockStatusData, models }))
+      .mockResolvedValue(okResponse(mockCostsData))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+
+    const groups = wrapper.findAll('section')
+    expect(groups.map(group => group.find('h2').text())).toEqual(['Anthropic', 'OpenAI', 'OpenRouter'])
+    expect(wrapper.findAll('table')).toHaveLength(3)
+    expect(wrapper.findAll('thead')).toHaveLength(3)
+    expect(groups[0].findAll('tbody th').map(cell => cell.text())).toEqual(['a-claude', 'b-claude', 'shared'])
+    expect(groups[0].text()).toContain('3 models · 3 deployments')
+    expect(groups[1].text()).toContain('2 models · 3 deployments')
+    expect(groups[1].findAll('tbody th').map(cell => cell.text())).toEqual(['shared', 'z-chat'])
+    expect(groups[1].find('tbody th').attributes('rowspan')).toBe('2')
+    expect(groups[1].text()).toContain('gpt-primary')
+    expect(groups[1].text()).toContain('gpt-backup')
+    expect(groups[1].text()).toContain('Cooldown')
+    expect(groups[1].text()).toContain('until')
+    expect(groups[1].text()).toContain('1000')
+    expect(groups[2].text()).toContain('anthropic/claude-via-router')
+    expect(groups[0].text()).not.toContain('claude-via-router')
+    wrapper.unmount()
+  })
+
+  it('opens cost editors and playgrounds only in the selected provider group for shared models', async () => {
+    const sharedModel = {
+      ...mockStatusData.models[0],
+      deployments: [
+        ...mockStatusData.models[0].deployments,
+        { provider: 'openrouter', actual_model: 'openai/gpt-4', status: 'healthy', failure_count: 0 },
+      ],
+    }
+    fetchMock.mockResolvedValueOnce(okResponse({ ...mockStatusData, models: [sharedModel] }))
+      .mockResolvedValueOnce(okResponse(mockCostsData))
+      .mockResolvedValue(okResponse(mockCostMapModels))
+    const wrapper = mount(ModelsView, { global: { stubs: { ModelPlayground: { template: '<div>Playground</div>' } } } })
+    await flushPromises()
+    const groups = wrapper.findAll('section')
+    const button = (group, text) => group.findAll('button').find(b => b.text() === text)
+
+    await button(groups[0], 'Edit').trigger('click')
+    await flushPromises()
+    expect(groups[0].find('input[placeholder*="openai"]').exists()).toBe(true)
+    expect(groups[1].find('input').exists()).toBe(false)
+    await button(groups[1], 'Edit').trigger('click')
+    expect(groups[0].find('input').exists()).toBe(false)
+    expect(groups[1].find('input[placeholder*="openai"]').exists()).toBe(true)
+
+    await button(groups[0], 'Test').trigger('click')
+    expect(groups[0].text()).toContain('Playground')
+    expect(groups[1].text()).not.toContain('Playground')
+    await button(groups[1], 'Test').trigger('click')
+    expect(groups[0].text()).not.toContain('Playground')
+    expect(groups[1].text()).toContain('Playground')
+    await button(groups[1], 'Hide test').trigger('click')
+    expect(wrapper.text()).not.toContain('Playground')
+    wrapper.unmount()
+  })
+
+  it('preserves decision details without offering chat tests or cost overrides', async () => {
+    const model = {
+      model_name: 'classifier',
+      deployments: [{
+        provider: 'decision', actual_model: 'classifier', status: 'healthy', failure_count: 0,
+        decision: {
+          modalities: ['text'], question_types: ['boolean'],
+          pricing: { input_cost_per_token: 0, output_cost_per_token: 0, cost_per_request: 0.01 },
+        },
+      }],
+    }
+    fetchMock.mockResolvedValueOnce(okResponse({ ...mockStatusData, models: [model] }))
+      .mockResolvedValue(okResponse({ costs: null }))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Decision · text · boolean')
+    expect(wrapper.text()).toContain('$0.01 / call')
+    expect(wrapper.findAll('button').map(button => button.text())).toEqual(['Refresh'])
+    wrapper.unmount()
+  })
+
+  it('keeps models without deployments visible under an unknown provider', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ ...mockStatusData, models: [{ model_name: 'unavailable', deployments: [] }] }))
+      .mockResolvedValue(okResponse({ costs: null }))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+    expect(wrapper.find('h2').text()).toBe('Unknown')
+    expect(wrapper.text()).toContain('0 deployments')
+    expect(wrapper.find('tbody th').text()).toBe('unavailable')
+    expect(wrapper.text()).toContain('Unknown')
+    wrapper.unmount()
+  })
+
+  it('shows an empty state when no models are configured', async () => {
+    fetchMock.mockResolvedValue(okResponse({ ...mockStatusData, models: [] }))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('No models configured')
+    expect(wrapper.findAll('table')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
   it('displays cost info in $/MTok when available', async () => {
     fetchMock.mockResolvedValueOnce(okResponse(mockStatusData)).mockResolvedValueOnce(okResponse(mockCostsData))
     const router = makeRouter()
