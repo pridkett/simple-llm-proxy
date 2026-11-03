@@ -1,239 +1,348 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import CostView from '@/views/CostView.vue'
+import { addMetrics } from '@/utils/usage.js'
 
 vi.mock('@/api/client.js', () => ({
-  api: {
-    spend: vi.fn(),
-  },
+  api: { usage: vi.fn(), logsMeta: vi.fn() }
 }))
-
 import { api } from '@/api/client.js'
 
-function makeRouter() {
-  return createRouter({
-    history: createWebHashHistory(),
-    routes: [{ path: '/cost', component: CostView }],
+const groups = [
+  {
+    group_id: 'local',
+    name: 'local',
+    calls: 10,
+    total_tokens: 1200,
+    known_token_calls: 10,
+    total_spend: 0,
+    known_cost_calls: 10,
+    input_tokens: 1000,
+    known_input_calls: 10,
+    output_tokens: 200,
+    known_output_calls: 10
+  },
+  {
+    group_id: 'paid',
+    name: 'paid',
+    calls: 2,
+    total_tokens: 80,
+    known_token_calls: 2,
+    total_spend: 1.25,
+    known_cost_calls: 2,
+    input_tokens: 50,
+    output_tokens: 30,
+    known_input_calls: 2,
+    known_output_calls: 2
+  },
+  {
+    group_id: 'opaque',
+    name: 'opaque',
+    calls: 1,
+    total_tokens: 0,
+    total_spend: 0,
+    known_token_calls: 0,
+    known_cost_calls: 0
+  },
+  {
+    group_id: 'partial',
+    name: 'partial',
+    calls: 1,
+    total_spend: 0.01,
+    known_cost_calls: 1,
+    partial_cost_calls: 1,
+    input_tokens: 7,
+    known_input_calls: 1
+  }
+]
+function response(rows = groups) {
+  return {
+    groups: rows,
+    series: rows.map((r) => ({ ...r, bucket: 0 })),
+    summary: {
+      failed_calls: 0,
+      upstream_cost_calls: 2,
+      estimated_cost_calls: 10,
+      mixed_cost_calls: 1,
+      ...addMetrics(rows)
+    },
+    buckets: [
+      {
+        start: '2026-11-01T04:00:00Z',
+        end: '2026-11-02T05:00:00Z',
+        label: 'Nov 1'
+      }
+    ],
+    from: '2026-11-01',
+    to: '2026-11-01',
+    from_time: '2026-11-01T04:00:00Z',
+    to_time: '2026-11-02T05:00:00Z',
+    timezone: 'America/New_York',
+    retention_days: 30,
+    alerts: [],
+    budget_rows: [
+      {
+        key_id: 1,
+        key_name: 'test-key',
+        app_name: 'app',
+        team_name: 'team',
+        total_spend: 1.26,
+        max_budget: 10,
+        soft_budget: 8
+      }
+    ]
+  }
+}
+const chart = {
+  name: 'ChartProbe',
+  props: ['options', 'series'],
+  template: '<div />'
+}
+let wrapper, router
+async function render(data = response()) {
+  api.usage.mockResolvedValue(data)
+  router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/cost', component: CostView },
+      { path: '/logs', component: { template: '<div />' } }
+    ]
   })
-}
-
-const emptySpendResponse = { rows: [], alerts: [], from: '2026-03-19', to: '2026-03-26' }
-const spendWithAlerts = {
-  rows: [
-    { key_id: 1, key_name: 'test-key', app_id: 1, app_name: 'test-app', team_id: 1, team_name: 'test-team',
-      total_spend: 9.5, max_budget: 10.0, soft_budget: 8.0 }
-  ],
-  alerts: [
-    { key_id: 1, key_name: 'test-key', app_name: 'test-app', team_name: 'test-team',
-      total_spend: 9.5, soft_budget: 8.0, max_budget: 10.0, alert_type: 'soft' }
-  ],
-  from: '2026-03-19', to: '2026-03-26',
-}
-
-const spendWithModels = {
-  rows: [
-    { key_id: 1, key_name: 'test-key', app_id: 1, app_name: 'test-app', team_id: 1, team_name: 'test-team',
-      total_spend: 1.5, max_budget: 10.0, soft_budget: null }
-  ],
-  model_rows: [
-    { model: 'claude-sonnet', total_spend: 1.25, request_count: 1200,
-      input_tokens: 150000, output_tokens: 40000, cache_read_tokens: 2000000, cache_write_tokens: 50000 },
-    { model: 'gpt-4o', total_spend: 0.25, request_count: 300,
-      input_tokens: 90000, output_tokens: 10000, cache_read_tokens: 0, cache_write_tokens: 0 },
-  ],
-  daily_rows: [],
-  alerts: [],
-  from: '2026-03-19', to: '2026-03-26',
-}
-
-async function mountByModel(data) {
-  api.spend.mockResolvedValue(data)
-  const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
+  await router.push('/cost')
+  wrapper = mount(CostView, {
+    global: { plugins: [router], stubs: { apexchart: chart } }
+  })
   await flushPromises()
-  await wrapper.findAll('button').find(b => b.text() === 'By Model').trigger('click')
   return wrapper
 }
+const button = (text) =>
+  wrapper.findAll('button').find((b) => b.text() === text)
+async function settle() {
+  await vi.advanceTimersByTimeAsync(160)
+  await flushPromises()
+}
 
-describe('CostView', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  api.logsMeta.mockResolvedValue({
+    teams: [{ id: 1, name: 'team' }],
+    apps: [{ id: 2, name: 'app' }],
+    keys: [{ id: 3, name: 'key' }],
+    models: ['local', 'paid']
   })
+})
+afterEach(() => {
+  wrapper?.unmount()
+  wrapper = null
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
-  it('updates both chart types and tooltips with the browser color preference', async () => {
+describe('Usage & Cost', () => {
+  it('keeps dollars visible when calls or tokens drive the chart', async () => {
+    await render()
+    expect(wrapper.find('[data-testid="summary-spend"]').text()).toContain(
+      '$1.2600'
+    )
+    await wrapper.find('[data-testid="summary-tokens"]').trigger('click')
+    expect(wrapper.find('[data-testid="summary-spend"]').text()).toContain(
+      '$1.2600'
+    )
+    expect(wrapper.findAll('th').map((h) => h.text())).toContain('Dollar spend')
+    expect(wrapper.findComponent(chart).props('series')[0].data[0]).toBe(1200)
+    expect(localStorage.getItem('usage-chart-metric')).toBe('tokens')
+  })
+  it('keeps distinct category colors when a metric changes their order', async () => {
+    await render()
+    const initial = wrapper.findComponent(chart).props()
+    const colors = new Map(initial.series.map((series, i) => [series.name, initial.options.colors[i]]))
+    expect(new Set(colors.values()).size).toBe(groups.length)
+    await wrapper.find('[data-testid="summary-spend"]').trigger('click')
+    const updated = wrapper.findComponent(chart).props()
+    updated.series.forEach((series, i) => expect(updated.options.colors[i]).toBe(colors.get(series.name)))
+  })
+  it('restores the chart metric preference', async () => {
+    localStorage.setItem('usage-chart-metric', 'spend')
+    await render()
+    expect(
+      wrapper.find('[data-testid="summary-spend"]').attributes('aria-pressed')
+    ).toBe('true')
+    expect(wrapper.findAll('[data-testid="usage-row"]')[0].text()).toContain(
+      'paid'
+    )
+  })
+  it('distinguishes measured zero, missing measurements, and partial spend', async () => {
+    await render()
+    const rows = wrapper.findAll('[data-testid="usage-row"]')
+    expect(rows.find((r) => r.text().includes('local')).text()).toContain(
+      '$0.0000'
+    )
+    expect(rows.find((r) => r.text().includes('opaque')).text()).toContain(
+      'Unknown'
+    )
+    expect(rows.find((r) => r.text().includes('partial')).text()).toContain(
+      'Known subtotal'
+    )
+    expect(wrapper.find('[data-testid="summary-spend"]').text()).toContain(
+      '13 / 14 calls measured'
+    )
+  })
+  it('sorts every metric and keeps unknown values last in both directions', async () => {
+    await render()
+    await wrapper.find('[aria-label="Sort by"]').setValue('total_spend')
+    expect(wrapper.findAll('[data-testid="usage-row"]')[0].text()).toContain(
+      'paid'
+    )
+    expect(
+      wrapper.findAll('[data-testid="usage-row"]').at(-1).text()
+    ).toContain('opaque')
+    await wrapper.find('[aria-label="Sort ascending"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="usage-row"]')[0].text()).toContain(
+      'local'
+    )
+    expect(
+      wrapper.findAll('[data-testid="usage-row"]').at(-1).text()
+    ).toContain('opaque')
+  })
+  it('exposes token detail and dollar totals together in Explore', async () => {
+    await render()
+    await button('explore').trigger('click')
+    const headers = wrapper.findAll('th').map((h) => h.text())
+    expect(headers).toEqual(
+      expect.arrayContaining([
+        'Input',
+        'Output',
+        'Cache read',
+        'Cache write',
+        'Reasoning',
+        'Dollar spend'
+      ])
+    )
+    expect(wrapper.find('[data-testid="usage-totals"]').text()).toContain(
+      '$1.2600'
+    )
+    expect(wrapper.find('[data-testid="estimate-note"]').text()).toContain(
+      'subsets, not extra tokens'
+    )
+  })
+  it('refetches grouping, timezone and attribution filters on the server', async () => {
+    await render()
+    await wrapper.find('[aria-label="Group by"]').setValue('app')
+    await wrapper.find('[aria-label="Timezone"]').setValue('UTC')
+    await wrapper.find('[aria-label="Team"]').setValue(1)
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ group_by: 'app', timezone: 'UTC', team_id: 1 })
+    )
+  })
+  it('drills into a model and preserves exact report bounds in Logs links', async () => {
+    await render()
+    const link = wrapper.find('a[aria-label="View requests for local"]')
+    const parsed = router.resolve(link.attributes('href').replace(/^#/, ''))
+    expect(parsed.query).toMatchObject({
+      model: 'local',
+      date_from: '2026-11-01T04:00:00Z',
+      date_before: '2026-11-02T05:00:00Z'
+    })
+    await button('local').trigger('click')
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: 'local' })
+    )
+    expect(wrapper.findAll('th').map((h) => h.text())).toContain('Reasoning')
+  })
+  it('offers a keyboard-accessible time-bucket drill-down with exclusive bounds', async () => {
+    await render()
+    await wrapper.find('[aria-label="Explore time bucket"]').setValue(0)
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        since: '2026-11-01T04:00:00Z',
+        until: '2026-11-02T05:00:00Z'
+      })
+    )
+    expect(wrapper.text()).toContain('Nov 1 ·')
+    await button('Today').trigger('click')
+    await settle()
+    expect(api.usage.mock.lastCall[0].since).toBeUndefined()
+  })
+  it('preserves key budgets and alerts with exact configured dollar caps', async () => {
+    const data = response()
+    data.alerts = [
+      {
+        key_id: 1,
+        key_name: 'test-key',
+        app_name: 'app',
+        total_spend: 9.5,
+        alert_type: 'soft'
+      }
+    ]
+    await render(data)
+    expect(wrapper.text()).toContain('soft budget reached')
+    await button('budgets').trigger('click')
+    expect(wrapper.text()).toContain('$10.00')
+    expect(wrapper.text()).toContain('12.6%')
+    expect(wrapper.find('[data-testid="summary-spend"]').exists()).toBe(true)
+  })
+  it('shows empty and error states and allows retry', async () => {
+    await render(response([]))
+    expect(wrapper.text()).toContain('No requests were recorded')
+    api.usage.mockRejectedValueOnce(new Error('Unavailable'))
+    await button('Refresh').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Unavailable')
+    await button('Refresh').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('No requests were recorded')
+  })
+  it('rejects reversed custom dates without requesting a misleading report', async () => {
+    await render()
+    await button('Custom').trigger('click')
+    await wrapper.find('[aria-label="From date"]').setValue('2026-12-01')
+    await wrapper.find('[aria-label="To date"]').setValue('2026-11-01')
+    const count = api.usage.mock.calls.length
+    await settle()
+    expect(wrapper.find('[role="alert"]').text()).toContain('start date')
+    expect(api.usage.mock.calls.length).toBe(count)
+  })
+  it('does not replace a newer report with a stale response', async () => {
+    await render()
+    let release
+    api.usage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        })
+    )
+    await button('Today').trigger('click')
+    await settle()
+    api.usage.mockResolvedValueOnce(response([groups[0]]))
+    await button('30d').trigger('click')
+    await settle()
+    release(response([groups[1]]))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="summary-spend"]').text()).toContain(
+      '$0.0000'
+    )
+  })
+  it('updates chart theme and tooltip with system appearance', async () => {
     const media = new EventTarget()
     media.matches = true
-    vi.stubGlobal('matchMedia', vi.fn(() => media))
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const chart = { name: 'ChartProbe', props: ['options'], template: '<div />' }
-    const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: chart } } })
-    await flushPromises()
-    const options = () => wrapper.findComponent({ name: 'ChartProbe' }).props('options')
-    expect(options().theme.mode).toBe('dark')
-    expect(options().tooltip.theme).toBe('dark')
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => media)
+    )
+    await render()
+    expect(wrapper.findComponent(chart).props('options').theme.mode).toBe(
+      'dark'
+    )
     media.matches = false
     media.dispatchEvent(new Event('change'))
     await flushPromises()
-    expect(options().theme.mode).toBe('light')
-    expect(options().tooltip.theme).toBe('light')
-    await wrapper.findAll('button').find(b => b.text() === 'Over Time').trigger('click')
-    expect(options().chart.type).toBe('area')
-    media.matches = true
-    media.dispatchEvent(new Event('change'))
-    await flushPromises()
-    expect(options().theme.mode).toBe('dark')
-    expect(options().tooltip.theme).toBe('dark')
-    wrapper.unmount()
-    vi.unstubAllGlobals()
-  })
-
-  it('renders ErrorAlert on API failure', async () => {
-    api.spend.mockRejectedValue(new Error('Network error'))
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.findComponent({ name: 'ErrorAlert' }).exists()).toBe(true)
-  })
-
-  it('hides Alerts Panel when alerts array is empty', async () => {
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('Budget Alerts')
-  })
-
-  it('renders Alerts Panel when alerts array is non-empty', async () => {
-    api.spend.mockResolvedValue(spendWithAlerts)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.text()).toContain('Budget Alerts')
-  })
-
-  it('renders empty state when spend rows array is empty', async () => {
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.text()).toContain('No spend data')
-  })
-
-  it('renders breakdown table rows from spend data', async () => {
-    api.spend.mockResolvedValue(spendWithAlerts)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.text()).toContain('test-key')
-  })
-
-  it('filter bar defaults to 7d as the active date range', async () => {
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    const buttons = wrapper.findAll('button')
-    const btn7d = buttons.find(b => b.text() === '7d')
-    expect(btn7d).toBeTruthy()
-    expect(btn7d.classes()).toContain('bg-indigo-50')
-  })
-
-  it('Reset Filters button not shown when filters are at defaults', async () => {
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('Reset Filters')
-  })
-
-  it('re-fetches from server when date range filter changes (no client-side filtering)', async () => {
-    // Mount with initial 7d response
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const router = makeRouter()
-    const wrapper = mount(CostView, { global: { plugins: [router], stubs: { apexchart: true } } })
-    await flushPromises()
-
-    const initialCallCount = api.spend.mock.calls.length
-    expect(initialCallCount).toBeGreaterThan(0)
-
-    // Click Today button — should trigger a new API call
-    api.spend.mockResolvedValue(emptySpendResponse)
-    const buttons = wrapper.findAll('button')
-    const btnToday = buttons.find(b => b.text() === 'Today')
-    await btnToday.trigger('click')
-    await flushPromises()
-
-    // api.spend should have been called again (server-driven refetch, not client-side filter)
-    expect(api.spend.mock.calls.length).toBeGreaterThan(initialCallCount)
-  })
-
-  describe('By Model breakdown (ADR 012)', () => {
-    it('renders token columns with grouped counts for each model', async () => {
-      const wrapper = await mountByModel(spendWithModels)
-      const headers = wrapper.findAll('th').map(th => th.text())
-      expect(headers).toEqual(expect.arrayContaining(
-        ['Model', 'Requests', 'Input Tokens', 'Output Tokens', 'Cache Read', 'Cache Write', 'Spend']))
-      const rows = wrapper.findAll('[data-testid="model-row"]')
-      expect(rows).toHaveLength(2)
-      const cells = rows[0].findAll('td').map(td => td.text())
-      expect(cells).toEqual([
-        'claude-sonnet',
-        (1200).toLocaleString(),
-        (150000).toLocaleString(),
-        (40000).toLocaleString(),
-        (2000000).toLocaleString(),
-        (50000).toLocaleString(),
-        '$1.2500',
-      ])
-    })
-
-    it('renders a totals row summing every column', async () => {
-      const wrapper = await mountByModel(spendWithModels)
-      const cells = wrapper.find('[data-testid="model-totals"]').findAll('td').map(td => td.text())
-      expect(cells).toEqual([
-        'Total',
-        (1500).toLocaleString(),
-        (240000).toLocaleString(),
-        (50000).toLocaleString(),
-        (2000000).toLocaleString(),
-        (50000).toLocaleString(),
-        '$1.5000',
-      ])
-    })
-
-    it('treats missing token fields as zero', async () => {
-      const wrapper = await mountByModel({
-        ...spendWithModels,
-        model_rows: [{ model: 'legacy', total_spend: 0.1, request_count: 2 }],
-      })
-      const cells = wrapper.find('[data-testid="model-row"]').findAll('td').map(td => td.text())
-      expect(cells.slice(2, 6)).toEqual(['0', '0', '0', '0'])
-    })
-
-    it('omits the totals row when there is no model data', async () => {
-      const wrapper = await mountByModel({ ...spendWithModels, model_rows: [] })
-      expect(wrapper.text()).toContain('No model data')
-      expect(wrapper.find('[data-testid="model-totals"]').exists()).toBe(false)
-    })
-  })
-
-  describe('cost provenance labeling', () => {
-    it('shows spend without implying all upstream reports are estimates', async () => {
-      api.spend.mockResolvedValue(spendWithModels)
-      const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
-      await flushPromises()
-      const text = wrapper.text()
-      expect(text).toContain('Spend')
-      expect(text).toContain('$1.5000')
-      expect(text).toContain('$10.00')
-      expect(text).not.toContain('~$10.00')
-    })
-
-    it('shows the estimate explanation note', async () => {
-      api.spend.mockResolvedValue(spendWithModels)
-      const wrapper = mount(CostView, { global: { plugins: [makeRouter()], stubs: { apexchart: true } } })
-      await flushPromises()
-      expect(wrapper.find('[data-testid="estimate-note"]').text()).toContain('Costs use upstream-reported amounts')
-    })
+    expect(wrapper.findComponent(chart).props('options').tooltip.theme).toBe(
+      'light'
+    )
   })
 })

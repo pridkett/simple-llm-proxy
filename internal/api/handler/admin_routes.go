@@ -38,6 +38,9 @@ func RegisterAdminRoutes(r chi.Router, store storage.Storage, cache *keystore.Ca
 	// Admin-only enforcement (403 for non-admin authenticated users) is done per-handler
 	// via middleware.UserFromContext — the same pattern used by all admin-only handlers.
 	r.Get("/admin/spend", AdminSpend(store))
+	if reports, ok := store.(usageStore); ok {
+		r.Get("/admin/usage", AdminUsage(reports, getCfg))
+	}
 
 	// Webhook management (Phase 9)
 	r.Get("/admin/webhooks", AdminListWebhooks(store, getCfg))

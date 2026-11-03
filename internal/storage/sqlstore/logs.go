@@ -54,6 +54,21 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		whereClauses = append(whereClauses, "ul.request_time >= ?")
 		whereArgs = append(whereArgs, filters.DateFrom.UTC())
 	}
+	if filters.DateBefore != nil {
+		whereClauses = append(whereClauses, "ul.request_time < ?")
+		whereArgs = append(whereArgs, filters.DateBefore.UTC())
+	}
+	switch filters.Unattributed {
+	case "team":
+		whereClauses = append(whereClauses, "t.id IS NULL")
+	case "app":
+		whereClauses = append(whereClauses, "app.id IS NULL")
+	case "key":
+		whereClauses = append(whereClauses, "ak.id IS NULL")
+	case "":
+	default:
+		return nil, 0, fmt.Errorf("invalid unattributed filter")
+	}
 	if filters.DateTo != nil {
 		whereClauses = append(whereClauses, "ul.request_time <= ?")
 		whereArgs = append(whereArgs, filters.DateTo.UTC())

@@ -16,6 +16,7 @@ client examples are documented in [Request accounting](docs/accounting.md).
 - **Load balancing** - Simple shuffle or round-robin routing strategies
 - **Failover & retries** - Automatic retry with cooldown for failed deployments
 - **LiteLLM-compatible config** - Uses familiar `model_list` YAML format with `os.environ/` expansion
+- **Usage & Cost** - Calls, tokens, dollar spend, time-series reporting, and request drill-down; see [the reporting guide](docs/usage-reporting.md).
 - **Usage logging** - SQLite-based request tracking
 - **App keys** - Per-app keys with model restrictions, revocation, and usage attribution; OIDC protects administration
 - **Decision models** - Decisions and System One APIs for Jev, OpenAI, Granite, Clef, and compatible Laya/Ollaya servers, with multimodal input, explicit key permissions, cost tracking, and log filters. See [the decision model guide](docs/decision-models.md).

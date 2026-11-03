@@ -385,11 +385,13 @@ type LogsFilter struct {
 	TeamID      *int64
 	AppID       *int64
 	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
-	Provider string     // empty string = no filter (same pattern as Model)
-	PoolName string     // empty string = no filter (same pattern as Model)
-	KeyID    *int64     // nil = no filter (same pattern as TeamID/AppID)
-	DateFrom *time.Time // nil = no lower bound on request_time
-	DateTo   *time.Time // nil = no upper bound on request_time
+	Provider     string     // empty string = no filter (same pattern as Model)
+	PoolName     string     // empty string = no filter (same pattern as Model)
+	KeyID        *int64     // nil = no filter (same pattern as TeamID/AppID)
+	DateFrom     *time.Time // nil = no lower bound on request_time
+	DateTo       *time.Time // nil = no inclusive upper bound on request_time
+	DateBefore   *time.Time // nil = no exclusive upper bound (report drill-down)
+	Unattributed string     // optional team/app/key with missing attribution
 }
 
 // LogsMeta holds distinct dimension values for filter dropdowns.

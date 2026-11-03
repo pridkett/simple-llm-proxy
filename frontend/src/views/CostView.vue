@@ -1,517 +1,844 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Cost</h1>
-
-    <LoadingSpinner v-if="loading" />
-    <ErrorAlert v-else-if="error" title="Failed to load cost data" :message="error" />
-
-    <template v-else>
-      <!-- 1. Alerts Panel — hidden entirely when no alerts -->
-      <div v-if="spendData?.alerts?.length > 0" class="mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">Budget Alerts</h2>
-          <span class="text-sm text-gray-500 dark:text-gray-400">{{ spendData.alerts.length }} key(s) require attention.</span>
-        </div>
-        <div class="space-y-2">
-          <div
-            v-for="alert in spendData.alerts"
-            :key="alert.key_id"
-            :class="alert.alert_type === 'hard'
-              ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800'
-              : 'bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800'"
-            class="rounded-md p-3 text-sm flex items-center justify-between"
-          >
-            <div :class="alert.alert_type === 'hard' ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'">
-              <span class="font-medium">{{ alert.key_name }}</span>
-              <span class="ml-1 text-xs">({{ alert.app_name }})</span>
-              <span class="ml-2">{{ formatSpend(alert.total_spend) }} spent</span>
-              <span v-if="alert.soft_budget" class="ml-1">/ ${{ alert.soft_budget.toFixed(2) }} soft</span>
-              <span v-if="alert.max_budget" class="ml-1">/ ${{ alert.max_budget.toFixed(2) }} hard</span>
-            </div>
-            <StatusBadge :status="alert.alert_type === 'hard' ? 'over' : 'warning'" />
-          </div>
-        </div>
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Usage &amp; Cost</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Understand traffic across paid, free, and local models.
+        </p>
       </div>
-
-      <!-- 2. Filter Bar -->
-      <div class="card px-4 py-3 mb-6">
-        <div class="flex flex-wrap gap-3 items-center">
-          <!-- Date range buttons -->
-          <div class="flex gap-1">
-            <button
-              v-for="range in ['today', '7d', '30d', 'custom']"
-              :key="range"
-              @click="dateRange = range"
-              :class="dateRange === range
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
-                : 'btn-secondary'"
-              class="rounded-md px-3 py-1.5 text-sm"
-            >
-              {{ range === 'today' ? 'Today' : range === '7d' ? '7d' : range === '30d' ? '30d' : 'Custom' }}
-            </button>
-          </div>
-          <!-- Custom date inputs -->
-          <template v-if="dateRange === 'custom'">
-            <label class="text-xs text-gray-500 dark:text-gray-400">From</label>
-            <input type="date" v-model="customFrom" @change="onCustomDateChange" class="input max-w-[140px]" />
-            <label class="text-xs text-gray-500 dark:text-gray-400">To</label>
-            <input type="date" v-model="customTo" @change="onCustomDateChange" class="input max-w-[140px]" />
-          </template>
-          <!-- Team dropdown — always enabled; options from allRowsData -->
-          <select v-model="selectedTeamId" class="input">
-            <option :value="null">All teams</option>
-            <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
-          </select>
-          <!-- App dropdown — disabled when no team selected -->
-          <select
-            v-model="selectedAppId"
-            :disabled="!selectedTeamId"
-            :class="!selectedTeamId ? 'opacity-50 cursor-not-allowed' : ''"
-            class="input"
-          >
-            <option :value="null">All applications</option>
-            <option v-for="app in appsForTeam" :key="app.id" :value="app.id">{{ app.name }}</option>
-          </select>
-          <!-- Key dropdown — disabled when no app selected -->
-          <select
-            v-model="selectedKeyId"
-            :disabled="!selectedAppId"
-            :class="!selectedAppId ? 'opacity-50 cursor-not-allowed' : ''"
-            class="input"
-          >
-            <option :value="null">All keys</option>
-            <option v-for="k in keysForApp" :key="k.id" :value="k.id">{{ k.name }}</option>
-          </select>
-          <!-- Reset Filters button — only when non-default state -->
+      <button class="btn-secondary text-sm" :disabled="loading" @click="load">
+        Refresh
+      </button>
+    </div>
+    <nav
+      class="flex gap-5 border-b border-gray-200 dark:border-gray-700 mb-5"
+      aria-label="Reporting views"
+    >
+      <button
+        v-for="item in ['overview', 'explore', 'budgets']"
+        :key="item"
+        type="button"
+        :aria-pressed="tab === item"
+        class="py-3 border-b-2 capitalize text-sm font-medium"
+        :class="
+          tab === item
+            ? 'border-indigo-500 text-indigo-700 dark:text-indigo-300'
+            : 'border-transparent text-gray-500 dark:text-gray-400'
+        "
+        @click="tab = item"
+      >
+        {{ item }}
+      </button>
+    </nav>
+    <div class="card p-4 mb-5 flex flex-wrap gap-3 items-end">
+      <fieldset>
+        <legend class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+          Period
+        </legend>
+        <div class="flex flex-wrap gap-1">
           <button
-            v-if="hasNonDefaultFilter"
-            @click="resetFilters"
-            class="btn-secondary text-xs px-3 py-1.5"
+            v-for="range in ['today', '7d', '30d', 'custom']"
+            :key="range"
+            type="button"
+            class="btn-secondary text-sm px-3"
+            :aria-pressed="period === range"
+            :class="
+              period === range
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : ''
+            "
+            @click="selectPeriod(range)"
           >
-            Reset Filters
+            {{
+              { today: 'Today', '7d': '7d', '30d': '30d', custom: 'Custom' }[
+                range
+              ]
+            }}
+          </button>
+        </div>
+      </fieldset>
+      <template v-if="period === 'custom'">
+        <label class="text-xs text-gray-500 dark:text-gray-400"
+          >From<input
+            v-model="customFrom"
+            aria-label="From date"
+            type="date"
+            class="input mt-1"
+        /></label>
+        <label class="text-xs text-gray-500 dark:text-gray-400"
+          >To<input
+            v-model="customTo"
+            aria-label="To date"
+            type="date"
+            class="input mt-1"
+        /></label>
+      </template>
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Timezone<select
+          v-model="timezone"
+          class="input mt-1"
+          aria-label="Timezone"
+        >
+          <option v-for="tz in timezones" :key="tz">{{ tz }}</option>
+        </select></label
+      >
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Buckets<select
+          v-model="interval"
+          class="input mt-1"
+          aria-label="Buckets"
+        >
+          <option value="hour">Hourly</option>
+          <option value="day">Daily</option>
+          <option value="week">Weekly</option>
+        </select></label
+      >
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Group by<select
+          v-model="groupBy"
+          class="input mt-1"
+          aria-label="Group by"
+        >
+          <option value="model">Model</option>
+          <option value="app">Application</option>
+          <option value="key">Key</option>
+          <option value="team">Team</option>
+        </select></label
+      >
+    </div>
+    <div class="flex flex-wrap gap-3 items-end mb-5">
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Team<select
+          v-model="filters.team_id"
+          class="input mt-1"
+          aria-label="Team"
+        >
+          <option :value="null">All teams</option>
+          <option v-for="item in meta.teams" :key="item.id" :value="item.id">
+            {{ item.name }} (#{{ item.id }})
+          </option>
+        </select></label
+      >
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Application<select
+          v-model="filters.app_id"
+          class="input mt-1"
+          aria-label="Application"
+        >
+          <option :value="null">All applications</option>
+          <option v-for="item in meta.apps" :key="item.id" :value="item.id">
+            {{ item.name }} (#{{ item.id }})
+          </option>
+        </select></label
+      >
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Key<select
+          v-model="filters.key_id"
+          class="input mt-1"
+          aria-label="Key"
+        >
+          <option :value="null">All keys</option>
+          <option v-for="item in meta.keys" :key="item.id" :value="item.id">
+            {{ item.name }} (#{{ item.id }})
+          </option>
+        </select></label
+      >
+      <label class="text-xs text-gray-500 dark:text-gray-400"
+        >Model<select
+          v-model="filters.model"
+          class="input mt-1"
+          aria-label="Model"
+        >
+          <option value="">All models</option>
+          <option v-for="name in meta.models" :key="name">{{ name }}</option>
+        </select></label
+      >
+      <button
+        v-if="hasFilters"
+        class="btn-secondary text-sm"
+        @click="clearFilters"
+      >
+        Clear filters
+      </button>
+    </div>
+    <div
+      v-if="selection || filters.unattributed"
+      class="flex flex-wrap gap-2 mb-4"
+      aria-live="polite"
+    >
+      <button
+        v-if="selection"
+        class="btn-secondary text-xs"
+        @click="selection = null"
+      >
+        {{ selection.label }} · {{ timezone }} ×
+      </button>
+      <button
+        v-if="filters.unattributed"
+        class="btn-secondary text-xs"
+        @click="filters.unattributed = ''"
+      >
+        Unattributed {{ filters.unattributed }} ×
+      </button>
+    </div>
+    <p
+      v-if="validationError"
+      role="alert"
+      class="mb-4 text-sm text-red-600 dark:text-red-400"
+    >
+      {{ validationError }}
+    </p>
+    <LoadingSpinner v-if="loading" />
+    <ErrorAlert
+      v-else-if="error && !validationError"
+      title="Failed to load usage report"
+      :message="error"
+    />
+    <template v-else-if="report && !validationError">
+      <div
+        class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6"
+        aria-label="Usage summary"
+      >
+        <button
+          v-for="item in metrics"
+          :key="item.key"
+          type="button"
+          class="card p-5 text-left border-2"
+          :class="
+            metric === item.key
+              ? 'border-indigo-500 dark:border-indigo-400'
+              : 'border-transparent'
+          "
+          :aria-pressed="metric === item.key"
+          :data-testid="`summary-${item.key}`"
+          @click="metric = item.key"
+        >
+          <span class="text-sm text-gray-500 dark:text-gray-400">{{
+            item.label
+          }}</span
+          ><span class="block text-2xl font-semibold tabular-nums mt-2">{{
+            display(report.summary, item.field)
+          }}</span>
+          <span class="block text-xs text-gray-500 dark:text-gray-400 mt-2">{{
+            item.key === 'calls'
+              ? `${formatNumber(report.summary.failed_calls)} failed · finalized logged requests`
+              : coverage(report.summary, item.field)
+          }}</span>
+        </button>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-5">
+        {{ report.from }} – {{ report.to }} · {{ report.timezone }} ·
+        {{ report.summary.upstream_cost_calls }} reported /
+        {{ report.summary.estimated_cost_calls }} estimated /
+        {{ report.summary.mixed_cost_calls }} mixed costs<span
+          v-if="report.summary.legacy_calls"
+        >
+          · {{ report.summary.legacy_calls }} legacy calls</span
+        >
+      </p>
+      <div
+        v-if="report.alerts?.length"
+        class="space-y-2 mb-5"
+        aria-label="Budget alerts"
+      >
+        <div
+          v-for="alert in report.alerts"
+          :key="alert.key_id"
+          class="p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200 flex flex-wrap gap-2 justify-between"
+        >
+          <span
+            ><strong>{{ alert.key_name }}</strong> · {{ alert.app_name }} ·
+            {{ formatMoney(alert.total_spend) }} in this window ·
+            {{
+              alert.alert_type === 'hard'
+                ? 'hard budget reached'
+                : 'soft budget reached'
+            }}</span
+          ><button class="underline" @click="tab = 'budgets'">
+            View budgets
           </button>
         </div>
       </div>
-
-      <!-- 3. Chart — toggleable: Total (bar) / Over Time (area) -->
-      <div class="card p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Spend Overview</h2>
-          <div class="flex gap-1">
+      <UsageBudgets v-if="tab === 'budgets'" :rows="report.budget_rows" />
+      <template v-else>
+        <section
+          v-if="tab === 'overview'"
+          class="card p-4 sm:p-6 mb-5"
+          aria-label="Usage trend"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 class="font-semibold">{{ metricLabel }} over time</h2>
             <button
-              v-for="mode in ['total', 'over-time']"
-              :key="mode"
-              @click="chartMode = mode"
-              :class="chartMode === mode
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
-                : 'btn-secondary'"
-              class="rounded-md px-3 py-1.5 text-sm"
+              class="text-sm text-indigo-700 dark:text-indigo-300"
+              @click="tab = 'explore'"
             >
-              {{ mode === 'total' ? 'Total' : 'Over Time' }}
+              Explore →
             </button>
           </div>
-        </div>
-        <apexchart
-          v-if="chartMode === 'total'"
-          :key="`total-${chartTheme.mode}`"
-          type="bar"
-          height="280"
-          :options="chartOptions"
-          :series="chartSeries"
-        />
-        <apexchart
-          v-else
-          :key="`over-time-${chartTheme.mode}`"
-          type="area"
-          height="280"
-          :options="overTimeChartOptions"
-          :series="overTimeChartSeries"
-        />
-      </div>
-
-      <!-- 4. Breakdown Table — toggleable: By Key / By Model -->
-      <div class="card">
-        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Spend Breakdown</h2>
-          <div class="flex gap-1">
-            <button
-              v-for="mode in ['by-key', 'by-model']"
-              :key="mode"
-              @click="breakdownMode = mode"
-              :class="breakdownMode === mode
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold'
-                : 'btn-secondary'"
-              class="rounded-md px-3 py-1.5 text-sm"
+          <p
+            v-if="!report.summary.calls"
+            class="py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+          >
+            No requests were recorded in this date range. Try expanding the
+            period or clearing filters.
+          </p>
+          <apexchart
+            v-else
+            :key="`${isDark}-${metric}-${groupBy}`"
+            type="bar"
+            height="300"
+            :options="chartOptions"
+            :series="chartSeries"
+          />
+          <label
+            v-if="report.summary.calls"
+            class="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-2"
+            >Explore a time bucket<select
+              class="input w-auto max-w-full"
+              aria-label="Explore time bucket"
+              :value="''"
+              @change="selectBucket(Number($event.target.value))"
             >
-              {{ mode === 'by-key' ? 'By Key' : 'By Model' }}
-            </button>
+              <option value="" disabled>Select a bucket…</option>
+              <option
+                v-for="(bucket, index) in report.buckets"
+                :key="bucket.start"
+                :value="index"
+              >
+                {{ bucket.label }}
+              </option>
+            </select></label
+          >
+        </section>
+        <section class="card overflow-hidden" aria-label="Usage breakdown">
+          <div
+            class="p-5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-700"
+          >
+            <h2 class="font-semibold">
+              {{ tab === 'explore' ? 'Explore' : 'Usage' }} by
+              {{ groupLabel.toLowerCase() }}
+            </h2>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="text-xs text-gray-500 dark:text-gray-400"
+                >Sort by<select
+                  v-model="sortKey"
+                  aria-label="Sort by"
+                  class="input mt-1"
+                >
+                  <option value="calls">Calls</option>
+                  <option value="total_tokens">Known tokens</option>
+                  <option value="total_spend">Known spend</option>
+                </select></label
+              ><button
+                class="btn-secondary text-xs"
+                :aria-label="descending ? 'Sort ascending' : 'Sort descending'"
+                @click="descending = !descending"
+              >
+                {{ descending ? '↓ Descending' : '↑ Ascending' }}</button
+              ><RouterLink :to="logsLink()" class="btn-secondary text-xs"
+                >View requests</RouterLink
+              >
+            </div>
           </div>
-        </div>
-
-        <div class="overflow-x-auto">
-          <!-- By Key table (default) -->
-          <table v-if="breakdownMode === 'by-key'" class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-100 dark:border-gray-700">
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Spend</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Budget</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">% Budget</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!spendData?.rows?.length">
-                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                  <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">No spend data</div>
-                  <div v-if="hasNonDefaultFilter">No spend data matches the selected filters. Try clearing the team or application filter.</div>
-                  <div v-else>No requests were recorded in this date range. Try expanding the date range or checking that requests are being proxied.</div>
-                </td>
-              </tr>
-              <tr
-                v-for="row in spendData?.rows ?? []"
-                :key="row.key_id"
-                class="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr
+                  class="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700"
+                >
+                  <th class="px-5 py-3 text-left">{{ groupLabel }}</th>
+                  <th
+                    v-for="col in columns"
+                    :key="col.field"
+                    class="px-4 py-3 text-right whitespace-nowrap"
+                  >
+                    {{ col.label }}
+                  </th>
+                  <th v-if="tab === 'overview'" class="px-4 py-3 text-right">
+                    Share of {{ metric }}
+                  </th>
+                  <th class="px-4 py-3 text-right">Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!sortedGroups.length">
+                  <td
+                    :colspan="columns.length + 3"
+                    class="p-10 text-center text-gray-500 dark:text-gray-400"
+                  >
+                    No requests match this period and these filters.
+                  </td>
+                </tr>
+                <tr
+                  v-for="row in sortedGroups"
+                  :key="row.group_id"
+                  data-testid="usage-row"
+                  class="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900"
+                >
+                  <td class="px-5 py-3">
+                    <button
+                      class="text-left text-indigo-700 dark:text-indigo-300 font-medium break-words"
+                      @click="selectGroup(row)"
+                    >
+                      {{ row.name }}</button
+                    ><span
+                      v-if="groupBy !== 'model' && row.group_id"
+                      class="block text-xs text-gray-500 dark:text-gray-400"
+                      >#{{ row.group_id }}</span
+                    >
+                  </td>
+                  <td
+                    v-for="col in columns"
+                    :key="col.field"
+                    class="px-4 py-3 text-right tabular-nums whitespace-nowrap"
+                  >
+                    <span>{{ display(row, col.field) }}</span
+                    ><span
+                      v-if="isPartial(row, col.field)"
+                      class="block text-xs text-gray-500 dark:text-gray-400"
+                      >Known subtotal</span
+                    >
+                  </td>
+                  <td
+                    v-if="tab === 'overview'"
+                    class="px-4 py-3 text-right tabular-nums"
+                  >
+                    {{ share(row) }}
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    <RouterLink
+                      :to="logsLink(row)"
+                      class="text-indigo-700 dark:text-indigo-300 text-xs whitespace-nowrap"
+                      :aria-label="`View requests for ${row.name}`"
+                      >View →</RouterLink
+                    >
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot
+                v-if="sortedGroups.length"
+                class="bg-gray-50 dark:bg-gray-900 font-medium"
               >
-                <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {{ row.key_name }}
-                  <span class="ml-1 text-xs text-gray-400">{{ row.app_name }}</span>
-                </td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">{{ formatSpend(row.total_spend) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">{{ formatBudget(row) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">{{ formatPctBudget(row) }}</td>
-                <td class="px-6 py-3"><StatusBadge :status="rowStatus(row)" /></td>
-              </tr>
-            </tbody>
-          </table>
-
-          <!-- By Model table: per-model token and cost breakdown (ADR 012) -->
-          <table v-else class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-100 dark:border-gray-700">
-                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Model</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Requests</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Input Tokens</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Output Tokens</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Read</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cache Write</th>
-                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Spend</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!spendData?.model_rows?.length">
-                <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                  <div class="font-medium text-gray-700 dark:text-gray-200 mb-1">No model data</div>
-                  <div v-if="hasNonDefaultFilter">No model data matches the selected filters.</div>
-                  <div v-else>No requests were recorded in this date range.</div>
-                </td>
-              </tr>
-              <tr
-                v-for="row in spendData?.model_rows ?? []"
-                :key="row.model"
-                data-testid="model-row"
-                class="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-              >
-                <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.request_count) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.input_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.output_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.cache_read_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 text-right tabular-nums">{{ formatCount(row.cache_write_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatSpend(row.total_spend) }}</td>
-              </tr>
-            </tbody>
-            <tfoot v-if="spendData?.model_rows?.length">
-              <tr data-testid="model-totals" class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 font-semibold">
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100">Total</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.request_count) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.input_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.output_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.cache_read_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatCount(modelTotals.cache_write_tokens) }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 dark:text-gray-100 text-right tabular-nums">{{ formatSpend(modelTotals.total_spend) }}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <p data-testid="estimate-note" class="px-6 py-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700">
-          Costs use upstream-reported amounts when available, otherwise estimates from the model price map.
-          Request logs show each amount's source and coverage. Unknown costs are excluded from spend totals;
-          known subtotals can be incomplete and may differ from provider invoices.
-        </p>
-      </div>
-
+                <tr data-testid="usage-totals">
+                  <td class="px-5 py-3">Total</td>
+                  <td
+                    v-for="col in columns"
+                    :key="col.field"
+                    class="px-4 py-3 text-right tabular-nums whitespace-nowrap"
+                  >
+                    {{ display(report.summary, col.field) }}
+                  </td>
+                  <td v-if="tab === 'overview'"></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p
+            class="p-4 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700"
+            data-testid="estimate-note"
+          >
+            Spend uses upstream-reported amounts when available, otherwise
+            recorded estimates. Unknown costs are excluded; partial amounts are
+            known subtotals. Recorded $0 is distinct from unknown. Cache and
+            reasoning counts are subsets, not extra tokens. Some providers
+            report totals without a breakdown. Legacy Anthropic input is
+            normalized for reporting; historical costs are not repriced.
+          </p>
+        </section>
+      </template>
+      <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+        {{
+          report.retention_days > 0
+            ? `Reports use retained logs (${report.retention_days}-day retention). Older activity may have been deleted.`
+            : 'Reports use available retained logs.'
+        }}
+        Calls include finalized logged failures; retries and job polls are not
+        additional calls.
+      </p>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { api } from '../api/client.js'
+import { useColorScheme } from '../composables/useColorScheme.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
-import StatusBadge from '../components/StatusBadge.vue'
-import { useColorScheme } from '../composables/useColorScheme.js'
+import UsageBudgets from '../components/UsageBudgets.vue'
+import {
+  addMetrics,
+  dateRange,
+  formatMoney,
+  formatNumber,
+  knownFields,
+  measurement,
+  metricFields,
+  sortGroups
+} from '../utils/usage.js'
 
 const { isDark } = useColorScheme()
-const chartTheme = computed(() => ({
-  mode: isDark.value ? 'dark' : 'light',
-  text: isDark.value ? '#D1D5DB' : '#6B7280',
-  border: isDark.value ? '#374151' : '#E5E7EB',
-  series: isDark.value ? '#818CF8' : '#4F46E5',
+const tab = ref('overview'),
+  period = ref('7d'),
+  interval = ref('day'),
+  groupBy = ref('model')
+const browserTimezone =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+const timezone = ref(browserTimezone)
+const timezones = [
+  ...new Set([
+    browserTimezone,
+    'UTC',
+    ...(Intl.supportedValuesOf
+      ? Intl.supportedValuesOf('timeZone')
+      : ['America/New_York', 'Europe/London', 'Asia/Tokyo'])
+  ])
+]
+const customFrom = ref(''),
+  customTo = ref('')
+const filters = ref({
+  team_id: null,
+  app_id: null,
+  key_id: null,
+  model: '',
+  unattributed: ''
+})
+const selection = ref(null),
+  report = ref(null),
+  loading = ref(false),
+  error = ref('')
+const meta = ref({ teams: [], apps: [], keys: [], models: [] })
+let storedMetric
+try {
+  storedMetric = localStorage.getItem('usage-chart-metric')
+} catch {
+  /* preferences are optional */
+}
+const metric = ref(
+  ['calls', 'tokens', 'spend'].includes(storedMetric) ? storedMetric : 'calls'
+)
+const sortKey = ref(metricFields[metric.value]),
+  descending = ref(true)
+const metrics = [
+  { key: 'calls', label: 'Calls', field: 'calls' },
+  { key: 'tokens', label: 'Known tokens', field: 'total_tokens' },
+  { key: 'spend', label: 'Dollar spend', field: 'total_spend' }
+]
+const metricLabel = computed(
+  () =>
+    ({ calls: 'Calls', tokens: 'Known tokens', spend: 'Known spend' })[
+      metric.value
+    ]
+)
+const groupLabel = computed(
+  () =>
+    ({ model: 'Model', app: 'Application', key: 'Key', team: 'Team' })[
+      groupBy.value
+    ]
+)
+const bounds = computed(() =>
+  period.value === 'custom'
+    ? { from: customFrom.value, to: customTo.value }
+    : dateRange(period.value, timezone.value)
+)
+const validationError = computed(() => {
+  if (!bounds.value.from || !bounds.value.to)
+    return 'Choose both a start and end date.'
+  if (bounds.value.from > bounds.value.to)
+    return 'The start date must be on or before the end date.'
+  return ''
+})
+const params = computed(() => ({
+  ...bounds.value,
+  ...filters.value,
+  timezone: timezone.value,
+  interval: interval.value,
+  group_by: groupBy.value,
+  ...(selection.value
+    ? { since: selection.value.start, until: selection.value.end }
+    : {})
 }))
-
-// State — current filtered response
-const loading = ref(false)
-const error = ref('')
-const spendData = ref(null)  // { rows: [], model_rows: [], daily_rows: [], alerts: [], from: '', to: '' }
-
-// Chart / breakdown view toggles
-const chartMode = ref('total')       // 'total' | 'over-time'
-const breakdownMode = ref('by-key')  // 'by-key' | 'by-model'
-
-// State — initial unfiltered response for populating dropdown options
-// This is fetched once on mount with no filters and not updated by filter changes.
-// It provides the full universe of teams/apps/keys for the cascade dropdowns.
-const allRowsData = ref(null)  // cached unfiltered response rows
-
-// Filter state — store IDs (not names) so we can pass them directly to api.spend()
-const dateRange = ref('7d')   // 'today' | '7d' | '30d' | 'custom'
-const customFrom = ref('')
-const customTo = ref('')
-const selectedTeamId = ref(null)    // null = "All teams"
-const selectedAppId = ref(null)     // null = "All applications"
-const selectedKeyId = ref(null)     // null = "All keys"
-
-// Computed: date range as from/to strings for api.spend()
-const dateFromTo = computed(() => {
-  const now = new Date()
-  const fmt = (d) => d.toISOString().split('T')[0]
-  if (dateRange.value === 'today') {
-    return { from: fmt(now), to: fmt(now) }
+const hasFilters = computed(
+  () => Object.values(filters.value).some(Boolean) || selection.value
+)
+const sortedGroups = computed(() =>
+  sortGroups(report.value?.groups || [], sortKey.value, descending.value)
+)
+const columns = computed(() => [
+  { field: 'calls', label: 'Calls' },
+  { field: 'total_tokens', label: 'Known tokens' },
+  ...(tab.value === 'explore'
+    ? [
+        { field: 'input_tokens', label: 'Input' },
+        { field: 'output_tokens', label: 'Output' },
+        { field: 'cache_read_tokens', label: 'Cache read' },
+        { field: 'cache_write_tokens', label: 'Cache write' },
+        { field: 'reasoning_tokens', label: 'Reasoning' }
+      ]
+    : []),
+  { field: 'total_spend', label: 'Dollar spend' }
+])
+function display(row, field) {
+  const value = measurement(row, field)
+  return field === 'total_spend' ? formatMoney(value) : formatNumber(value)
+}
+function isPartial(row, field) {
+  const key = knownFields[field]
+  return (
+    key &&
+    row[key] > 0 &&
+    (row[key] < row.calls ||
+      (field === 'total_spend' && row.partial_cost_calls > 0))
+  )
+}
+function coverage(row, field) {
+  if (!row.calls) return 'No calls in this period'
+  const count = row[knownFields[field]] || 0
+  const label = `${formatNumber(count)} / ${formatNumber(row.calls)} calls measured`
+  return `${label}${isPartial(row, field) ? ' · known subtotal' : ''}${field === 'total_spend' && row.partial_cost_calls ? ` · ${row.partial_cost_calls} partial` : ''}`
+}
+function share(row) {
+  const value = measurement(row, metricFields[metric.value]),
+    total = measurement(report.value.summary, metricFields[metric.value])
+  return value == null || total == null || total === 0
+    ? '—'
+    : `${((value / total) * 100).toFixed(1)}%`
+}
+function selectPeriod(value) {
+  selection.value = null
+  if (value === 'custom' && !customFrom.value) {
+    customFrom.value = bounds.value.from
+    customTo.value = bounds.value.to
   }
-  if (dateRange.value === '7d') {
-    return { from: fmt(new Date(now.getTime() - 7 * 86400000)) }
+  period.value = value
+}
+function clearFilters() {
+  filters.value = {
+    team_id: null,
+    app_id: null,
+    key_id: null,
+    model: '',
+    unattributed: ''
   }
-  if (dateRange.value === '30d') {
-    return { from: fmt(new Date(now.getTime() - 30 * 86400000)) }
+  selection.value = null
+}
+function selectGroup(row) {
+  if (groupBy.value === 'model') filters.value.model = row.group_id
+  else if (row.group_id)
+    filters.value[`${groupBy.value}_id`] = Number(row.group_id)
+  else filters.value.unattributed = groupBy.value
+  tab.value = 'explore'
+}
+function selectBucket(index) {
+  if (Number.isInteger(index) && report.value?.buckets[index]) {
+    selection.value = report.value.buckets[index]
+    tab.value = 'explore'
   }
-  if (dateRange.value === 'custom' && customFrom.value && customTo.value) {
-    return { from: customFrom.value, to: customTo.value }
+}
+function logsLink(row) {
+  const query = {
+    date_from: report.value?.from_time,
+    date_before: report.value?.to_time,
+    ...filters.value
   }
-  return {}
-})
-
-// Computed: dropdown options derived from the initial unfiltered response
-// Team dropdown: all unique teams from allRowsData
-const teams = computed(() => {
-  if (!allRowsData.value) return []
-  const seen = new Map()
-  for (const r of allRowsData.value.rows) {
-    if (!seen.has(r.team_id)) seen.set(r.team_id, r.team_name)
+  if (row) {
+    if (groupBy.value === 'model') query.model = row.group_id
+    else if (row.group_id) query[`${groupBy.value}_id`] = row.group_id
+    else query.unattributed = groupBy.value
   }
-  return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-})
-
-// App dropdown: apps belonging to the selected team (from allRowsData)
-const appsForTeam = computed(() => {
-  if (!allRowsData.value) return []
-  const rows = selectedTeamId.value
-    ? allRowsData.value.rows.filter(r => r.team_id === selectedTeamId.value)
-    : allRowsData.value.rows
-  const seen = new Map()
-  for (const r of rows) {
-    if (!seen.has(r.app_id)) seen.set(r.app_id, r.app_name)
-  }
-  return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-})
-
-// Key dropdown: keys belonging to the selected app (from allRowsData)
-const keysForApp = computed(() => {
-  if (!allRowsData.value) return []
-  const rows = selectedAppId.value
-    ? allRowsData.value.rows.filter(r => r.app_id === selectedAppId.value)
-    : allRowsData.value.rows
-  const seen = new Map()
-  for (const r of rows) {
-    if (!seen.has(r.key_id)) seen.set(r.key_id, r.key_name)
-  }
-  return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-})
-
-// Computed: is any filter non-default?
-const hasNonDefaultFilter = computed(() => {
-  return dateRange.value !== '7d' || selectedTeamId.value != null || selectedAppId.value != null || selectedKeyId.value != null
-})
-
-// Reset all filters and re-fetch
-function resetFilters() {
-  dateRange.value = '7d'
-  customFrom.value = ''
-  customTo.value = ''
-  selectedTeamId.value = null
-  selectedAppId.value = null
-  selectedKeyId.value = null
-  // Watch will trigger loadSpend automatically
+  for (const key of Object.keys(query)) if (!query[key]) delete query[key]
+  return { path: '/logs', query }
+}
+const palette = computed(() =>
+  isDark.value
+    ? [
+        '#a5b4fc',
+        '#67e8f9',
+        '#facc15',
+        '#f0abfc',
+        '#86efac',
+        '#fda4af',
+        '#fdba74',
+        '#c4b5fd'
+      ]
+    : [
+        '#4f46e5',
+        '#0e7490',
+        '#a16207',
+        '#a21caf',
+        '#15803d',
+        '#be123c',
+        '#c2410c',
+        '#7c3aed'
+      ]
+)
+// Keep category colors stable as metrics reorder the series.
+const colorAssignments = new Map()
+function groupColor(group) {
+  if (group.other) return isDark.value ? '#94a3b8' : '#64748b'
+  const id = `${groupBy.value}:${group.group_id}`
+  if (!colorAssignments.has(id)) colorAssignments.set(id, colorAssignments.size)
+  const index = colorAssignments.get(id)
+  return palette.value[index] || `hsl(${(index * 137.508) % 360}, 65%, ${isDark.value ? 70 : 40}%)`
 }
 
-// D-09: Chart grouping logic — operates on spendData.rows (the current server response)
-const chartLabels = computed(() => {
-  if (!spendData.value) return []
-  const rows = spendData.value.rows
-  if (selectedKeyId.value || selectedAppId.value) return rows.map(r => r.key_name)
-  if (selectedTeamId.value) {
-    // Aggregate by app_name — multiple app records with the same name (e.g. deleted + recreated) merge into one bar
-    const appSpend = new Map()
-    for (const r of rows) appSpend.set(r.app_name, (appSpend.get(r.app_name) || 0) + r.total_spend)
-    return [...appSpend.keys()]
-  }
-  // No filters: aggregate by team
-  const teamSpend = new Map()
-  for (const r of rows) {
-    teamSpend.set(r.team_name, (teamSpend.get(r.team_name) || 0) + r.total_spend)
-  }
-  return [...teamSpend.keys()]
+const chartGroups = computed(() => {
+  const rows = sortGroups(
+    report.value?.groups || [],
+    metricFields[metric.value]
+  )
+  return [
+    ...rows
+      .slice(0, 8)
+      .map((row) => ({ ...row, ids: new Set([row.group_id]) })),
+    ...(rows.length > 8
+      ? [
+          {
+            group_id: '__other',
+            name: 'Other',
+            ids: new Set(rows.slice(8).map((row) => row.group_id)),
+            other: true
+          }
+        ]
+      : [])
+  ]
 })
-
-const chartValues = computed(() => {
-  if (!spendData.value) return []
-  const rows = spendData.value.rows
-  if (selectedKeyId.value || selectedAppId.value) {
-    return rows.map(r => parseFloat(r.total_spend.toFixed(4)))
+const bucketMeasurements = computed(() => {
+  const buckets = new Map()
+  for (const row of report.value?.series || []) {
+    if (!buckets.has(row.bucket)) buckets.set(row.bucket, new Map())
+    buckets.get(row.bucket).set(row.group_id, row)
   }
-  if (selectedTeamId.value) {
-    const appSpend = new Map()
-    for (const r of rows) appSpend.set(r.app_name, (appSpend.get(r.app_name) || 0) + r.total_spend)
-    return [...appSpend.values()].map(v => parseFloat(v.toFixed(4)))
-  }
-  // No filters: aggregate by team
-  const teamSpend = new Map()
-  for (const r of rows) {
-    teamSpend.set(r.team_name, (teamSpend.get(r.team_name) || 0) + r.total_spend)
-  }
-  return [...teamSpend.values()].map(v => parseFloat(v.toFixed(4)))
+  return buckets
 })
-
-const chartSeries = computed(() => [{ name: 'Spend', data: chartValues.value }])
-
+const chartSeries = computed(() =>
+  chartGroups.value.map((group) => ({
+    name:
+      group.name +
+      (groupBy.value !== 'model' && group.group_id && !group.other
+        ? ` (#${group.group_id})`
+        : ''),
+    data: (report.value?.buckets || []).map((_, bucket) =>
+      measurement(
+        addMetrics(
+          [...group.ids]
+            .map((id) => bucketMeasurements.value.get(bucket)?.get(id))
+            .filter(Boolean)
+        ),
+        metricFields[metric.value]
+      )
+    )
+  }))
+)
 const chartOptions = computed(() => ({
-  chart: { type: 'bar', toolbar: { show: false }, background: 'transparent', foreColor: chartTheme.value.text },
-  theme: { mode: chartTheme.value.mode },
-  colors: [chartTheme.value.series],
-  plotOptions: { bar: { borderRadius: 4, horizontal: false } },
-  xaxis: { categories: chartLabels.value, labels: { style: { colors: chartTheme.value.text } } },
-  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: chartTheme.value.text } } },
-  grid: { borderColor: chartTheme.value.border },
-  tooltip: { theme: chartTheme.value.mode, y: { formatter: (v) => formatSpend(v) } },
-  dataLabels: { enabled: false },
-  noData: { text: 'No spend data for this period.' },
-}))
-
-// Over-time chart (area) — driven by daily_rows from the server response
-const overTimeChartSeries = computed(() => [{
-  name: 'Spend',
-  data: (spendData.value?.daily_rows ?? []).map(r => parseFloat(r.total_spend.toFixed(4))),
-}])
-
-const overTimeChartOptions = computed(() => ({
-  chart: { type: 'area', toolbar: { show: false }, background: 'transparent', foreColor: chartTheme.value.text },
-  theme: { mode: chartTheme.value.mode },
-  colors: [chartTheme.value.series],
-  stroke: { curve: 'smooth', width: 2 },
-  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05 } },
-  xaxis: {
-    categories: (spendData.value?.daily_rows ?? []).map(r => r.day),
-    labels: { style: { colors: chartTheme.value.text }, rotate: -30 },
+  chart: {
+    type: 'bar',
+    stacked: true,
+    background: 'transparent',
+    foreColor: isDark.value ? '#d1d5db' : '#4b5563',
+    toolbar: { show: false },
+    events: {
+      dataPointSelection: (_event, _context, config) =>
+        selectBucket(config.dataPointIndex)
+    }
   },
-  yaxis: { labels: { formatter: (v) => `$${v.toFixed(2)}`, style: { colors: chartTheme.value.text } } },
-  grid: { borderColor: chartTheme.value.border },
-  tooltip: { theme: chartTheme.value.mode, y: { formatter: (v) => formatSpend(v) } },
+  theme: { mode: isDark.value ? 'dark' : 'light' },
+  colors: chartGroups.value.map((row) => groupColor(row)),
+  plotOptions: { bar: { columnWidth: '65%', borderRadius: 2 } },
+  xaxis: {
+    categories: (report.value?.buckets || []).map((b) => b.label),
+    tickAmount: 7,
+    labels: { hideOverlappingLabels: true, rotate: -30 }
+  },
+  yaxis: {
+    min: 0,
+    title: {
+      text:
+        metric.value === 'spend' ? 'USD (known subtotal)' : metricLabel.value
+    },
+    labels: {
+      formatter: (value) =>
+        metric.value === 'spend'
+          ? formatMoney(value)
+          : Math.round(value).toLocaleString()
+    }
+  },
+  grid: { borderColor: isDark.value ? '#374151' : '#e5e7eb' },
+  tooltip: {
+    theme: isDark.value ? 'dark' : 'light',
+    shared: true,
+    intersect: false,
+    y: {
+      formatter: (value) =>
+        value == null
+          ? 'Unknown'
+          : metric.value === 'spend'
+            ? formatMoney(value)
+            : formatNumber(value)
+    }
+  },
   dataLabels: { enabled: false },
-  noData: { text: 'No spend data for this period.' },
+  legend: { position: 'bottom' },
+  noData: { text: 'No known measurements in this period.' }
 }))
-
-// Fetch function — called on mount and on any filter change
-// Passes resolved IDs directly to api.spend() for server-side aggregation
-async function loadSpend() {
+let sequence = 0,
+  debounce
+async function load() {
+  clearTimeout(debounce)
+  const request = ++sequence
+  if (validationError.value) {
+    loading.value = false
+    return
+  }
   loading.value = true
   error.value = ''
   try {
-    const params = {
-      ...dateFromTo.value,
-      teamId: selectedTeamId.value,   // null is omitted by api.spend() positive-integer check
-      appId: selectedAppId.value,
-      keyId: selectedKeyId.value,
-    }
-    const data = await api.spend(params)
-    spendData.value = data
+    const data = await api.usage(params.value)
+    if (request === sequence) report.value = data
   } catch (e) {
-    error.value = e?.message || 'Failed to load cost data. Check that the proxy is reachable and your session is valid.'
+    if (request === sequence)
+      error.value = e?.message || 'Failed to load usage report'
   } finally {
-    loading.value = false
+    if (request === sequence) loading.value = false
   }
 }
-
-// Initial unfiltered fetch — used to populate dropdown options
-// This is separate from loadSpend() so filter changes don't affect dropdown options
-async function loadAllRows() {
+watch(metric, (value) => {
+  sortKey.value = metricFields[value]
   try {
-    const data = await api.spend({ ...dateFromTo.value })
-    allRowsData.value = data
+    localStorage.setItem('usage-chart-metric', value)
   } catch {
-    // Non-critical — dropdowns will be empty but the view still works
+    /* optional */
   }
-}
-
-// Cascade: resetting team clears app and key; resetting app clears key
-watch(selectedTeamId, () => {
-  selectedAppId.value = null
-  selectedKeyId.value = null
 })
-watch(selectedAppId, () => {
-  selectedKeyId.value = null
+watch([period, customFrom, customTo, timezone, interval], () => {
+  selection.value = null
 })
-
-// Re-fetch on filter change — always server-side, per D-07
-watch([dateRange, selectedTeamId, selectedAppId, selectedKeyId], loadSpend)
-
-// Custom date debounce
-let customDateDebounceTimer = null
-function onCustomDateChange() {
-  clearTimeout(customDateDebounceTimer)
-  customDateDebounceTimer = setTimeout(loadSpend, 300)
-}
-watch([customFrom, customTo], onCustomDateChange)
-
-// Column totals for the By Model table footer — sums the rows currently shown.
-const modelTotals = computed(() => {
-  const totals = { request_count: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, total_spend: 0 }
-  for (const r of spendData.value?.model_rows ?? []) {
-    for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0
-  }
-  return totals
+watch(
+  params,
+  () => {
+    sequence++
+    loading.value = true
+    clearTimeout(debounce)
+    debounce = setTimeout(load, 150)
+  },
+  { deep: true }
+)
+onMounted(() => {
+  load()
+  api
+    .logsMeta()
+    .then((data) => {
+      if (data) meta.value = { ...meta.value, ...data }
+    })
+    .catch(() => {
+      /* Reporting remains usable if filter metadata fails. */
+    })
 })
-
-// Row helper functions
-function rowStatus(row) {
-  if (row.max_budget != null && row.total_spend >= row.max_budget) return 'over'
-  if (row.soft_budget != null && row.total_spend >= row.soft_budget) return 'warning'
-  return 'ok'
-}
-// Aggregates can combine upstream reports and local estimates; request logs expose provenance.
-function formatSpend(v) { return `$${(v ?? 0).toFixed(4)}` }
-function formatCount(v) { return (v ?? 0).toLocaleString() }
-function formatBudget(row) {
-  if (row.max_budget == null) return '—'
-  return `$${row.max_budget.toFixed(2)}`
-}
-function formatPctBudget(row) {
-  if (row.max_budget == null || row.max_budget === 0) return '—'
-  return `${((row.total_spend / row.max_budget) * 100).toFixed(1)}%`
-}
-
-onMounted(async () => {
-  await loadAllRows()   // populate dropdowns from unfiltered response
-  await loadSpend()     // initial filtered load (default 7d, no filters)
+onBeforeUnmount(() => {
+  sequence++
+  clearTimeout(debounce)
 })
 </script>
