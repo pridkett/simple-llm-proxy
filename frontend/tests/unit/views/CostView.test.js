@@ -100,7 +100,7 @@ const chart = {
   template: '<div />'
 }
 let wrapper, router
-async function render(data = response()) {
+async function render(data = response(), path = '/cost') {
   api.usage.mockResolvedValue(data)
   router = createRouter({
     history: createMemoryHistory(),
@@ -109,7 +109,7 @@ async function render(data = response()) {
       { path: '/logs', component: { template: '<div />' } }
     ]
   })
-  await router.push('/cost')
+  await router.push(path)
   wrapper = mount(CostView, {
     global: { plugins: [router], stubs: { apexchart: chart } }
   })
@@ -141,6 +141,55 @@ afterEach(() => {
 })
 
 describe('Usage & Cost', () => {
+  it('applies linked key filters and budget dates before the first request', async () => {
+    localStorage.setItem('usage-chart-metric', 'tokens')
+    await render(response(), '/cost?team_id=1&app_id=2&key_id=3&metric=spend&from=2026-10-28&to=2026-11-04&timezone=UTC')
+    expect(api.usage).toHaveBeenCalledTimes(1)
+    expect(api.usage).toHaveBeenCalledWith(expect.objectContaining({
+      team_id: 1, app_id: 2, key_id: 3,
+      from: '2026-10-28', to: '2026-11-04', timezone: 'UTC'
+    }))
+    expect(wrapper.get('[aria-label="Team"]').element.value).toBe('1')
+    expect(wrapper.get('[aria-label="Application"]').element.value).toBe('2')
+    expect(wrapper.get('[aria-label="Key"]').element.value).toBe('3')
+    expect(wrapper.get('[aria-label="From date"]').element.value).toBe('2026-10-28')
+    expect(wrapper.get('[aria-label="To date"]').element.value).toBe('2026-11-04')
+    expect(wrapper.get('[data-testid="summary-spend"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[aria-label="Sort by"]').element.value).toBe('total_spend')
+  })
+
+  it('updates filters on navigation and restores them with browser back', async () => {
+    await render(response(), '/cost?team_id=1&app_id=2&key_id=3&metric=spend')
+    await router.push('/cost?team_id=1&metric=spend')
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(expect.objectContaining({ team_id: 1, app_id: null, key_id: null }))
+    router.back()
+    await flushPromises()
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(expect.objectContaining({ team_id: 1, app_id: 2, key_id: 3 }))
+    await button('Clear filters').trigger('click')
+    await settle()
+    expect(api.usage).toHaveBeenLastCalledWith(expect.objectContaining({ team_id: null, app_id: null, key_id: null }))
+  })
+
+  it('keeps linked entities selected even when they have no retained logs', async () => {
+    api.logsMeta.mockResolvedValue({ teams: [], apps: [], keys: [], models: [] })
+    await render(response([]), '/cost?team_id=1&app_id=2&key_id=3&metric=spend')
+    for (const [label, id] of [['Team', '1'], ['Application', '2'], ['Key', '3']]) {
+      expect(wrapper.get(`[aria-label="${label}"]`).element.value).toBe(id)
+    }
+    expect(wrapper.text()).toContain('No requests were recorded')
+    expect(api.usage).toHaveBeenCalledWith(expect.objectContaining({ team_id: 1, app_id: 2, key_id: 3 }))
+  })
+
+  it.each(['0', '-1', 'abc', '1.5', '9007199254740993', '1&team_id=2'])(
+    'ignores invalid or repeated filter IDs: %s', async (id) => {
+      await render(response(), `/cost?team_id=${id}&app_id=bad&key_id=-3&metric=bad&timezone=bad`)
+      expect(api.usage).toHaveBeenCalledWith(expect.objectContaining({ team_id: null, app_id: null, key_id: null }))
+      expect(wrapper.get('[data-testid="summary-calls"]').attributes('aria-pressed')).toBe('true')
+    }
+  )
+
   it('keeps dollars visible when calls or tokens drive the chart', async () => {
     await render()
     expect(wrapper.find('[data-testid="summary-spend"]').text()).toContain(

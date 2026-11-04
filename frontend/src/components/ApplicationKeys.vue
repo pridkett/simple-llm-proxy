@@ -122,13 +122,27 @@
               </span>
             </td>
             <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
-              <span v-if="key.max_budget != null">
-                ${{ (keySpend[key.id] ?? 0).toFixed(4) }} / ${{
-                  key.max_budget.toFixed(2)
-                }}
-              </span>
+              <RouterLink
+                v-if="isAdmin"
+                :to="{
+                  path: '/cost',
+                  query: {
+                    team_id: application.team_id,
+                    app_id: application.id,
+                    key_id: key.id,
+                    metric: 'spend',
+                    ...spendRange
+                  }
+                }"
+                :aria-label="`View usage & cost for key ${key.name}`"
+                class="text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                ${{ (keySpend[key.id] ?? 0).toFixed(4) }} /
+                {{ key.max_budget != null ? `$${key.max_budget.toFixed(2)}` : '∞' }}
+              </RouterLink>
               <span v-else>
-                ${{ (keySpend[key.id] ?? 0).toFixed(4) }} / &#8734;
+                ${{ (keySpend[key.id] ?? 0).toFixed(4) }} /
+                {{ key.max_budget != null ? `$${key.max_budget.toFixed(2)}` : '∞' }}
               </span>
             </td>
             <td class="px-4 py-3 text-sm">
@@ -495,6 +509,7 @@ const isCreating = computed(() => route.name === 'team-key-new')
 // State
 const keys = ref([])
 const keySpend = ref({})
+const spendRange = ref({})
 const selectedApp = computed(() => props.application)
 const loadingKeys = ref(false)
 const error = ref(null)
@@ -659,6 +674,9 @@ async function loadKeySpend(appId) {
   try {
     const data = await api.spend({ appId })
     if (data && data.rows) {
+      if (data.from && data.to) {
+        spendRange.value = { from: data.from, to: data.to, timezone: 'UTC' }
+      }
       const map = {}
       data.rows.forEach((r) => {
         map[r.key_id] = r.total_spend

@@ -115,7 +115,11 @@
           aria-label="Team"
         >
           <option :value="null">All teams</option>
-          <option v-for="item in meta.teams" :key="item.id" :value="item.id">
+          <option
+            v-for="item in filterOptions(meta.teams, filters.team_id, 'Team')"
+            :key="item.id"
+            :value="item.id"
+          >
             {{ item.name }} (#{{ item.id }})
           </option>
         </select></label
@@ -127,7 +131,11 @@
           aria-label="Application"
         >
           <option :value="null">All applications</option>
-          <option v-for="item in meta.apps" :key="item.id" :value="item.id">
+          <option
+            v-for="item in filterOptions(meta.apps, filters.app_id, 'Application')"
+            :key="item.id"
+            :value="item.id"
+          >
             {{ item.name }} (#{{ item.id }})
           </option>
         </select></label
@@ -139,7 +147,11 @@
           aria-label="Key"
         >
           <option :value="null">All keys</option>
-          <option v-for="item in meta.keys" :key="item.id" :value="item.id">
+          <option
+            v-for="item in filterOptions(meta.keys, filters.key_id, 'Key')"
+            :key="item.id"
+            :value="item.id"
+          >
             {{ item.name }} (#{{ item.id }})
           </option>
         </select></label
@@ -463,7 +475,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { api } from '../api/client.js'
 import { useColorScheme } from '../composables/useColorScheme.js'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -481,6 +493,7 @@ import {
 } from '../utils/usage.js'
 
 const { isDark } = useColorScheme()
+const route = useRoute()
 const tab = ref('overview'),
   period = ref('7d'),
   interval = ref('day'),
@@ -520,6 +533,43 @@ try {
 const metric = ref(
   ['calls', 'tokens', 'spend'].includes(storedMetric) ? storedMetric : 'calls'
 )
+function applyRouteQuery(query) {
+  const id = (value) => {
+    if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null
+    const number = Number(value)
+    return Number.isSafeInteger(number) ? number : null
+  }
+  filters.value = {
+    team_id: id(query.team_id),
+    app_id: id(query.app_id),
+    key_id: id(query.key_id),
+    model: '',
+    unattributed: ''
+  }
+  selection.value = null
+  if (['calls', 'tokens', 'spend'].includes(query.metric)) {
+    metric.value = query.metric
+  }
+  timezone.value = timezones.includes(query.timezone)
+    ? query.timezone
+    : browserTimezone
+  if (typeof query.from === 'string' && typeof query.to === 'string') {
+    customFrom.value = query.from
+    customTo.value = query.to
+    period.value = 'custom'
+  } else {
+    period.value = '7d'
+    customFrom.value = ''
+    customTo.value = ''
+  }
+}
+watch(() => route.query, applyRouteQuery, { immediate: true })
+// Metadata contains only entities with retained logs; linked entities may be new.
+function filterOptions(items, id, label) {
+  return id && !items.some((item) => item.id === id)
+    ? [...items, { id, name: label }]
+    : items
+}
 const sortKey = ref(metricFields[metric.value]),
   descending = ref(true)
 const metrics = [
