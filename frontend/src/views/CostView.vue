@@ -319,24 +319,24 @@
               {{ tab === 'explore' ? 'Explore' : 'Usage' }} by
               {{ groupLabel.toLowerCase() }}
             </h2>
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-end gap-3">
               <label class="text-xs text-gray-500 dark:text-gray-400"
                 >Sort by<select
                   v-model="sortKey"
                   aria-label="Sort by"
-                  class="input mt-1"
+                  class="input h-10 mt-1"
                 >
                   <option value="calls">Calls</option>
                   <option value="total_tokens">Known tokens</option>
                   <option value="total_spend">Known spend</option>
                 </select></label
               ><button
-                class="btn-secondary text-xs"
+                class="btn-secondary h-10 text-sm"
                 :aria-label="descending ? 'Sort ascending' : 'Sort descending'"
                 @click="descending = !descending"
               >
                 {{ descending ? '↓ Descending' : '↑ Ascending' }}</button
-              ><RouterLink :to="logsLink()" class="btn-secondary text-xs"
+              ><RouterLink :to="logsLink()" class="btn-secondary h-10 text-sm"
                 >View requests</RouterLink
               >
             </div>
