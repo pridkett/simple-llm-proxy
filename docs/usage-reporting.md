@@ -3,6 +3,17 @@
 Open **Usage & Cost** (`/#/cost`) as an administrator. The Dashboard (`/#/`)
 continues to show proxy health, model deployments, cooldowns, and router settings.
 
+From Teams or a team's application list, **View costs** opens this report with
+that team or application selected and Dollar spend active. Clicking a key's
+budget amount selects its team, application, and key, and preserves the displayed
+spend's inclusive dates in UTC. Team and application links use the default
+seven-day period. These reporting links are available to administrators.
+
+Direct report links accept `team_id`, `app_id`, `key_id`, and `metric`
+(`calls`, `tokens`, or `spend`) query parameters. A `from`/`to` pair selects a
+custom date range; `timezone` selects its timezone. For example:
+`/#/cost?team_id=1&app_id=2&key_id=3&metric=spend`.
+
 - **Overview** shows stacked usage over time and a ranked breakdown.
 - **Explore** adds input/output, cache read/write, and reasoning token details.
 - **Budgets** retains active-key spend, configured caps, and budget status.

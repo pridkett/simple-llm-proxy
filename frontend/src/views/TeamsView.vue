@@ -46,6 +46,7 @@
               <th class="px-4 py-3 font-medium">Applications</th>
               <th class="px-4 py-3 font-medium">Active keys</th>
               <th v-if="isAdmin" class="px-4 py-3 font-medium">Members</th>
+              <th v-if="isAdmin" class="px-4 py-3 font-medium">Usage &amp; cost</th>
               <th v-if="isAdmin" class="px-4 py-3">
                 <span class="sr-only">Actions</span>
               </th>
@@ -66,6 +67,14 @@
               <td class="px-4 py-4">{{ teamStats[team.id]?.keys ?? '—' }}</td>
               <td v-if="isAdmin" class="px-4 py-4">
                 {{ teamStats[team.id]?.members ?? '—' }}
+              </td>
+              <td v-if="isAdmin" class="px-4 py-4">
+                <RouterLink
+                  :to="{ path: '/cost', query: { team_id: team.id, metric: 'spend' } }"
+                  :aria-label="`View usage & cost for team ${team.name}`"
+                  class="text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >View costs</RouterLink
+                >
               </td>
               <td v-if="isAdmin" class="px-4 py-4">
                 <template v-if="pendingDeleteTeam === team.id">
@@ -98,7 +107,7 @@
               </td>
             </tr>
             <tr v-if="!teams.length">
-              <td :colspan="isAdmin ? 5 : 3" class="px-4 py-8 text-gray-500 dark:text-gray-400">
+              <td :colspan="isAdmin ? 6 : 3" class="px-4 py-8 text-gray-500 dark:text-gray-400">
                 No teams yet.
               </td>
             </tr>
@@ -331,6 +340,7 @@
                   <th class="px-4 py-3 font-medium">Name</th>
                   <th class="px-4 py-3 font-medium">Active keys</th>
                   <th class="px-4 py-3 font-medium">Created</th>
+                  <th v-if="isAdmin" class="px-4 py-3 font-medium">Usage &amp; cost</th>
                   <th v-if="isAdmin" class="px-4 py-3">
                     <span class="sr-only">Actions</span>
                   </th>
@@ -348,6 +358,17 @@
                   <td class="px-4 py-4">{{ appKeyCounts[app.id] ?? '—' }}</td>
                   <td class="px-4 py-4">
                     {{ new Date(app.created_at).toLocaleDateString() }}
+                  </td>
+                  <td v-if="isAdmin" class="px-4 py-4">
+                    <RouterLink
+                      :to="{
+                        path: '/cost',
+                        query: { team_id: currentTeam.id, app_id: app.id, metric: 'spend' }
+                      }"
+                      :aria-label="`View usage & cost for application ${app.name}`"
+                      class="text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >View costs</RouterLink
+                    >
                   </td>
                   <td v-if="isAdmin" class="px-4 py-4">
                     <template v-if="pendingDeleteApp === app.id"
@@ -380,7 +401,7 @@
                 </tr>
                 <tr v-if="!applications.length">
                   <td
-                    :colspan="isAdmin ? 4 : 3"
+                    :colspan="isAdmin ? 5 : 3"
                     class="px-4 py-8 text-gray-500 dark:text-gray-400"
                   >
                     No applications yet.

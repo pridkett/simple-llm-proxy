@@ -27,12 +27,15 @@ vi.mock('@/api/client.js', () => ({
       'updateAPIKey',
       'revokeAPIKey',
       'models',
-      'spend'
+      'spend',
+      'usage',
+      'logsMeta'
     ].map((name) => [name, vi.fn()])
   )
 }))
 import { api } from '@/api/client.js'
 import { teamRoutes } from '@/router/teamRoutes.js'
+import CostView from '@/views/CostView.vue'
 
 enableAutoUnmount(afterEach)
 const clone = (data) => JSON.parse(JSON.stringify(data))
@@ -42,12 +45,16 @@ const secret = 'sk-app-' + 'a'.repeat(48)
 async function render(path = '/teams') {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: teamRoutes
+    routes: [
+      ...teamRoutes,
+      { path: '/cost', component: CostView },
+      { path: '/logs', component: { template: '<div />' } }
+    ]
   })
   await router.push(path)
   const wrapper = mount(RouterView, {
     attachTo: document.body,
-    global: { plugins: [router] }
+    global: { plugins: [router], stubs: { apexchart: true } }
   })
   await flushPromises()
   return { router, wrapper }
@@ -133,9 +140,65 @@ beforeEach(() => {
   ])
   api.models.mockResolvedValue({ data: [] })
   api.spend.mockResolvedValue({ rows: [] })
+  api.usage.mockResolvedValue({
+    groups: [], series: [], buckets: [], budget_rows: [], alerts: [],
+    summary: { calls: 0 }, from: '2026-10-28', to: '2026-11-04', timezone: 'UTC'
+  })
+  api.logsMeta.mockResolvedValue({
+    teams: [{ id: 1, name: 'Platform' }],
+    apps: [{ id: 1, name: 'Support assistant' }],
+    keys: [{ id: 1, name: 'Production' }], models: []
+  })
 })
 
 describe('Teams workspace', () => {
+  it.each([
+    ['/teams', 'team Platform', { team_id: 1, app_id: null, key_id: null }],
+    ['/teams/1', 'application Support assistant', { team_id: 1, app_id: 1, key_id: null }]
+  ])('opens filtered costs from %s', async (path, label, filters) => {
+    const { wrapper, router } = await render(path)
+    await wrapper.get(`a[aria-label="View usage & cost for ${label}"]`).trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/cost')
+    expect(api.usage).toHaveBeenCalledWith(expect.objectContaining(filters))
+    expect(wrapper.get('[data-testid="summary-spend"]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it.each([
+    [20, true, '$2.5000 / $20.00'],
+    [null, true, '$2.5000 / ∞'],
+    [20, false, '$2.5000 / $20.00']
+  ])('links a key budget of %s (active: %s) with its exact date range', async (budget, active, text) => {
+    keys[1][0].max_budget = budget
+    keys[1][0].is_active = active
+    api.spend.mockResolvedValue({
+      rows: [{ key_id: 1, total_spend: 2.5 }], from: '2026-10-28', to: '2026-11-04'
+    })
+    const { wrapper, router } = await render('/teams/1/applications/1')
+    const link = wrapper.get('a[aria-label="View usage & cost for key Production"]')
+    expect(link.text().replace(/\s+/g, ' ')).toBe(text)
+    await link.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ team_id: '1', app_id: '1', key_id: '1', metric: 'spend' })
+    expect(api.usage).toHaveBeenCalledWith(expect.objectContaining({
+      team_id: 1, app_id: 1, key_id: 1,
+      from: '2026-10-28', to: '2026-11-04', timezone: 'UTC'
+    }))
+    expect(wrapper.get('[aria-label="Key"]').element.value).toBe('1')
+  })
+
+  it('keeps admin-only reporting links out of team members’ lists', async () => {
+    user.value = { id: 'u2', is_admin: false }
+    const { wrapper, router } = await render('/teams')
+    for (const path of ['/teams', '/teams/1', '/teams/1/applications/1']) {
+      await router.push(path)
+      await flushPromises()
+      expect(wrapper.find('a[aria-label^="View usage & cost"]').exists()).toBe(false)
+    }
+    expect(wrapper.text()).toContain('$0.0000 / $20.00')
+    expect(api.usage).not.toHaveBeenCalled()
+  })
+
   it('opens the overview without a root breadcrumb or redundant row actions', async () => {
     const { wrapper } = await render()
     expect(wrapper.get('h1').text()).toBe('Teams')
