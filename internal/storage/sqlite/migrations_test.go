@@ -31,6 +31,7 @@ func TestMigrate(t *testing.T) {
 		"pool_budget_state",
 		"sticky_routing_sessions",
 		"mcp_connections",
+		"mcp_oauth_credentials",
 	}
 
 	for _, table := range expectedTables {
@@ -102,7 +103,7 @@ func TestMigrationIdempotency(t *testing.T) {
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 61 {
-		t.Errorf("expected 61 rows in schema_migrations, got %d", count)
+	if count != 62 {
+		t.Errorf("expected 62 rows in schema_migrations, got %d", count)
 	}
 }

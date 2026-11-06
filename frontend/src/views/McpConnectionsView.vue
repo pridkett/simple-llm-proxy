@@ -2,10 +2,11 @@
   <main class="max-w-3xl mx-auto px-4 py-8">
     <h1 class="text-2xl font-bold mb-2">MCP Connections</h1>
     <p class="text-sm text-gray-600 dark:text-gray-300 mb-6">
-      Manage your upstream keys and issue bearer tokens for your MCP clients.
+      Connect upstream accounts and issue bearer tokens for your MCP clients.
     </p>
 
     <p v-if="error" role="alert" class="text-sm text-red-700 dark:text-red-300 mb-4">{{ error }}</p>
+    <p v-if="oauthConnected" role="status" class="mb-4">Upstream OAuth account connected.</p>
     <p v-if="loading" role="status">Loading connections…</p>
     <p v-else-if="!error && !connections.length">No MCP servers are assigned to your account.</p>
 
@@ -13,7 +14,7 @@
       <h2 class="font-semibold">{{ connection.server }}</h2>
       <p class="text-sm break-all mt-1"><code>{{ endpointURL(connection.endpoint) }}</code></p>
 
-      <form v-if="connection.credential_scope === 'user'" class="mt-4" @submit.prevent="saveKey(connection.server)">
+      <form v-if="connection.credential_scope === 'user' && !connection.oauth" class="mt-4" @submit.prevent="saveKey(connection.server)">
         <label :for="`mcp-key-${connection.server}`" class="block text-sm font-medium mb-1">
           {{ connection.key_set ? 'Replace upstream API key' : 'Upstream API key' }}
         </label>
@@ -30,14 +31,28 @@
         </div>
       </form>
 
+      <div v-if="connection.oauth" class="mt-4">
+        <p class="text-sm mb-2">
+          {{ connection.credential_scope === 'shared' ? 'Shared OAuth account' : 'Personal OAuth account' }}
+          {{ connection.connected ? 'connected' : 'needs to be connected' }}.
+        </p>
+        <div v-if="connection.can_manage_oauth" class="flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary" :disabled="busy" @click="startOAuth(connection.server)">
+            {{ connection.connected ? 'Reconnect upstream' : 'Connect upstream' }}
+          </button>
+          <button v-if="connection.connected" type="button" class="btn-secondary" :disabled="busy"
+            @click="update(() => api.disconnectMcpOAuth(connection.server))">Disconnect upstream</button>
+        </div>
+      </div>
+
       <p v-if="hasToken(connection)" class="mt-4 text-sm">
         Gateway token expires {{ new Date(connection.token_expires * 1000).toLocaleString() }}.
       </p>
-      <div class="flex flex-wrap gap-2 mt-4">
+      <div v-if="connection.can_use" class="flex flex-wrap gap-2 mt-4">
         <button
           type="button"
           class="btn-primary"
-          :disabled="busy || (connection.credential_scope === 'user' && !connection.key_set)"
+          :disabled="busy || (connection.oauth ? !connection.connected : connection.credential_scope === 'user' && !connection.key_set)"
           @click="mintToken(connection.server)"
         >{{ hasToken(connection) ? 'Rotate token' : 'Issue token' }}</button>
         <button v-if="hasToken(connection)" type="button" class="btn-secondary" :disabled="busy"
@@ -57,8 +72,12 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 
+const route = useRoute()
+const router = useRouter()
+const oauthConnected = ref(false)
 const connections = ref([])
 const keys = reactive(Object.create(null))
 const issued = ref(null)
@@ -79,6 +98,10 @@ async function refresh() {
 }
 
 onMounted(async () => {
+  const oauthResult = route.query.oauth
+  if (oauthResult === 'connected') oauthConnected.value = true
+  if (oauthResult === 'failed') error.value = 'OAuth connection failed. Start a new connection and try again.'
+  if (oauthResult) await router.replace({ name: 'mcp' })
   try {
     await refresh()
   } catch (err) {
@@ -91,6 +114,7 @@ onMounted(async () => {
 async function update(action) {
   busy.value = true
   error.value = ''
+  oauthConnected.value = false
   issued.value = null
   try {
     await action()
@@ -107,6 +131,20 @@ function saveKey(server) {
     await api.saveMcpKey(server, keys[server])
     keys[server] = ''
   })
+}
+
+async function startOAuth(server) {
+  busy.value = true
+  error.value = ''
+  issued.value = null
+  try {
+    const result = await api.startMcpOAuth(server)
+    if (result) window.location.assign(result.authorization_url)
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    busy.value = false
+  }
 }
 
 function mintToken(server) {

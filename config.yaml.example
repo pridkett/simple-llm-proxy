@@ -114,7 +114,7 @@ general_settings:
 
 # Optional native HTTPS Streamable HTTP MCP gateway. Restart after changes.
 # mcp:
-#   # Required for user grants. Generate 32 bytes with openssl rand -base64 32.
+#   # Required for user grants and OAuth. Generate with openssl rand -base64 32.
 #   credential_key: os.environ/MCP_CREDENTIAL_KEY
 #   servers:
 #     catalog:

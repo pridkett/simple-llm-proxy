@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
 const personalTokenLifetime = 30 * 24 * time.Hour
@@ -23,20 +24,24 @@ type connectionStatus struct {
 	Scope        string `json:"credential_scope"`
 	KeySet       bool   `json:"key_set"`
 	TokenExpires int64  `json:"token_expires,omitempty"`
+	OAuth        bool   `json:"oauth"`
+	Connected    bool   `json:"connected"`
+	CanUse       bool   `json:"can_use"`
+	CanManage    bool   `json:"can_manage_oauth"`
 }
 
 func (g *gateway) list(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.UserFromContext(r.Context()).ID
+	user := middleware.UserFromContext(r.Context())
 	names := make([]string, 0, len(g.servers))
 	for name, server := range g.servers {
-		if slices.Contains(server.AllowedUserIDs, userID) {
+		if slices.Contains(server.AllowedUserIDs, user.ID) || canManageOAuth(server, user) {
 			names = append(names, name)
 		}
 	}
 	slices.Sort(names)
 	statuses := make([]connectionStatus, 0, len(names))
 	for _, name := range names {
-		status, ok := g.status(w, r, name, g.servers[name], userID)
+		status, ok := g.status(w, r, name, g.servers[name], user)
 		if !ok {
 			return
 		}
@@ -46,21 +51,47 @@ func (g *gateway) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *gateway) connection(w http.ResponseWriter, r *http.Request) {
-	name, server, userID, ok := g.userRegistration(w, r)
-	if ok {
-		if status, ok := g.status(w, r, name, server, userID); ok {
-			writeJSON(w, 200, status)
-		}
+	name := chi.URLParam(r, "server")
+	server, exists := g.servers[name]
+	user := middleware.UserFromContext(r.Context())
+	if !exists || (!slices.Contains(server.AllowedUserIDs, user.ID) && !canManageOAuth(server, user)) {
+		fail(w, 404, "unknown_server", "MCP server is not available.")
+		return
+	}
+	if status, ok := g.status(w, r, name, server, user); ok {
+		writeJSON(w, 200, status)
 	}
 }
 
-func (g *gateway) status(w http.ResponseWriter, r *http.Request, name string, server registration, userID string) (connectionStatus, bool) {
-	status := connectionStatus{Server: name, Endpoint: "/mcp/" + name, Scope: server.Scope}
+func canManageOAuth(server registration, user *storage.User) bool {
+	return server.OAuth != nil &&
+		((server.Scope == "shared" && user.IsAdmin) ||
+			(server.Scope == "user" && slices.Contains(server.AllowedUserIDs, user.ID)))
+}
+
+func (g *gateway) status(w http.ResponseWriter, r *http.Request, name string, server registration, user *storage.User) (connectionStatus, bool) {
+	status := connectionStatus{
+		Server: name, Endpoint: "/mcp/" + name, Scope: server.Scope,
+		OAuth: server.OAuth != nil, CanManage: canManageOAuth(server, user),
+		CanUse: slices.Contains(server.AllowedUserIDs, user.ID),
+	}
+	if status.OAuth {
+		if g.oauthStore == nil {
+			fail(w, 503, "storage_unavailable", "MCP connection storage is unavailable.")
+			return status, false
+		}
+		grant, err := g.oauthStore.GetMCPOAuth(r.Context(), server.binding, oauthOwner(server, user.ID))
+		if err != nil {
+			fail(w, 500, "storage_error", "Could not read the MCP OAuth connection.")
+			return status, false
+		}
+		status.Connected = grant != nil
+	}
 	if g.connections == nil {
 		fail(w, 503, "storage_unavailable", "MCP connection storage is unavailable.")
 		return status, false
 	}
-	connection, err := g.connections.GetMCPConnection(r.Context(), server.binding, userID)
+	connection, err := g.connections.GetMCPConnection(r.Context(), server.binding, user.ID)
 	if err != nil {
 		fail(w, 500, "storage_error", "Could not read the MCP connection.")
 		return status, false
@@ -77,7 +108,7 @@ func (g *gateway) saveKey(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if server.Scope != "user" {
+	if server.Scope != "user" || server.OAuth != nil {
 		fail(w, 403, "access_denied", "This server does not use personal upstream keys.")
 		return
 	}
@@ -112,13 +143,25 @@ func (g *gateway) mintToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(secret[:])
 	token := tokenPrefix + hex.EncodeToString(secret[:])
 	expires := time.Now().Add(personalTokenLifetime).Unix()
-	created, err := g.connections.SetMCPToken(r.Context(), server.binding, userID, digest(token), expires, server.Scope == "user")
+	var created bool
+	var err error
+	if server.Scope == "user" && server.OAuth != nil {
+		if g.oauthStore == nil {
+			fail(w, 503, "storage_unavailable", "MCP connection storage is unavailable.")
+			return
+		}
+		g.oauth.mu.Lock()
+		created, err = g.oauthStore.SetMCPOAuthToken(r.Context(), server.binding, userID, digest(token), expires)
+		g.oauth.mu.Unlock()
+	} else {
+		created, err = g.connections.SetMCPToken(r.Context(), server.binding, userID, digest(token), expires, server.Scope == "user")
+	}
 	if err != nil {
 		fail(w, 500, "storage_error", "Could not issue the MCP token.")
 		return
 	}
 	if !created {
-		fail(w, 409, "connection_required", "Save your upstream key before issuing a gateway token.")
+		fail(w, 409, "connection_required", "Connect your upstream account before issuing a gateway token.")
 		return
 	}
 	writeJSON(w, 201, map[string]any{"token": token, "expires": expires})
@@ -134,6 +177,10 @@ func (g *gateway) revokeToken(w http.ResponseWriter, r *http.Request) {
 func (g *gateway) disconnect(w http.ResponseWriter, r *http.Request) {
 	_, server, userID, ok := g.userRegistration(w, r)
 	if ok {
+		if server.Scope == "user" && server.OAuth != nil {
+			g.disconnectOAuth(w, r)
+			return
+		}
 		g.finishMutation(w, g.connections.DeleteMCPConnection(r.Context(), server.binding, userID))
 	}
 }

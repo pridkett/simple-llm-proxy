@@ -60,6 +60,12 @@ export const api = {
   mcpConnections() {
     return request('/api/mcp/connections/')
   },
+  startMcpOAuth(server) {
+    return request(`/api/mcp/oauth/${encodeURIComponent(server)}`, { method: 'POST' })
+  },
+  disconnectMcpOAuth(server) {
+    return request(`/api/mcp/oauth/${encodeURIComponent(server)}`, { method: 'DELETE' })
+  },
   saveMcpKey(server, key) {
     return request(mcpConnectionPath(server), { method: 'PUT', body: JSON.stringify({ key }) })
   },

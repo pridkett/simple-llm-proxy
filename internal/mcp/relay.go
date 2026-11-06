@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/rs/zerolog/log"
 )
 
@@ -31,17 +32,19 @@ func (g *gateway) relay(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "invalid_origin", "Browser origins are disabled for the MCP transport.")
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 110*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	caller, ok := g.authorize(w, r, server)
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 110*time.Second)
-	defer cancel()
-	upstream, ok := g.upstreamRequest(w, r.WithContext(ctx), server, caller)
+	upstream, ok := g.upstreamRequest(w, r, server, caller)
 	if !ok {
 		return
 	}
-	log.Ctx(ctx).Debug().Str("mcp_server", name).Str("mcp_actor", caller.actor).Msg("relaying MCP request")
+	log.Info().Str("request_id", middleware.RequestIDFromContext(ctx)).
+		Str("mcp_server", name).Str("mcp_actor", caller.actor).Msg("relaying MCP request")
 	response, err := g.transport.RoundTrip(upstream)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -116,7 +119,9 @@ func (g *gateway) relayResponse(w http.ResponseWriter, response *http.Response, 
 	status := response.StatusCode
 	switch {
 	case status == http.StatusUnauthorized:
-		if server.Scope == "user" {
+		if server.OAuth != nil {
+			fail(w, 403, "connection_required", "The upstream rejected the OAuth credential. Reconnect in MCP Connections.")
+		} else if server.Scope == "user" {
 			fail(w, 403, "connection_required", "The upstream rejected your key. Replace it in MCP Connections.")
 		} else {
 			fail(w, 502, "upstream_auth_failed", "The upstream MCP server rejected the configured credential.")

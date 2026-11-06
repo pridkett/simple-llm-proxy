@@ -351,6 +351,7 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`ALTER TABLE api_keys ADD COLUMN allow_decisions BOOLEAN NOT NULL DEFAULT FALSE`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC)`,
 		sqlstore.MCPConnectionsSchema,
+		sqlstore.MCPOAuthSchema,
 	}
 
 	for i, sql := range migrations {

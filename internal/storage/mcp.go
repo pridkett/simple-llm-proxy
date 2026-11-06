@@ -17,3 +17,16 @@ type MCPStore interface {
 	RevokeMCPToken(ctx context.Context, binding, userID string) error
 	DeleteMCPConnection(ctx context.Context, binding, userID string) error
 }
+
+type MCPOAuthCredential struct {
+	Ciphertext []byte
+	Generation string
+}
+
+type MCPOAuthStore interface {
+	GetMCPOAuth(ctx context.Context, binding, owner string) (*MCPOAuthCredential, error)
+	PutMCPOAuth(ctx context.Context, binding, owner string, credential MCPOAuthCredential) error
+	RefreshMCPOAuth(ctx context.Context, binding, owner string, old, updated []byte) (bool, error)
+	DeleteMCPOAuth(ctx context.Context, binding, owner string) error
+	SetMCPOAuthToken(ctx context.Context, binding, userID, hash string, expires int64) (bool, error)
+}

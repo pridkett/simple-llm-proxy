@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -34,6 +35,8 @@ type gateway struct {
 	servers     map[string]registration
 	keys        storage.Storage
 	connections storage.MCPStore
+	oauthStore  storage.MCPOAuthStore
+	oauth       oauthState
 	limiter     *keystore.RateLimiter
 	credentials cipher.AEAD
 	sessions    cipher.AEAD
@@ -68,15 +71,18 @@ func (g *gateway) register(mux chi.Router, sm *scs.SessionManager) {
 		r.Post("/{server}/token", g.mintToken)
 		r.Delete("/{server}/token", g.revokeToken)
 	})
+	mux.Route("/api/mcp/oauth", func(r chi.Router) { g.registerOAuth(r, sm) })
 }
 
 func newGateway(cfg *config.Config, store storage.Storage, limiter *keystore.RateLimiter, transport http.RoundTripper) *gateway {
 	connections, _ := store.(storage.MCPStore)
+	oauthStore, _ := store.(storage.MCPOAuthStore)
 	var sessionKey [32]byte
 	rand.Read(sessionKey[:])
 	g := &gateway{
 		servers: make(map[string]registration, len(cfg.MCP.Servers)),
-		keys:    store, connections: connections, limiter: limiter,
+		keys:    store, connections: connections, limiter: limiter, oauthStore: oauthStore,
+		oauth:       oauthState{pending: make(map[string]pendingOAuth)},
 		credentials: newAEAD(cfg.MCP.CredentialKey), sessions: newAEAD(sessionKey),
 		transport: transport,
 	}
@@ -84,6 +90,10 @@ func newGateway(cfg *config.Config, store storage.Storage, limiter *keystore.Rat
 		// Reusing an alias for another resource, header, or identity namespace
 		// must not reuse the previous registration's personal credentials.
 		binding := digest(strings.Join([]string{name, server.URL, server.Scope, server.Header, cfg.OIDCSettings.IssuerURL}, "\x00"))
+		if server.OAuth != nil {
+			settings, _ := json.Marshal(server.OAuth)
+			binding = digest(binding + string(settings))
+		}
 		g.servers[name] = registration{server, binding}
 	}
 	return g
@@ -107,6 +117,7 @@ type admission struct {
 
 func (g *gateway) authorize(w http.ResponseWriter, r *http.Request, server registration) (admission, bool) {
 	var caller admission
+	var userID string
 	token, ok := bearer(r)
 	if !ok {
 		unauthorized(w)
@@ -127,9 +138,10 @@ func (g *gateway) authorize(w http.ResponseWriter, r *http.Request, server regis
 			fail(w, 403, "access_denied", "This user is not granted access to the server.")
 			return caller, false
 		}
-		caller.actor = "user:" + connection.UserID
+		userID = connection.UserID
+		caller.actor = "user:" + userID
 		caller.generation = hash
-		if server.Scope == "user" {
+		if server.Scope == "user" && server.OAuth == nil {
 			if len(connection.Ciphertext) == 0 {
 				fail(w, 403, "connection_required", "Connect your upstream account in MCP Connections.")
 				return caller, false
@@ -168,7 +180,23 @@ func (g *gateway) authorize(w http.ResponseWriter, r *http.Request, server regis
 		caller.actor = "key:" + strconv.FormatInt(key.ID, 10)
 		caller.generation = digest(token)
 	}
-	if server.Scope == "shared" {
+	if server.OAuth != nil {
+		if g.oauthStore == nil {
+			fail(w, 503, "storage_unavailable", "MCP connection storage is unavailable.")
+			return caller, false
+		}
+		token, generation, err := g.oauthAccessToken(r.Context(), server, oauthOwner(server, userID))
+		if err != nil {
+			if errors.Is(err, errOAuthConnect) {
+				fail(w, 403, "connection_required", "Connect the upstream OAuth account in MCP Connections.")
+			} else {
+				fail(w, 502, "oauth_refresh_failed", "Could not obtain an upstream OAuth access token.")
+			}
+			return caller, false
+		}
+		caller.credential = token
+		caller.generation = digest(caller.generation + generation)
+	} else if server.Scope == "shared" {
 		caller.credential = server.SharedKey
 		caller.generation = digest(caller.generation + server.SharedKey)
 	}
