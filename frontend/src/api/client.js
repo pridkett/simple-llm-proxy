@@ -52,7 +52,27 @@ async function request(path, options = {}) {
   return res.json()
 }
 
+function mcpConnectionPath(server) {
+  return `/api/mcp/connections/${encodeURIComponent(server)}`
+}
+
 export const api = {
+  mcpConnections() {
+    return request('/api/mcp/connections/')
+  },
+  saveMcpKey(server, key) {
+    return request(mcpConnectionPath(server), { method: 'PUT', body: JSON.stringify({ key }) })
+  },
+  mintMcpToken(server) {
+    return request(`${mcpConnectionPath(server)}/token`, { method: 'POST' })
+  },
+  revokeMcpToken(server) {
+    return request(`${mcpConnectionPath(server)}/token`, { method: 'DELETE' })
+  },
+  disconnectMcp(server) {
+    return request(mcpConnectionPath(server), { method: 'DELETE' })
+  },
+
   /** GET /health – no auth required */
   health() {
     return fetch(`${BASE_URL}/health`).then((r) => r.json())

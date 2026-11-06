@@ -20,6 +20,12 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      '/api/mcp': {
+        target: 'http://localhost:8080',
+      },
+      '/mcp': {
+        target: 'http://localhost:8080',
+      },
       '/auth': {
         target: 'http://localhost:8080',
         changeOrigin: true,

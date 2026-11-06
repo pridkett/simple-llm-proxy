@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 	"fmt"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlstore"
 )
 
 // migrate runs database migrations that have not yet been applied.
@@ -348,6 +350,7 @@ func (s *Storage) migrate(ctx context.Context) error {
 		// Explicit opt-in: adding decision models must not expand existing key privileges.
 		`ALTER TABLE api_keys ADD COLUMN allow_decisions BOOLEAN NOT NULL DEFAULT FALSE`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC)`,
+		sqlstore.MCPConnectionsSchema,
 	}
 
 	for i, sql := range migrations {

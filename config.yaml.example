@@ -111,3 +111,19 @@ general_settings:
   # Example env value: postgresql://proxy:password@postgres.home/llm_proxy?sslmode=verify-full
   # Switching databases does not import SQLite data. See README.md and ADR 014.
   port: 8080
+
+# Optional native HTTPS Streamable HTTP MCP gateway. Restart after changes.
+# mcp:
+#   # Required for user grants. Generate 32 bytes with openssl rand -base64 32.
+#   credential_key: os.environ/MCP_CREDENTIAL_KEY
+#   servers:
+#     catalog:
+#       url: https://catalog.example.org/mcp
+#       credential_scope: shared
+#       shared_key: os.environ/MCP_CATALOG_KEY
+#       allowed_app_key_ids: [42]
+#     repositories:
+#       url: https://repos.example.org/mcp
+#       credential_scope: user
+#       credential_header: X-API-Key
+#       allowed_user_ids: ["oidc-subject"]

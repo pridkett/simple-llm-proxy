@@ -139,6 +139,7 @@ const links = [
   { to: '/logs', label: 'Logs' },
   { to: '/config', label: 'Config' },
   { to: '/api-docs', label: 'API Docs' },
+  { to: '/mcp', label: 'MCP Connections' },
 ]
 
 const adminLinks = [

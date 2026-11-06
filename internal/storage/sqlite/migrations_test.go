@@ -30,6 +30,7 @@ func TestMigrate(t *testing.T) {
 		"webhook_deliveries",
 		"pool_budget_state",
 		"sticky_routing_sessions",
+		"mcp_connections",
 	}
 
 	for _, table := range expectedTables {
@@ -96,12 +97,12 @@ func TestMigrationIdempotency(t *testing.T) {
 		t.Fatalf("second migrate() call failed (not idempotent): %v", err)
 	}
 
-	// Prior schema plus usage availability and session attribution.
+	// Include the MCP connection migration.
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 60 {
-		t.Errorf("expected 60 rows in schema_migrations, got %d", count)
+	if count != 61 {
+		t.Errorf("expected 61 rows in schema_migrations, got %d", count)
 	}
 }
