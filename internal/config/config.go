@@ -4,6 +4,7 @@ import "time"
 
 // Config represents the complete proxy configuration.
 type Config struct {
+	MCP             MCPSettings     `yaml:"mcp" json:"-"`
 	ModelList       []ModelConfig   `yaml:"model_list"`
 	RouterSettings  RouterSettings  `yaml:"router_settings"`
 	GeneralSettings GeneralSettings `yaml:"general_settings"`

@@ -27,9 +27,11 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 func (rw *responseWriter) Flush() {
-	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+	_ = rw.FlushError()
+}
+
+func (rw *responseWriter) FlushError() error {
+	return http.NewResponseController(rw.ResponseWriter).Flush()
 }
 
 // Logging returns middleware that logs requests with structured fields.

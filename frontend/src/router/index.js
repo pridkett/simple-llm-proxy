@@ -14,6 +14,7 @@ import { useSession } from '../composables/useSession.js'
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { requiresAuth: false } },
   { path: '/', name: 'dashboard', component: DashboardView },
+  { path: '/mcp', name: 'mcp', component: () => import('../views/McpConnectionsView.vue') },
   { path: '/models', name: 'models', component: ModelsView },
   { path: '/chat', name: 'chat', component: ChatView },
   { path: '/logs', name: 'logs', component: LogsView },
