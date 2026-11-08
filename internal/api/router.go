@@ -13,6 +13,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
+	"github.com/pwagstro/simple_llm_proxy/internal/mcp"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -125,6 +126,8 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		// Identity and key management CRUD routes
 		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)
 	})
+
+	mcp.Register(mux, reloader.Config(), store, sm, rl)
 
 	// SPA static serving (production / Docker): serve the built frontend at "/"
 	// when a dist directory is available. Explicit config wins; otherwise fall

@@ -30,7 +30,7 @@ enableAutoUnmount(afterEach)
 async function render({ user = { name: 'Alice Example', email: 'alice@example.com', is_admin: true }, path = '/' } = {}) {
   mockIsAuthenticated.value = Boolean(user)
   mockCurrentUser.value = user
-  const paths = ['/', '/login', '/models', '/chat', '/logs', '/config', '/api-docs', '/settings', '/users', '/teams', '/teams/1/applications/1', '/applications', '/keys', '/cost', '/pools', '/webhooks', '/events']
+  const paths = ['/', '/login', '/models', '/chat', '/logs', '/config', '/api-docs', '/mcp', '/settings', '/users', '/teams', '/teams/1/applications/1', '/applications', '/keys', '/cost', '/pools', '/webhooks', '/events']
   const router = createRouter({
     history: createMemoryHistory(),
     routes: paths.map(path => ({ path, name: path === '/login' ? 'login' : path, component: { template: '<div />' } })),
@@ -61,7 +61,7 @@ describe('NavBar', () => {
     const { wrapper } = await render({ path: '/models' })
     const navigation = wrapper.get('nav[aria-label="Main navigation"]')
     expect(navigation.findAll('a').map(link => link.text())).toEqual([
-      'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs',
+      'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs', 'MCP Connections',
       'Users', 'Teams', 'Usage & Cost', 'Pools', 'Webhooks', 'Events',
     ])
     expect(navigation.get('a[href="/models"]').attributes('aria-current')).toBe('page')
@@ -70,7 +70,7 @@ describe('NavBar', () => {
   it('hides admin links and avoids admin spend requests for regular users', async () => {
     const { wrapper } = await render({ user: { name: 'Alice', email: 'alice@example.com', is_admin: false } })
     expect(wrapper.get('nav').findAll('a').map(link => link.text())).toEqual([
-      'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs',
+      'Dashboard', 'Models', 'Chat', 'Logs', 'Config', 'API Docs', 'MCP Connections',
     ])
     expect(api.spend).not.toHaveBeenCalled()
     expect((await openAccount(wrapper)).text()).toContain('Logout')

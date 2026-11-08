@@ -138,6 +138,12 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	if value, ok := raw["mcp"]; ok {
+		if err := parseMCPSettings(value, cfg); err != nil {
+			return nil, err
+		}
+	}
+
 	// Process provider_pools
 	if os, ok := raw["otel_settings"].(map[string]any); ok {
 		if v, ok := os["enabled"].(bool); ok {

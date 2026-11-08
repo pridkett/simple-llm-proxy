@@ -4,6 +4,8 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlstore"
 )
 
 //go:embed schema.sql
@@ -28,6 +30,8 @@ var migrations = []string{baseline, `
 	// Decision access is opt-in for existing and newly created app keys.
 	`ALTER TABLE api_keys ADD COLUMN allow_decisions BOOLEAN NOT NULL DEFAULT FALSE;
      CREATE INDEX idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC);`,
+	sqlstore.MCPConnectionsSchema,
+	sqlstore.MCPOAuthSchema,
 }
 
 func (s *Storage) migrate(ctx context.Context) error {
