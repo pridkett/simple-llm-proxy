@@ -17,10 +17,17 @@ type Config struct {
 
 // OTelSettings configures optional OTLP trace export.
 type OTelSettings struct {
-	Enabled       bool         `yaml:"enabled"`
-	ServiceName   string       `yaml:"service_name"`
-	Exporter      OTelExporter `yaml:"exporter"`
-	SamplingRatio float64      `yaml:"sampling_ratio"`
+	Enabled        bool               `yaml:"enabled"`
+	ServiceName    string             `yaml:"service_name"`
+	Exporter       OTelExporter       `yaml:"exporter"`
+	SamplingRatio  float64            `yaml:"sampling_ratio"`
+	MessageCapture OTelMessageCapture `yaml:"message_capture"`
+}
+
+// OTelMessageCapture limits content export to explicitly selected applications.
+type OTelMessageCapture struct {
+	ApplicationIDs []int64 `yaml:"application_ids"`
+	MaxBytes       int     `yaml:"max_bytes"`
 }
 
 type OTelExporter struct {
@@ -166,9 +173,10 @@ func Defaults() *Config {
 			AdminGroup: "admin",
 		},
 		OTelSettings: OTelSettings{
-			ServiceName:   "simple-llm-proxy",
-			Exporter:      OTelExporter{Protocol: "http"},
-			SamplingRatio: 1,
+			ServiceName:    "simple-llm-proxy",
+			Exporter:       OTelExporter{Protocol: "http"},
+			SamplingRatio:  1,
+			MessageCapture: OTelMessageCapture{MaxBytes: 32 << 10},
 		},
 	}
 }

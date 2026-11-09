@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"unicode"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 )
 
 // decodeSessionRequest consumes proxy-only session attribution before decoding
@@ -78,5 +80,11 @@ func decodeSessionRequest(req *http.Request, dst any, strict ...bool) (string, e
 	if err != nil {
 		return "", err
 	}
-	return sessionID, json.Unmarshal(body, dst)
+	if err := json.Unmarshal(body, dst); err != nil {
+		return sessionID, err
+	}
+	if capture := middleware.MessageCaptureFromContext(req.Context()); capture != nil {
+		capture.Input(fields)
+	}
+	return sessionID, nil
 }

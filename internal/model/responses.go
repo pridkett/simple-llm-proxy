@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 // ResponsesRequest represents an OpenAI Responses API request (POST /v1/responses).
 // Input accepts either a plain string or a structured array of input items
 // (OpenAI's union type) — the proxy passes it through largely unmodified.
@@ -61,26 +63,31 @@ type ResponseOutputItem struct {
 	Content []ResponseContentPart `json:"content,omitempty"`
 
 	// Function/tool call fields (Type == "function_call").
-	CallID    string `json:"call_id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Arguments string `json:"arguments,omitempty"`
+	CallID    string          `json:"call_id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Arguments string          `json:"arguments,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	Output    json.RawMessage `json:"output,omitempty"`
 }
 
 // ResponseContentPart is a single content part within a ResponseOutputItem
 // (e.g. {"type": "output_text", "text": "..."}).
 type ResponseContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type    string `json:"type"`
+	Text    string `json:"text,omitempty"`
+	Refusal string `json:"refusal,omitempty"`
 }
 
 // ResponsesStreamEvent represents one SSE event from a streaming Responses API
 // call (e.g. "response.created", "response.output_text.delta", "response.completed").
 // The proxy forwards these largely verbatim to the client.
 type ResponsesStreamEvent struct {
-	Type           string             `json:"type"`
-	SequenceNumber int                `json:"sequence_number,omitempty"`
-	Response       *ResponsesResponse `json:"response,omitempty"`
-	Delta          string             `json:"delta,omitempty"`
-	ItemID         string             `json:"item_id,omitempty"`
-	OutputIndex    *int               `json:"output_index,omitempty"`
+	Type           string              `json:"type"`
+	SequenceNumber int                 `json:"sequence_number,omitempty"`
+	Response       *ResponsesResponse  `json:"response,omitempty"`
+	Delta          string              `json:"delta,omitempty"`
+	ItemID         string              `json:"item_id,omitempty"`
+	OutputIndex    *int                `json:"output_index,omitempty"`
+	ContentIndex   *int                `json:"content_index,omitempty"`
+	Item           *ResponseOutputItem `json:"item,omitempty"`
 }

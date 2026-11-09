@@ -11,6 +11,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	proxyotel "github.com/pwagstro/simple_llm_proxy/internal/otel"
+	"github.com/pwagstro/simple_llm_proxy/internal/otel/content"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,7 +19,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type operationSpan struct{ span trace.Span }
+type operationSpan struct {
+	span    trace.Span
+	capture *content.Capture
+}
 
 func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model string, stream bool, sessionID string) (context.Context, *operationSpan) {
 	if tracer == nil {
@@ -56,7 +60,7 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 		attrs = append(attrs, session...)
 	}
 	ctx, span := tracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(attrs...))
-	return ctx, &operationSpan{span: span}
+	return ctx, &operationSpan{span: span, capture: middleware.MessageCaptureFromContext(ctx)}
 }
 
 // A digest keeps all accepted UTF-8 IDs within Langfuse's ASCII length limit.
@@ -73,6 +77,9 @@ func traceSessionID(ctx context.Context, sessionID string) string {
 
 func (o *operationSpan) end() {
 	if o != nil {
+		if o.capture != nil && o.span.IsRecording() {
+			o.span.SetAttributes(o.capture.Attributes()...)
+		}
 		o.span.End()
 	}
 }

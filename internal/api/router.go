@@ -15,6 +15,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/mcp"
 	"github.com/pwagstro/simple_llm_proxy/internal/openapi"
+	"github.com/pwagstro/simple_llm_proxy/internal/otel/content"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
@@ -72,14 +73,17 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 			mux.Post("/"+format, h)
 		}
 
-		// OpenAI-compatible endpoints
-		mux.Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
-		mux.Post("/v1/messages", handler.Messages(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		captureSettings := func() config.OTelMessageCapture { return reloader.Config().OTelSettings.MessageCapture }
+		mux.With(middleware.CaptureMessages(content.Chat, captureSettings)).
+			Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		mux.With(middleware.CaptureMessages(content.Messages, captureSettings)).
+			Post("/v1/messages", handler.Messages(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/v1/completions", handler.Completions())
 		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
 		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
-		mux.Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		mux.With(middleware.CaptureMessages(content.Responses, captureSettings)).
+			Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Get("/v1/responses/{id}", handler.GetResponseJob(store))
 		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store, sa))
 		mux.Get("/v1/models", handler.Models(r))

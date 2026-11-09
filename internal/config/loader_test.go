@@ -140,6 +140,25 @@ otel_settings:
 	}
 }
 
+func TestOTelMessageCaptureConfig(t *testing.T) {
+	cfg, err := Parse([]byte("otel_settings:\n  message_capture:\n    application_ids: [7, 42]\n    max_bytes: 8192\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture := cfg.OTelSettings.MessageCapture
+	if capture.MaxBytes != 8192 || len(capture.ApplicationIDs) != 2 || capture.ApplicationIDs[0] != 7 || capture.ApplicationIDs[1] != 42 {
+		t.Fatalf("unexpected capture settings: %+v", capture)
+	}
+	if capture := Defaults().OTelSettings.MessageCapture; len(capture.ApplicationIDs) != 0 || capture.MaxBytes != 32768 {
+		t.Fatalf("unexpected capture defaults: %+v", capture)
+	}
+	for _, fields := range []string{"application_ids: [0]", "application_ids: ['42']", "max_bytes: 100", "max_bytes: 65537", "enabled: true"} {
+		if _, err := Parse([]byte("otel_settings:\n  message_capture:\n    " + fields + "\n")); err == nil {
+			t.Errorf("accepted invalid capture settings %q", fields)
+		}
+	}
+}
+
 func TestParseModelString(t *testing.T) {
 	tests := []struct {
 		input    string
