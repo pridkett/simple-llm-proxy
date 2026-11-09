@@ -93,7 +93,7 @@ func Decisions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			keyID = &id
 			sticky = ck.Key.KeyHash
 		}
-		ctx, operation := beginOperation(ctx, tracer, "decision", decisionReq.Model, false)
+		ctx, operation := beginOperation(ctx, tracer, "decision", decisionReq.Model, false, sessionID)
 		defer operation.end()
 		var response *model.DecisionResponse
 		result := r.Route(ctx, decisionReq.Model, sticky, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {

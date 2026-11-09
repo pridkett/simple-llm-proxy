@@ -197,6 +197,12 @@ For a local plaintext collector, use an `http://` endpoint and set
 The child LLM span covers retries and records failed attempts as events;
 request bodies, API key values, and key hashes are never attached to spans.
 
+When a model request includes a valid session ID, its HTTP and model spans
+share `gen_ai.conversation.id` and `langfuse.session.id`. For application keys,
+the exported value is `app:<application_id>:<sha256 of the UTF-8 session ID>`
+using lowercase hex. Keys for the same application share the namespace.
+Use `llmproxy.request_id` to join traces to proxy logs.
+
 ### Multiple Deployments
 
 You can configure multiple deployments for the same model name for load balancing:

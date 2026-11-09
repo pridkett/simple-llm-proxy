@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,6 +91,63 @@ func TestChatTelemetryIdentityCostAndEndpoint(t *testing.T) {
 	for key, val := range a {
 		if strings.Contains(key, "secret") || strings.Contains(valString(val), "secret-hash") || strings.Contains(valString(val), "sk-app-secret") {
 			t.Fatalf("secret leaked into span: %s=%v", key, val)
+		}
+	}
+}
+
+func TestSessionOnHTTPAndOperationSpans(t *testing.T) {
+	resetTestMockState()
+	testMockProviderState.chatResponse = &model.ChatCompletionResponse{}
+	rtr, err := router.New(newTestMockConfig("gpt-4"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder, provider := testTracer(t)
+	tracer := provider.Tracer("test")
+	// Exercise the full accepted UTF-8 range and reuse the same client ID across keys.
+	session := strings.Repeat("é", 128)
+	for _, tc := range []struct {
+		key, app int64
+		session  string
+		status   int
+	}{
+		{1, 20, session, http.StatusOK},
+		{2, 20, session, http.StatusOK},
+		{3, 21, session, http.StatusOK},
+		{4, 20, "", http.StatusOK},
+		{4, 20, session + "x", http.StatusBadRequest},
+	} {
+		store := &telemetryAuthStore{captureStorage: &captureStorage{}, key: &storage.APIKey{
+			ID: tc.key, ApplicationID: tc.app, IsActive: true,
+		}}
+		handler := ChatCompletions(rtr, nil, nil, nil, nil, config.GeneralSettings{}, tracer)
+		h := middleware.OTel(tracer)(middleware.KeyAuth("master", store, keystore.New(0), nil, nil)(handler))
+		req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", false))
+		req.Header.Set("Authorization", "Bearer sk-app-test")
+		req.Header.Set("X-Session-ID", tc.session)
+		w := httptest.NewRecorder()
+		before := len(recorder.Ended())
+		h.ServeHTTP(w, req)
+		if w.Code != tc.status {
+			t.Fatalf("HTTP %d, want %d: %s", w.Code, tc.status, w.Body.String())
+		}
+		spans := recorder.Ended()[before:]
+		var expected any
+		count := 1
+		if tc.status == http.StatusOK {
+			count = 2
+			if tc.session != "" {
+				expected = fmt.Sprintf("app:%d:%x", tc.app, sha256.Sum256([]byte(tc.session)))
+			}
+		}
+		if len(spans) != count {
+			t.Fatalf("got %d spans, want %d", len(spans), count)
+		}
+		for _, span := range spans {
+			attrs := spanAttrs(span)
+			if attrs[proxyotel.GenAIConversationID] != expected || attrs[proxyotel.LangfuseSessionID] != expected {
+				t.Errorf("span %q has session attributes %v, want %v", span.Name(), attrs, expected)
+			}
 		}
 	}
 }
@@ -268,7 +327,7 @@ func TestResponsesTelemetry(t *testing.T) {
 
 func TestTelemetryCostIsIndependentOfUsage(t *testing.T) {
 	recorder, provider := testTracer(t)
-	_, op := beginOperation(context.Background(), provider.Tracer("test"), "chat", "m", false)
+	_, op := beginOperation(context.Background(), provider.Tracer("test"), "chat", "m", false, "")
 	op.finish(&router.RouteResult{}, nil, 0.25, true)
 	op.end()
 	attrs := spanAttrs(recorder.Ended()[0])

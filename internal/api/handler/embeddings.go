@@ -82,7 +82,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 		}
 		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, embReq.Model, "/v1/embeddings", sessionID, apiKeyID, false)
 		defer acc.close()
-		ctx, operation := beginOperation(ctx, tracer, "embeddings", embReq.Model, false)
+		ctx, operation := beginOperation(ctx, tracer, "embeddings", embReq.Model, false, sessionID)
 		defer operation.end()
 		acc.ctx = ctx
 
