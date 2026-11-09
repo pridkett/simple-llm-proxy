@@ -144,7 +144,7 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
-	// Process provider_pools
+	// Process otel_settings
 	if os, ok := raw["otel_settings"].(map[string]any); ok {
 		if v, ok := os["enabled"].(bool); ok {
 			cfg.OTelSettings.Enabled = v
@@ -160,6 +160,11 @@ func Parse(data []byte) (*Config, error) {
 				cfg.OTelSettings.SamplingRatio = float64(n)
 			default:
 				return nil, fmt.Errorf("otel_settings.sampling_ratio must be a number")
+			}
+		}
+		if v, exists := os["message_capture"]; exists {
+			if err := parseOTelMessageCapture(v, &cfg.OTelSettings.MessageCapture); err != nil {
+				return nil, err
 			}
 		}
 		if e, ok := os["exporter"].(map[string]any); ok {

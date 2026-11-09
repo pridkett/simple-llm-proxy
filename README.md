@@ -194,14 +194,52 @@ For OTLP/HTTP, a bare host endpoint sends to `/v1/traces`; an endpoint with a
 path uses that path as-is. OTLP/gRPC endpoints use a host URL without a path.
 For a local plaintext collector, use an `http://` endpoint and set
 `insecure: true`. Header values support `os.environ/VAR_NAME` expansion.
-The child LLM span covers retries and records failed attempts as events;
-request bodies, API key values, and key hashes are never attached to spans.
+The child LLM span covers retries and records failed attempts as events.
+The exporter sends metadata by default. Authentication headers and stored API
+key hashes are excluded.
 
 When a model request includes a valid session ID, its HTTP and model spans
 share `gen_ai.conversation.id` and `langfuse.session.id`. For application keys,
 the exported value is `app:<application_id>:<sha256 of the UTF-8 session ID>`
 using lowercase hex. Keys for the same application share the namespace.
 Use `llmproxy.request_id` to join traces to proxy logs.
+
+#### Capture test messages
+
+Add `message_capture` under `otel_settings` to capture content for specific
+application IDs. The empty allowlist is the default. Authenticate with a key
+from one of the listed applications.
+
+```yaml
+otel_settings:
+  enabled: true
+  sampling_ratio: 1.0
+  exporter:
+    protocol: http
+    endpoint: https://your-langfuse-host/api/public/otel/v1/traces
+    headers:
+      Authorization: os.environ/OTEL_AUTH_HEADER
+  message_capture:
+    application_ids: [42]
+    max_bytes: 32768
+```
+
+For Langfuse, use a Basic authorization header built from the project public
+and secret keys. The proxy also emits the standard GenAI attributes for other
+OTLP destinations. Chat Completions, Anthropic Messages, and Responses
+creation capture structured inputs and outputs on recording model spans.
+Streams are assembled into messages with tool call IDs, arguments, and results.
+Background Responses creation captures the response available at submission.
+
+`max_bytes` bounds the serialized capture per direction, with a default of
+32 KiB and an allowed range of 1–64 KiB. Individual fields are capped to leave
+room for later messages. The `llmproxy.capture.*_truncated` and
+`llmproxy.capture.output_partial` attributes flag clipped data or interrupted
+output. Capture removes binary and reasoning content and masks recognized
+credential patterns and fields. Free text can still contain source code or
+unrecognized secrets. Enable capture on dedicated test applications and send
+it only to a destination approved for that data. Reloading with an empty
+`application_ids` list stops new content capture.
 
 ### Multiple Deployments
 

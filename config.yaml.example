@@ -104,6 +104,16 @@ router_settings:
   allowed_fails: 3
   cooldown_time: 30s
 
+# Optional structured GenAI span content for selected test applications.
+# otel_settings:
+#   enabled: true
+#   exporter:
+#     protocol: http
+#     endpoint: https://collector.example.com:4318
+#   message_capture:
+#     application_ids: [42]
+#     max_bytes: 32768
+
 general_settings:
   master_key: os.environ/PROXY_MASTER_KEY
   database_url: ./proxy.db # SQLite path (default), or postgres:// / postgresql:// URL
