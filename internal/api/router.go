@@ -36,7 +36,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 	// Global middleware
 	mux.Use(middleware.Recovery())
 	mux.Use(middleware.RequestID())
-	mux.Use(middleware.OTel(tracer))
+	mux.Use(middleware.OTel(tracer, reloader.Config().OTelSettings.TrustedTraceparentCIDRs...))
 	mux.Use(middleware.Logging())
 	mux.Use(middleware.CORS([]string{
 		"http://localhost:5173",

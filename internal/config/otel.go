@@ -1,6 +1,29 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"net/netip"
+)
+
+func parseTrustedTraceparentCIDRs(raw any) ([]netip.Prefix, error) {
+	values, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("otel_settings.trusted_traceparent_cidrs must be a list of CIDRs")
+	}
+	prefixes := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		rawPrefix, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("otel_settings.trusted_traceparent_cidrs must contain CIDR strings")
+		}
+		prefix, err := netip.ParsePrefix(rawPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("otel_settings.trusted_traceparent_cidrs contains invalid CIDR %q", rawPrefix)
+		}
+		prefixes = append(prefixes, prefix.Masked())
+	}
+	return prefixes, nil
+}
 
 func parseOTelMessageCapture(raw any, capture *OTelMessageCapture) error {
 	fields, ok := raw.(map[string]any)

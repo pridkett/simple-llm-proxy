@@ -113,6 +113,7 @@ router_settings:
 #   message_capture:
 #     application_ids: [42]
 #     max_bytes: 32768
+#   trusted_traceparent_cidrs: ["127.0.0.1/32", "::1/128"]
 
 general_settings:
   master_key: os.environ/PROXY_MASTER_KEY
