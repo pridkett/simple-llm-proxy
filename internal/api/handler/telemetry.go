@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -19,11 +20,10 @@ import (
 
 type operationSpan struct{ span trace.Span }
 
-func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model string, stream bool) (context.Context, *operationSpan) {
+func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model string, stream bool, sessionID string) (context.Context, *operationSpan) {
 	if tracer == nil {
 		return ctx, nil
 	}
-	ctx, span := tracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient))
 	attrs := []attribute.KeyValue{
 		attribute.String(proxyotel.GenAIOperationName, operation),
 		attribute.String(proxyotel.GenAIRequestModel, model),
@@ -46,8 +46,29 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 	if user := middleware.UserFromContext(ctx); user != nil && user.Email != "" {
 		attrs = append(attrs, attribute.String(proxyotel.UserEmail, user.Email))
 	}
-	span.SetAttributes(attrs...)
+	if sessionID != "" {
+		id := traceSessionID(ctx, sessionID)
+		session := []attribute.KeyValue{
+			attribute.String(proxyotel.GenAIConversationID, id),
+			attribute.String(proxyotel.LangfuseSessionID, id),
+		}
+		trace.SpanFromContext(ctx).SetAttributes(session...)
+		attrs = append(attrs, session...)
+	}
+	ctx, span := tracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(attrs...))
 	return ctx, &operationSpan{span: span}
+}
+
+// A digest keeps all accepted UTF-8 IDs within Langfuse's ASCII length limit.
+func traceSessionID(ctx context.Context, sessionID string) string {
+	digest := sha256.Sum256([]byte(sessionID))
+	if key := middleware.APIKeyFromContext(ctx); key != nil && key.Key != nil {
+		return fmt.Sprintf("app:%d:%x", key.Key.ApplicationID, digest)
+	}
+	if user := middleware.UserFromContext(ctx); user != nil {
+		return fmt.Sprintf("user:%x:%x", sha256.Sum256([]byte(user.ID)), digest)
+	}
+	return fmt.Sprintf("master:%x", digest)
 }
 
 func (o *operationSpan) end() {

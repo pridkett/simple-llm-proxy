@@ -88,7 +88,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		}
 		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, respReq.Model, "/v1/responses", sessionID, apiKeyID, respReq.Stream)
 		defer acc.close()
-		ctx, operation := beginOperation(ctx, tracer, "generate_content", respReq.Model, respReq.Stream)
+		ctx, operation := beginOperation(ctx, tracer, "generate_content", respReq.Model, respReq.Stream, sessionID)
 		defer operation.end()
 		acc.ctx = ctx
 

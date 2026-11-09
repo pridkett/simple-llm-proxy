@@ -181,7 +181,7 @@ func chatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 		}
 		ctx, acc := startAccounting(ctx, w, req, store, sa, cm, r, chatReq.Model, protocol.endpoint(), sessionID, apiKeyID, chatReq.Stream)
 		defer acc.close()
-		ctx, operation := beginOperation(ctx, tracer, "chat", chatReq.Model, chatReq.Stream)
+		ctx, operation := beginOperation(ctx, tracer, "chat", chatReq.Model, chatReq.Stream, sessionID)
 		defer operation.end()
 		acc.ctx = ctx
 
