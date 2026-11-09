@@ -159,6 +159,25 @@ func TestOTelMessageCaptureConfig(t *testing.T) {
 	}
 }
 
+func TestOTelTrustedTraceparentCIDRsConfig(t *testing.T) {
+	cfg, err := Parse([]byte("otel_settings:\n  trusted_traceparent_cidrs: [127.0.0.5/24, '::1/128']\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefixes := cfg.OTelSettings.TrustedTraceparentCIDRs
+	if len(prefixes) != 2 || prefixes[0].String() != "127.0.0.0/24" || prefixes[1].String() != "::1/128" {
+		t.Fatalf("unexpected trusted CIDRs: %v", prefixes)
+	}
+	if len(Defaults().OTelSettings.TrustedTraceparentCIDRs) != 0 {
+		t.Fatal("traceparent trust should be opt-in")
+	}
+	for _, value := range []string{"true", "127.0.0.1/32", "[42]", "['127.0.0.1']", "['10.0.0.0/40']"} {
+		if _, err := Parse([]byte("otel_settings:\n  trusted_traceparent_cidrs: " + value + "\n")); err == nil {
+			t.Errorf("accepted invalid trusted CIDRs %s", value)
+		}
+	}
+}
+
 func TestParseModelString(t *testing.T) {
 	tests := []struct {
 		input    string

@@ -241,6 +241,28 @@ unrecognized secrets. Enable capture on dedicated test applications and send
 it only to a destination approved for that data. Reloading with an empty
 `application_ids` list stops new content capture.
 
+#### Join a harness trace
+
+For a test harness or local relay that connects directly to the proxy, add its
+socket peer CIDRs to `otel_settings` and restart the proxy. The list is empty
+by default.
+
+```yaml
+otel_settings:
+  trusted_traceparent_cidrs: ["127.0.0.1/32", "::1/128"]
+```
+
+Start an `agent.run` span in the harness, inject its W3C `traceparent` on
+each LLM request, and export the harness span to the same destination as the
+proxy spans. The proxy starts each HTTP span under the supplied parent and
+applies its existing parent-based sampling. For Langfuse session filtering,
+also tag the harness span with the same exported `langfuse.session.id`
+described above and send the original `X-Session-ID` on each request.
+
+Trust applies to the immediate connection, using the socket IP. A trusted
+reverse proxy or relay should remove externally supplied trace headers and
+inject only the harness context it intends to forward.
+
 ### Multiple Deployments
 
 You can configure multiple deployments for the same model name for load balancing:

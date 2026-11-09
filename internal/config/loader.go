@@ -167,6 +167,13 @@ func Parse(data []byte) (*Config, error) {
 				return nil, err
 			}
 		}
+		if v, exists := os["trusted_traceparent_cidrs"]; exists {
+			prefixes, err := parseTrustedTraceparentCIDRs(v)
+			if err != nil {
+				return nil, err
+			}
+			cfg.OTelSettings.TrustedTraceparentCIDRs = prefixes
+		}
 		if e, ok := os["exporter"].(map[string]any); ok {
 			if v, ok := e["protocol"].(string); ok {
 				cfg.OTelSettings.Exporter.Protocol = v

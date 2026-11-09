@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"net/netip"
+	"time"
+)
 
 // Config represents the complete proxy configuration.
 type Config struct {
@@ -17,11 +20,12 @@ type Config struct {
 
 // OTelSettings configures optional OTLP trace export.
 type OTelSettings struct {
-	Enabled        bool               `yaml:"enabled"`
-	ServiceName    string             `yaml:"service_name"`
-	Exporter       OTelExporter       `yaml:"exporter"`
-	SamplingRatio  float64            `yaml:"sampling_ratio"`
-	MessageCapture OTelMessageCapture `yaml:"message_capture"`
+	Enabled                 bool               `yaml:"enabled"`
+	ServiceName             string             `yaml:"service_name"`
+	Exporter                OTelExporter       `yaml:"exporter"`
+	SamplingRatio           float64            `yaml:"sampling_ratio"`
+	MessageCapture          OTelMessageCapture `yaml:"message_capture"`
+	TrustedTraceparentCIDRs []netip.Prefix     `yaml:"trusted_traceparent_cidrs"`
 }
 
 // OTelMessageCapture limits content export to explicitly selected applications.
