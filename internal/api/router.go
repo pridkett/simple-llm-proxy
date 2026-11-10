@@ -36,7 +36,6 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 	// Global middleware
 	mux.Use(middleware.Recovery())
 	mux.Use(middleware.RequestID())
-	mux.Use(middleware.OTel(tracer, reloader.Config().OTelSettings.TrustedTraceparentCIDRs...))
 	mux.Use(middleware.Logging())
 	mux.Use(middleware.CORS([]string{
 		"http://localhost:5173",
@@ -44,6 +43,10 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		"http://127.0.0.1:5173",
 		"http://127.0.0.1:5174",
 	}))
+
+	// Only model calls are traced; health checks, model listings, the admin UI,
+	// and other housekeeping routes stay out of the trace backend.
+	traced := middleware.OTel(tracer, reloader.Config().OTelSettings.TrustedTraceparentCIDRs...)
 
 	// Public routes — no auth required
 	mux.Get("/health", handler.Health())
@@ -69,20 +72,20 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 
 		for _, format := range []string{"decisions", "systemone"} {
 			h := handler.Decisions(r, store, sa, dispatcher, func() config.GeneralSettings { return reloader.Config().GeneralSettings }, format, tracer)
-			mux.Post("/v1/"+format, h)
-			mux.Post("/"+format, h)
+			mux.With(traced).Post("/v1/"+format, h)
+			mux.With(traced).Post("/"+format, h)
 		}
 
 		captureSettings := func() config.OTelMessageCapture { return reloader.Config().OTelSettings.MessageCapture }
-		mux.With(middleware.CaptureMessages(content.Chat, captureSettings)).
+		mux.With(traced, middleware.CaptureMessages(content.Chat, captureSettings)).
 			Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
-		mux.With(middleware.CaptureMessages(content.Messages, captureSettings)).
+		mux.With(traced, middleware.CaptureMessages(content.Messages, captureSettings)).
 			Post("/v1/messages", handler.Messages(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Post("/v1/completions", handler.Completions())
-		mux.Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
+		mux.With(traced).Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
 		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
-		mux.With(middleware.CaptureMessages(content.Responses, captureSettings)).
+		mux.With(traced, middleware.CaptureMessages(content.Responses, captureSettings)).
 			Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.Get("/v1/responses/{id}", handler.GetResponseJob(store))
 		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store, sa))
@@ -124,8 +127,8 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Patch("/admin/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
 		mux.Patch("/admin/models/{model}/costs", handler.PatchModelCosts(cm, store))
 		mux.Delete("/admin/models/{model}/costs", handler.DeleteModelCosts(cm, store))
-		mux.Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
-		mux.Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
+		mux.With(traced).Post("/admin/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
+		mux.With(traced).Post("/admin/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
 		// Identity and key management CRUD routes
 		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)

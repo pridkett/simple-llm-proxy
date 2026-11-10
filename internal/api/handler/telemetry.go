@@ -50,6 +50,9 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 	if user := middleware.UserFromContext(ctx); user != nil && user.Email != "" {
 		attrs = append(attrs, attribute.String(proxyotel.UserEmail, user.Email))
 	}
+	if userID := middleware.ClientUserIDFromContext(ctx); userID != "" {
+		attrs = append(attrs, middleware.ClientUserAttributes(userID)...)
+	}
 	if sessionID != "" {
 		id := traceSessionID(ctx, sessionID)
 		session := []attribute.KeyValue{

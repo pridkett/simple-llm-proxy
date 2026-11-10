@@ -8,6 +8,8 @@ const (
 	GenAIRequestStream  = "gen_ai.request.stream"
 	GenAIConversationID = "gen_ai.conversation.id"
 	LangfuseSessionID   = "langfuse.session.id"
+	UserID              = "user.id"
+	LangfuseUserID      = "langfuse.user.id"
 	GenAIProviderName   = "gen_ai.provider.name"
 	GenAIResponseModel  = "gen_ai.response.model"
 	GenAIInputTokens    = "gen_ai.usage.input_tokens"

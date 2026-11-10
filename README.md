@@ -194,6 +194,10 @@ For OTLP/HTTP, a bare host endpoint sends to `/v1/traces`; an endpoint with a
 path uses that path as-is. OTLP/gRPC endpoints use a host URL without a path.
 For a local plaintext collector, use an `http://` endpoint and set
 `insecure: true`. Header values support `os.environ/VAR_NAME` expansion.
+Only model calls are traced: `/v1/chat/completions`, `/v1/messages`,
+`/v1/responses`, `/v1/embeddings`, the decision routes, and their `/admin`
+mirrors. Health checks, model listings, the admin UI, and other routes create
+no spans.
 The child LLM span covers retries and records failed attempts as events.
 The exporter sends metadata by default. Authentication headers and stored API
 key hashes are excluded.
@@ -202,6 +206,12 @@ When a model request includes a valid session ID, its HTTP and model spans
 share `gen_ai.conversation.id` and `langfuse.session.id`. For application keys,
 the exported value is `app:<application_id>:<sha256 of the UTF-8 session ID>`
 using lowercase hex. Keys for the same application share the namespace.
+Send `X-User-ID` to attribute a model request to the calling application's
+end user. The trimmed value is exported unchanged as `user.id` and
+`langfuse.user.id` on the HTTP and model spans. Values longer than 256 bytes or
+containing control characters are ignored. Any key holder can set it, so treat
+it as attribution, not identity. For OpenWebUI, add `"X-User-ID": "{{USER_ID}}"`
+next to `"X-Session-ID": "{{CHAT_ID}}"` in the connection headers.
 Use `llmproxy.request_id` to join traces to proxy logs.
 
 #### Capture test messages
