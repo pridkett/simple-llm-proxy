@@ -113,6 +113,12 @@ general_settings:
   port: 8080
 ```
 
+Set `general_settings.write_timeout` to a positive duration such as `5m` if
+model loading or generation needs more time. It defaults to `2m` and applies
+server-wide from the end of request headers through the last response write,
+including streamed responses. Restart the proxy after changing it. Clients and
+reverse proxies can enforce shorter deadlines of their own.
+
 ### Environment Variable Expansion
 
 Use `os.environ/VAR_NAME` syntax to reference environment variables:

@@ -122,6 +122,8 @@ general_settings:
   # Example env value: postgresql://proxy:password@postgres.home/llm_proxy?sslmode=verify-full
   # Switching databases does not import SQLite data. See README.md and ADR 014.
   port: 8080
+  # Default: 2m. Increase for slow model loads or long streams. Requires a restart.
+  # write_timeout: 5m
 
 # Optional native HTTPS Streamable HTTP MCP gateway. Restart after changes.
 # mcp:
