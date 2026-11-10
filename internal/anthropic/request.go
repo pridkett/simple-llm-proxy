@@ -24,10 +24,19 @@ type Request struct {
 	StopSequences []string        `json:"stop_sequences,omitempty"`
 	Tools         []Tool          `json:"tools,omitempty"`
 	ToolChoice    *ToolChoice     `json:"tool_choice,omitempty"`
+	Thinking      *ThinkingConfig `json:"thinking,omitempty"`
+	OutputConfig  json.RawMessage `json:"output_config,omitempty"`
 	Metadata      *struct {
 		UserID string `json:"user_id,omitempty"`
 	} `json:"metadata,omitempty"`
 	CacheControl json.RawMessage `json:"cache_control,omitempty"`
+}
+
+type ThinkingConfig struct {
+	Type         string          `json:"type"`
+	BudgetTokens *int            `json:"budget_tokens,omitempty"`
+	Display      string          `json:"display,omitempty"`
+	BlockBinding json.RawMessage `json:"block_binding,omitempty"`
 }
 
 type Message struct {
@@ -38,6 +47,9 @@ type Message struct {
 type Block struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	Data      string          `json:"data,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
@@ -54,12 +66,13 @@ type Block struct {
 }
 
 type Tool struct {
-	Type         string          `json:"type,omitempty"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description,omitempty"`
-	InputSchema  json.RawMessage `json:"input_schema"`
-	Strict       *bool           `json:"strict,omitempty"`
-	CacheControl json.RawMessage `json:"cache_control,omitempty"`
+	Type                string          `json:"type,omitempty"`
+	Name                string          `json:"name"`
+	Description         string          `json:"description,omitempty"`
+	InputSchema         json.RawMessage `json:"input_schema"`
+	Strict              *bool           `json:"strict,omitempty"`
+	CacheControl        json.RawMessage `json:"cache_control,omitempty"`
+	EagerInputStreaming *bool           `json:"eager_input_streaming,omitempty"`
 }
 
 type ToolChoice struct {
@@ -107,6 +120,8 @@ func (r *Request) ChatRequest() (*model.ChatCompletionRequest, error) {
 			return nil, fmt.Errorf("stop_sequences must contain nonempty strings")
 		}
 	}
+	// Thinking, OutputConfig, and per-tool EagerInputStreaming are accepted
+	// for client compatibility and omitted from the provider request.
 	chat := &model.ChatCompletionRequest{Model: r.Model, MaxTokens: &r.MaxTokens, Stream: r.Stream, Temperature: r.Temperature, TopP: r.TopP, Stop: r.StopSequences}
 	if r.Stream {
 		chat.StreamOptions = &model.StreamOptions{IncludeUsage: true}
@@ -143,6 +158,11 @@ func (r *Request) ChatRequest() (*model.ChatCompletionRequest, error) {
 			switch part.Type {
 			case "text":
 				content = append(content, model.ContentPart{Type: "text", Text: part.Text})
+			case "thinking", "redacted_thinking":
+				if msg.Role != "assistant" {
+					return nil, fmt.Errorf("%s blocks require assistant role", part.Type)
+				}
+				continue
 			case "image":
 				if msg.Role != "user" {
 					return nil, fmt.Errorf("image blocks require user role")
