@@ -199,8 +199,15 @@ Only model calls are traced: `/v1/chat/completions`, `/v1/messages`,
 mirrors. Health checks, model listings, the admin UI, and other routes create
 no spans.
 The child LLM span covers retries and records failed attempts as events.
-The exporter sends metadata by default. Authentication headers and stored API
-key hashes are excluded.
+The exporter sends metadata by default. For requests authenticated with an
+application key, both spans include the proxy's `team_name`, `team_id`,
+`application_name`, `application_id`, `api_key_name`, and `api_key_id` as
+filterable Langfuse trace metadata (OTLP attributes under
+`langfuse.trace.metadata.*`). Filter by `api_key_id` to distinguish keys with
+the same name. It is the numeric ID in the proxy's key detail URL, exported as
+text, and is unique within the proxy database. Use `application_id` to
+distinguish same-named applications across teams. Authentication headers, key
+prefixes, and stored key hashes are excluded from attribution.
 
 When a model request includes a valid session ID, its HTTP and model spans
 share `gen_ai.conversation.id` and `langfuse.session.id`. For application keys,
