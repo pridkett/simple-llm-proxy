@@ -19,6 +19,12 @@ import (
 )
 
 func captureExchange(t *testing.T, protocol content.Protocol, path, body, token string, app int64, handler func(trace.Tracer) http.Handler) (map[string]any, string) {
+	model, _, body := captureExchangeSpans(t, protocol, path, body, token, app, handler)
+	return model, body
+}
+
+// captureExchangeSpans returns the model span, the HTTP span, and the downstream body.
+func captureExchangeSpans(t *testing.T, protocol content.Protocol, path, body, token string, app int64, handler func(trace.Tracer) http.Handler) (map[string]any, map[string]any, string) {
 	t.Helper()
 	recorder, provider := testTracer(t)
 	tracer := provider.Tracer("capture-test")
@@ -43,7 +49,7 @@ func captureExchange(t *testing.T, protocol content.Protocol, path, body, token 
 	if attrs := spanAttrs(spans[1]); attrs["gen_ai.input.messages"] != nil || attrs["gen_ai.output.messages"] != nil {
 		t.Fatalf("HTTP span got message payloads: %v", attrs)
 	}
-	return spanAttrs(spans[0]), w.Body.String()
+	return spanAttrs(spans[0]), spanAttrs(spans[1]), w.Body.String()
 }
 
 func TestChatStructuredCaptureEligibilityAndRedaction(t *testing.T) {
@@ -69,15 +75,15 @@ func TestChatStructuredCaptureEligibilityAndRedaction(t *testing.T) {
 		{"master key", "master", 42, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			attrs, downstream := captureExchange(t, content.Chat, "/v1/chat/completions", body, tc.token, tc.app, handler)
+			attrs, root, downstream := captureExchangeSpans(t, content.Chat, "/v1/chat/completions", body, tc.token, tc.app, handler)
 			input := valString(attrs["gen_ai.input.messages"])
 			output := valString(attrs["gen_ai.output.messages"])
 			if !strings.Contains(downstream, "output-secret") {
 				t.Fatal("capture modified the live response")
 			}
 			if !tc.want {
-				if input != "" || output != "" || attrs["langfuse.observation.input"] != nil {
-					t.Fatalf("ineligible content captured: %v", attrs)
+				if input != "" || output != "" || attrs["langfuse.observation.input"] != nil || root["langfuse.observation.input"] != nil {
+					t.Fatalf("ineligible content captured: %v %v", attrs, root)
 				}
 				return
 			}
@@ -85,6 +91,9 @@ func TestChatStructuredCaptureEligibilityAndRedaction(t *testing.T) {
 				strings.Contains(input, "hidden") || strings.Contains(output, "output-secret") ||
 				attrs["gen_ai.response.id"] != "chat-id" || attrs["langfuse.observation.output"] != output {
 				t.Fatalf("unexpected capture: %v", attrs)
+			}
+			if root["langfuse.observation.input"] != attrs["langfuse.observation.input"] || root["langfuse.observation.output"] != output {
+				t.Fatalf("HTTP root span lacks the trace input/output: %v", root)
 			}
 		})
 	}
