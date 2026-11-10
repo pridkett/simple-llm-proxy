@@ -127,7 +127,7 @@ func TestOAuthGateway(t *testing.T) {
 	g := newGateway(cfg, store, keystore.NewRateLimiter(), upstream.Client().Transport)
 	sm := scs.New()
 	routes := chi.NewRouter()
-	g.register(routes, sm)
+	g.register(routes, sm, config.LocalAdminSettings{})
 	cookie := func(user string) *http.Cookie {
 		session, err := sm.Load(ctx, "")
 		must(t, err)

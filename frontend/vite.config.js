@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
+const proxyTarget = 'http://127.0.0.1:8080'
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -13,29 +15,29 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/v1': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/admin': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
+        // Keep the browser Host so the backend can verify same-origin requests.
+        target: proxyTarget,
       },
       '/api/mcp': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
       },
       '/mcp': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
       },
       '/auth': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/openapi.json': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
         changeOrigin: true,
       },
     },

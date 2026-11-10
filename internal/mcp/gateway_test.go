@@ -94,7 +94,7 @@ func TestGatewayCredentialsAndSessions(t *testing.T) {
 	g := newGateway(cfg, store, keystore.NewRateLimiter(), upstream.Client().Transport)
 	sm := scs.New()
 	routes := chi.NewRouter()
-	g.register(routes, sm)
+	g.register(routes, sm, config.LocalAdminSettings{})
 
 	do := func(method, path, token, body string, headers map[string]string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -228,7 +228,7 @@ func TestRelayFlushesEventStream(t *testing.T) {
 	routes := chi.NewRouter()
 	routes.Use(middleware.Recovery(), middleware.Logging())
 	g := newGateway(cfg, store, keystore.NewRateLimiter(), upstream.Client().Transport)
-	g.register(routes, scs.New())
+	g.register(routes, scs.New(), config.LocalAdminSettings{})
 	proxy := httptest.NewServer(routes)
 	defer proxy.Close()
 	defer close(sent)

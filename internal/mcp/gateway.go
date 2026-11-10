@@ -53,16 +53,15 @@ func Register(mux chi.Router, cfg *config.Config, store storage.Storage, sm *scs
 	transport.ResponseHeaderTimeout = 30 * time.Second
 	transport.MaxResponseHeaderBytes = 64 << 10
 	g := newGateway(cfg, store, limiter, transport)
-	g.register(mux, sm)
+	g.register(mux, sm, cfg.LocalAdmin)
 }
 
-func (g *gateway) register(mux chi.Router, sm *scs.SessionManager) {
+func (g *gateway) register(mux chi.Router, sm *scs.SessionManager, localAdmin config.LocalAdminSettings) {
 	for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
 		mux.MethodFunc(method, "/mcp/{server}", g.relay)
 	}
 	mux.Route("/api/mcp/connections", func(r chi.Router) {
-		r.Use(sm.LoadAndSave)
-		r.Use(middleware.RequireSession(g.keys, sm))
+		r.Use(middleware.BrowserAuth(g.keys, sm, localAdmin)...)
 		r.Use(http.NewCrossOriginProtection().Handler)
 		r.Get("/", g.list)
 		r.Get("/{server}", g.connection)

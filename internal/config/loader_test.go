@@ -6,6 +6,32 @@ import (
 	"time"
 )
 
+func TestParseLocalAdmin(t *testing.T) {
+	for _, tc := range []struct {
+		yaml string
+		want LocalAdminSettings
+	}{
+		{"", LocalAdminSettings{Name: "Local Admin"}},
+		{"local_admin: {enabled: true}", LocalAdminSettings{Enabled: true, Name: "Local Admin"}},
+		{"local_admin: {enabled: true, name: ' Dev '}", LocalAdminSettings{Enabled: true, Name: "Dev"}},
+	} {
+		cfg, err := Parse([]byte(tc.yaml))
+		if err != nil || cfg.LocalAdmin != tc.want {
+			t.Fatalf("Parse(%q) = %+v, %v, want %+v", tc.yaml, cfg, err, tc.want)
+		}
+	}
+	for _, input := range []string{
+		"local_admin: true",
+		"local_admin: {enabled: 'true'}",
+		"local_admin: {enabled: true, name: ' '}",
+		"local_admin: {enabled: true}\noidc_settings: {issuer_url: https://idp.example.test}",
+	} {
+		if _, err := Parse([]byte(input)); err == nil {
+			t.Errorf("Parse(%q) accepted invalid local admin settings", input)
+		}
+	}
+}
+
 func TestParse(t *testing.T) {
 	yaml := `
 model_list:

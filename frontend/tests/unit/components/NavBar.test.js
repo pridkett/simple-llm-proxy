@@ -76,6 +76,13 @@ describe('NavBar', () => {
     expect((await openAccount(wrapper)).text()).toContain('Logout')
   })
 
+  it('shows the local admin name without a logout action', async () => {
+    const { wrapper } = await render({ user: { name: 'Dev Admin', is_admin: true, local_admin: true } })
+    const panel = await openAccount(wrapper)
+    expect(panel.text()).toContain('Dev Admin')
+    expect(panel.text()).not.toContain('Logout')
+  })
+
   it('keeps Teams active inside an application workspace', async () => {
     const { wrapper } = await render({ path: '/teams/1/applications/1' })
     expect(wrapper.get('nav a[href="/teams"]').attributes('aria-current')).toBe('page')

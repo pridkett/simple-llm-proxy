@@ -146,6 +146,30 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	if value, exists := raw["local_admin"]; exists {
+		settings, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("local_admin must be a mapping")
+		}
+		if value, exists := settings["enabled"]; exists {
+			enabled, ok := value.(bool)
+			if !ok {
+				return nil, fmt.Errorf("local_admin.enabled must be a boolean")
+			}
+			cfg.LocalAdmin.Enabled = enabled
+		}
+		if value, exists := settings["name"]; exists {
+			name, ok := value.(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return nil, fmt.Errorf("local_admin.name must be a nonempty string")
+			}
+			cfg.LocalAdmin.Name = strings.TrimSpace(name)
+		}
+		if cfg.LocalAdmin.Enabled && cfg.OIDCSettings.IssuerURL != "" {
+			return nil, fmt.Errorf("local_admin.enabled cannot be used with oidc_settings.issuer_url")
+		}
+	}
+
 	if value, ok := raw["mcp"]; ok {
 		if err := parseMCPSettings(value, cfg); err != nil {
 			return nil, err

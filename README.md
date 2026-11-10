@@ -81,6 +81,31 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+### Local UI without OIDC
+
+For development on your machine, add this block to your proxy config and leave
+`oidc_settings.issuer_url` unset:
+
+```yaml
+local_admin:
+  enabled: true
+  name: Local Admin  # Optional display name
+```
+
+Run `go run ./cmd/proxy -config config.local.yaml` with the path to your config.
+Build the frontend with `cd frontend && npm ci && npm run build` and open
+`http://127.0.0.1:8080`. For live frontend development, run `npm run dev` in
+`frontend` and open `http://localhost:5173`. Vite expects the backend on port 8080.
+The UI opens as the local administrator without a sign-in prompt. The profile
+is supplied by the server for local requests and has no database account.
+
+The setting defaults to off. To disable it, remove the block or set
+`enabled: false` and restart the proxy. While enabled, the proxy listens only
+on `127.0.0.1`. Anyone who can access that local listener can administer the
+proxy. Keep both servers on your machine and avoid exposing them through a
+reverse proxy or tunnel. Calls to `/v1/*` still require the master key or an app
+key. Personal MCP access and MCP OAuth require OIDC.
+
 ## Configuration
 
 The proxy uses a subset of LiteLLM’s YAML configuration format. Configure explicit client-facing model aliases; this does not import every LiteLLM feature or wildcard route:

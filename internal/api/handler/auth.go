@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/auth"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -196,27 +197,24 @@ func AuthLogout(sm *scs.SessionManager) http.HandlerFunc {
 	}
 }
 
-// AdminMe returns the currently authenticated user's profile from the session.
-func AdminMe(store storage.Storage, sm *scs.SessionManager) http.HandlerFunc {
+// AdminMe returns the profile supplied by the browser auth middleware.
+func AdminMe(localAdmin bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := sm.GetString(r.Context(), "user_id")
-		if userID == "" {
+		user := middleware.UserFromContext(r.Context())
+		if user == nil {
 			model.WriteError(w, model.ErrUnauthorized("not authenticated"))
 			return
 		}
 
-		user, err := store.GetUser(r.Context(), userID)
-		if err != nil || user == nil {
-			model.WriteError(w, model.ErrUnauthorized("user not found"))
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":       user.ID,
-			"email":    user.Email,
-			"name":     user.Name,
-			"is_admin": user.IsAdmin,
+		_ = json.NewEncoder(w).Encode(struct {
+			ID         string `json:"id"`
+			Email      string `json:"email"`
+			Name       string `json:"name"`
+			IsAdmin    bool   `json:"is_admin"`
+			LocalAdmin bool   `json:"local_admin,omitempty"`
+		}{
+			ID: user.ID, Email: user.Email, Name: user.Name, IsAdmin: user.IsAdmin, LocalAdmin: localAdmin,
 		})
 	}
 }

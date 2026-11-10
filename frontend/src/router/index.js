@@ -35,18 +35,17 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  // No auth required for public routes (e.g. /login)
-  if (to.meta.requiresAuth === false) return true
-
-  const { isAuthenticated, fetchCurrentUser } = useSession()
-
-  // If session state not yet loaded (e.g. page refresh), check /admin/me
-  // fetchCurrentUser() returns false (not throw) if unauthenticated — 401 loop safe
-  if (!isAuthenticated.value) {
-    const ok = await fetchCurrentUser()
-    if (!ok) return { name: 'login' }
+  const { isAuthenticated, currentUser, fetchCurrentUser } = useSession()
+  if (to.meta.requiresAuth === false) {
+    // An auth redirect already checked /admin/me. Check direct login visits
+    // so that old bookmarks also open the dashboard in local admin mode.
+    if (!to.redirectedFrom && (isAuthenticated.value || await fetchCurrentUser()) && currentUser.value?.local_admin) {
+      return { name: 'dashboard' }
+    }
+    return true
   }
-  return true
+
+  return isAuthenticated.value || await fetchCurrentUser() || { name: 'login' }
 })
 
 export default router

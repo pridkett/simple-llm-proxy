@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/api/handler"
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/auth"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
@@ -317,7 +318,7 @@ func TestAdminMe_NoSession(t *testing.T) {
 	store := &mockAuthStore{}
 	sm := newTestSessionManager()
 
-	h := sm.LoadAndSave(handler.AdminMe(store, sm))
+	h := sm.LoadAndSave(middleware.RequireSession(store, sm)(handler.AdminMe(false)))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/me", nil)
 	req.Header.Set("Accept", "application/json")
@@ -363,7 +364,7 @@ func TestAdminMe_WithSession(t *testing.T) {
 		t.Skip("session cookie not found — in-memory store may not set cookie without store backend")
 	}
 
-	h := sm.LoadAndSave(handler.AdminMe(store, sm))
+	h := sm.LoadAndSave(middleware.RequireSession(store, sm)(handler.AdminMe(false)))
 	req := httptest.NewRequest(http.MethodGet, "/admin/me", nil)
 	req.AddCookie(sessionCookie)
 
