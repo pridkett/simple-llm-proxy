@@ -21,6 +21,7 @@ import (
 
 type operationSpan struct {
 	span    trace.Span
+	parent  trace.Span // the HTTP server span, which Langfuse v4 treats as the trace root
 	capture *content.Capture
 }
 
@@ -62,8 +63,9 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 		trace.SpanFromContext(ctx).SetAttributes(session...)
 		attrs = append(attrs, session...)
 	}
+	parent := trace.SpanFromContext(ctx)
 	ctx, span := tracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(attrs...))
-	return ctx, &operationSpan{span: span, capture: middleware.MessageCaptureFromContext(ctx)}
+	return ctx, &operationSpan{span: span, parent: parent, capture: middleware.MessageCaptureFromContext(ctx)}
 }
 
 // A digest keeps all accepted UTF-8 IDs within Langfuse's ASCII length limit.
@@ -81,7 +83,17 @@ func traceSessionID(ctx context.Context, sessionID string) string {
 func (o *operationSpan) end() {
 	if o != nil {
 		if o.capture != nil && o.span.IsRecording() {
-			o.span.SetAttributes(o.capture.Attributes()...)
+			attrs := o.capture.Attributes()
+			o.span.SetAttributes(attrs...)
+			// Langfuse v4 shows a trace's input and output from its root
+			// observation, so mirror only the Langfuse keys onto the HTTP span.
+			if o.parent != nil && o.parent.IsRecording() {
+				for _, a := range attrs {
+					if a.Key == "langfuse.observation.input" || a.Key == "langfuse.observation.output" {
+						o.parent.SetAttributes(a)
+					}
+				}
+			}
 		}
 		o.span.End()
 	}
