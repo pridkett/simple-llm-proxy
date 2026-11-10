@@ -24,6 +24,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage/sqlite"
+	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,6 +38,11 @@ type decisionFixture struct {
 }
 
 func newDecisionFixture(t *testing.T, snippetLimit ...int) *decisionFixture {
+	t.Helper()
+	return newDecisionFixtureWithTracer(t, nil, snippetLimit...)
+}
+
+func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimit ...int) *decisionFixture {
 	t.Helper()
 	f := &decisionFixture{migrationFixture: &migrationFixture{captured: make(chan map[string]any, 100)}, spend: keystore.NewSpendAccumulator()}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +204,11 @@ func newDecisionFixture(t *testing.T, snippetLimit ...int) *decisionFixture {
 	if err := spec.Build(); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(api.NewRouter(f.router, f.store, reloader, nil, time.Now(), spec, sm, nil, keystore.New(time.Minute), keystore.NewRateLimiter(), f.spend, nil))
+	var tracers []trace.Tracer
+	if tracer != nil {
+		tracers = append(tracers, tracer)
+	}
+	server := httptest.NewServer(api.NewRouter(f.router, f.store, reloader, nil, time.Now(), spec, sm, nil, keystore.New(time.Minute), keystore.NewRateLimiter(), f.spend, nil, tracers...))
 	f.url = server.URL
 	t.Cleanup(server.Close)
 	return f

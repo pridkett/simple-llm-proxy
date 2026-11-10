@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -155,5 +156,41 @@ func TestOTelSpanClosesWhenRecoveryCatchesPanic(t *testing.T) {
 	}
 	if attrs["http.status_code"] != int64(500) || spans[0].Status().Code != codes.Error {
 		t.Fatalf("panic not reflected in span: attrs=%v status=%v", attrs, spans[0].Status())
+	}
+}
+
+func TestOTelClientUserIDValidation(t *testing.T) {
+	for name, tc := range map[string]struct {
+		header string
+		want   string
+	}{
+		"accepted":         {" user-1 ", "user-1"},
+		"absent":           {"", ""},
+		"control chars":    {"user\x01", ""},
+		"longer than 256B": {strings.Repeat("u", 257), ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+			defer provider.Shutdown(t.Context())
+			var fromContext string
+			h := OTel(provider.Tracer("test"))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fromContext = ClientUserIDFromContext(r.Context())
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			if tc.header != "" {
+				req.Header.Set(ClientUserIDHeader, tc.header)
+			}
+			h.ServeHTTP(httptest.NewRecorder(), req)
+			got := ""
+			for _, a := range recorder.Ended()[0].Attributes() {
+				if string(a.Key) == proxyotel.LangfuseUserID {
+					got = a.Value.AsString()
+				}
+			}
+			if got != tc.want || fromContext != tc.want {
+				t.Fatalf("span=%q context=%q want %q", got, fromContext, tc.want)
+			}
+		})
 	}
 }

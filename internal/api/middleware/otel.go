@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/netip"
+	"strings"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	proxyotel "github.com/pwagstro/simple_llm_proxy/internal/otel"
@@ -28,6 +31,10 @@ func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) 
 			ctx, span := tracer.Start(ctx, r.Method+" "+r.URL.Path, trace.WithSpanKind(trace.SpanKindServer))
 			if id := RequestIDFromContext(ctx); id != "" {
 				span.SetAttributes(attribute.String(proxyotel.RequestID, id))
+			}
+			if userID := clientUserID(r.Header.Get(ClientUserIDHeader)); userID != "" {
+				span.SetAttributes(ClientUserAttributes(userID)...)
+				ctx = context.WithValue(ctx, clientUserIDKey{}, userID)
 			}
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 			defer func() {
@@ -76,4 +83,34 @@ func trustedTracePeer(remoteAddr string, prefixes []netip.Prefix) bool {
 		}
 	}
 	return false
+}
+
+// ClientUserIDHeader names the calling application's end user (for example
+// OpenWebUI's {{USER_ID}}). It is attribution supplied by an authenticated
+// client, not an authenticated identity.
+const ClientUserIDHeader = "X-User-ID"
+
+type clientUserIDKey struct{}
+
+// ClientUserIDFromContext returns the X-User-ID accepted for this request.
+func ClientUserIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(clientUserIDKey{}).(string)
+	return id
+}
+
+// ClientUserAttributes maps a client user ID onto the generic and Langfuse keys.
+func ClientUserAttributes(userID string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String(proxyotel.UserID, userID),
+		attribute.String(proxyotel.LangfuseUserID, userID),
+	}
+}
+
+// clientUserID drops values that are empty, too long, or contain control characters.
+func clientUserID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 256 || strings.ContainsFunc(value, unicode.IsControl) {
+		return ""
+	}
+	return value
 }
