@@ -294,7 +294,17 @@ func (x *Tool) UnmarshalJSON(data []byte) error {
 	x.rawFields = fields
 	return err
 }
-func (x Tool) MarshalJSON() ([]byte, error) { type wire Tool; return writeObject(wire(x), x.rawFields) }
+func (x Tool) MarshalJSON() ([]byte, error) {
+	type wire Tool
+	if x.Function.Name != "" || (x.Type == "function" && x.rawFields["name"] == nil) {
+		return writeObject(wire(x), x.rawFields)
+	}
+	// Built-in Responses tools use a flat schema and have no function object.
+	return writeObject(struct {
+		wire
+		Function *FunctionDef `json:"function,omitempty"`
+	}{wire: wire(x)}, x.rawFields)
+}
 
 // AccountingJSON preserves field presence: omitted counts are different from reported zeros.
 func (x Usage) AccountingJSON() json.RawMessage {

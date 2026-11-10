@@ -179,3 +179,32 @@ func TestNativeAnthropicUsageSurvivesTranslation(t *testing.T) {
 		t.Fatalf("native=%v record=%+v", native, rec)
 	}
 }
+
+func TestMediaUsageDoesNotUseTextRates(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		usage string
+		skip  bool
+	}{
+		{"chat audio", `{"usage":{"prompt_tokens":10,"completion_tokens":2,"completion_tokens_details":{"audio_tokens":2}}}`, false},
+		{"image tool", `{"usage":{"input_tokens":10,"output_tokens":2}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, ctx := beginTest("")
+			if tc.skip {
+				SkipEstimate(ctx, "local pricing does not cover this media operation")
+			}
+			ObserveJSON(ctx, []byte(tc.usage))
+			r := c.Snapshot(true)
+			if r.Cost.Amount != nil || r.Cost.EstimatedAmount != nil || r.Usage.TotalTokens == nil ||
+				*r.Usage.TotalTokens != 12 || len(r.Attempts[0].Warnings) == 0 {
+				t.Fatalf("unexpected accounting for media usage: %+v", r)
+			}
+			ObserveHeaders(ctx, http.Header{"X-Litellm-Response-Cost": []string{"0.02"}})
+			r = c.Snapshot(true)
+			if r.Cost.Amount == nil || *r.Cost.Amount != "0.02" || r.Cost.Source != "upstream" {
+				t.Fatalf("reported media cost was lost: %+v", r)
+			}
+		})
+	}
+}

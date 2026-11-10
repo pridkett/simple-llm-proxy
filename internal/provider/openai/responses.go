@@ -1,14 +1,12 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
@@ -161,9 +159,9 @@ func (p *Provider) CreateResponseStream(ctx context.Context, req *model.Response
 	go func() {
 		defer close(events)
 
-		reader := bufio.NewReader(resp.Body)
+		reader := provider.NewSSEReader(resp.Body)
 		for {
-			line, err := reader.ReadString('\n')
+			_, data, err := reader.Next()
 			if err != nil {
 				if err != io.EOF {
 					errs <- err
@@ -171,15 +169,8 @@ func (p *Provider) CreateResponseStream(ctx context.Context, req *model.Response
 				return
 			}
 
-			line = strings.TrimSpace(line)
-			if line == "" || !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			data := strings.TrimPrefix(line, "data: ")
-
 			var event model.ResponsesStreamEvent
-			if err := json.Unmarshal([]byte(data), &event); err != nil {
+			if err := json.Unmarshal(data, &event); err != nil {
 				errs <- fmt.Errorf("unmarshaling event: %w", err)
 				return
 			}

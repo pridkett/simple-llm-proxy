@@ -85,6 +85,17 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Post("/v1/completions", handler.Completions())
 		mux.With(traced).Post("/v1/embeddings", handler.Embeddings(r, store, sa, cm, dispatcher, tracer))
 
+		media := handler.OpenAIMedia{Router: r, Store: store, Spend: sa, CostMap: cm, Webhooks: dispatcher, Tracer: tracer}
+		for _, path := range []string{
+			"/images/generations", "/images/edits",
+			"/audio/speech", "/audio/transcriptions", "/audio/translations",
+			"/realtime/calls", "/realtime/client_secrets",
+		} {
+			mux.With(traced).Post("/v1"+path, media.HTTP(path))
+		}
+		mux.With(traced).Get("/v1/realtime", media.Realtime("/realtime"))
+		mux.With(traced).Get("/v1/realtime/translations", media.Realtime("/realtime/translations"))
+
 		// OpenAI Responses API (ADR 010): sync, streaming, and background create + poll + cancel.
 		mux.With(traced, middleware.CaptureMessages(content.Responses, captureSettings)).
 			Post("/v1/responses", handler.Responses(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))

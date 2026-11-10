@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 	"time"
 
@@ -32,6 +34,15 @@ func (rw *responseWriter) Flush() {
 
 func (rw *responseWriter) FlushError() error {
 	return http.NewResponseController(rw.ResponseWriter).Flush()
+}
+
+// Hijack lets the Realtime upgrade pass through logging and tracing wrappers.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, buf, err := http.NewResponseController(rw.ResponseWriter).Hijack()
+	if err == nil {
+		rw.status = http.StatusSwitchingProtocols
+	}
+	return conn, buf, err
 }
 
 // Logging returns middleware that logs requests with structured fields.

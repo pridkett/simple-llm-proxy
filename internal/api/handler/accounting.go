@@ -23,6 +23,7 @@ import (
 
 type callAccountingKey struct{}
 type callAccounting struct {
+	responseStatus                      int
 	reconcile                           func(*model.Usage)
 	collector                           *accounting.Collector
 	ctx                                 context.Context
@@ -123,7 +124,7 @@ func (s *callAccounting) complete() *accounting.Record {
 	if won {
 		creditAccounting(rec, s.sa, s.router.BudgetManager())
 	}
-	if !s.streaming {
+	if !s.streaming && s.responseStatus == 0 {
 		setAccountingHeaders(s.writer, rec)
 	}
 	return rec
@@ -157,6 +158,9 @@ func (s *callAccounting) logEntry(rec *accounting.Record) *storage.RequestLog {
 		entry.RespBodySnippet = p.RespBodySnippet
 		entry.RequestTime = p.StartTime
 		entry.LatencyMS = time.Since(p.StartTime).Milliseconds()
+	}
+	if s.responseStatus != 0 {
+		entry.StatusCode = s.responseStatus
 	}
 	if s.err != nil {
 		entry.StatusCode = http.StatusBadGateway
