@@ -15,3 +15,8 @@ type MediaProvider interface {
 	ForwardMedia(ctx context.Context, path, contentType string, body io.Reader, headers http.Header) (*http.Response, error)
 	ConnectRealtime(ctx context.Context, path string, query url.Values, headers http.Header) (*websocket.Conn, error)
 }
+
+// AudioGenerationProvider is an audio-only provider with a dedicated generation API.
+type AudioGenerationProvider interface {
+	GenerateAudio(ctx context.Context, model, outputFormat string, body io.Reader) (*http.Response, error)
+}

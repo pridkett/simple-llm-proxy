@@ -71,12 +71,13 @@ type LogSettings struct {
 
 // ModelConfig represents a model deployment configuration.
 type ModelConfig struct {
-	CostPolicy    string          `yaml:"cost_policy,omitempty"`
-	Decision      *DecisionConfig `yaml:"decision,omitempty"`
-	ModelName     string          `yaml:"model_name"`
-	LiteLLMParams LiteLLMParams   `yaml:"litellm_params"`
-	RPM           int             `yaml:"rpm,omitempty"`
-	TPM           int             `yaml:"tpm,omitempty"`
+	AudioCostPerSecond *float64        `yaml:"audio_cost_per_second,omitempty"`
+	CostPolicy         string          `yaml:"cost_policy,omitempty"`
+	Decision           *DecisionConfig `yaml:"decision,omitempty"`
+	ModelName          string          `yaml:"model_name"`
+	LiteLLMParams      LiteLLMParams   `yaml:"litellm_params"`
+	RPM                int             `yaml:"rpm,omitempty"`
+	TPM                int             `yaml:"tpm,omitempty"`
 }
 
 // DecisionConfig explicitly opts a deployment into the decision-only API.

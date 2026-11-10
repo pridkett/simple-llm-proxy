@@ -23,14 +23,17 @@ type RouteOptions struct {
 	BeforeAttempt   func(*provider.Deployment, string)
 	AfterAttempt    func(*model.ChatCompletionResponse, error)
 	Eligible        func(*provider.Deployment) bool
+	// StopOnUpstreamError prevents replay of non-idempotent requests after dispatch.
+	StopOnUpstreamError bool
 }
 
 func eligibleDeployment(d *provider.Deployment, opts []RouteOptions) bool {
 	if len(opts) > 0 && opts[0].Eligible != nil {
 		return opts[0].Eligible(d)
 	}
-	// Existing API handlers are generation-only. Decision deployments require an explicit filter.
-	return d.Decision == nil
+	// Decision and audio-only deployments require an explicit endpoint filter.
+	_, audioOnly := d.Provider.(provider.AudioGenerationProvider)
+	return d.Decision == nil && !audioOnly
 }
 
 type capacityWindow struct {

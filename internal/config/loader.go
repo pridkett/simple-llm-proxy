@@ -263,6 +263,18 @@ func parseModelConfig(item any) (ModelConfig, error) {
 	}
 
 	mc := ModelConfig{}
+	if value, exists := m["audio_cost_per_second"]; exists {
+		var rate float64
+		switch value := value.(type) {
+		case int:
+			rate = float64(value)
+		case float64:
+			rate = value
+		default:
+			return mc, fmt.Errorf("audio_cost_per_second must be a number")
+		}
+		mc.AudioCostPerSecond = &rate
+	}
 	if value, exists := m["cost_policy"]; exists {
 		policy, ok := value.(string)
 		if !ok || (policy != "prefer_upstream" && policy != "estimate_only" && policy != "require_upstream") {
@@ -334,7 +346,7 @@ func parseModelConfig(item any) (ModelConfig, error) {
 		mc.TPM = v
 	}
 
-	return mc, nil
+	return mc, mc.ValidateAudio()
 }
 
 func parseProviderPool(item any) (ProviderPool, error) {

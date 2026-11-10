@@ -58,19 +58,39 @@ type Pricing struct {
 	CacheWrite *string `json:"cache_write_per_token"`
 }
 type Attempt struct {
-	nativeCaptured bool
-	NativeUsage    json.RawMessage `json:"native_usage,omitempty"`
-	Provider       string          `json:"provider"`
-	Model          string          `json:"model"`
-	DeploymentKey  string          `json:"deployment_key"`
-	Pool           string          `json:"pool,omitempty"`
-	Policy         string          `json:"policy"`
-	Status         string          `json:"status"`
-	Usage          Usage           `json:"usage"`
-	Cost           Cost            `json:"cost"`
-	Pricing        *Pricing        `json:"pricing,omitempty"`
-	Warnings       []string        `json:"warnings,omitempty"`
+	nativeCaptured  bool
+	NativeUsage     json.RawMessage       `json:"native_usage,omitempty"`
+	AudioGeneration *AudioGenerationUsage `json:"audio_generation,omitempty"`
+	Provider        string                `json:"provider"`
+	Model           string                `json:"model"`
+	DeploymentKey   string                `json:"deployment_key"`
+	Pool            string                `json:"pool,omitempty"`
+	Policy          string                `json:"policy"`
+	Status          string                `json:"status"`
+	Usage           Usage                 `json:"usage"`
+	Cost            Cost                  `json:"cost"`
+	Pricing         *Pricing              `json:"pricing,omitempty"`
+	Warnings        []string              `json:"warnings,omitempty"`
 }
+
+// AudioGenerationUsage keeps requested duration separate from upstream billing evidence.
+type AudioGenerationUsage struct {
+	RequestedDurationMS int64   `json:"requested_duration_ms"`
+	CharacterCost       *int64  `json:"character_cost,omitempty"`
+	SongID              string  `json:"song_id,omitempty"`
+	USDPerSecond        *string `json:"estimated_usd_per_second,omitempty"`
+}
+
+func ObserveAudioGeneration(ctx context.Context, usage AudioGenerationUsage) {
+	if ref, ok := ctx.Value(attemptKey{}).(attemptRef); ok {
+		ref.c.mu.Lock()
+		defer ref.c.mu.Unlock()
+		a := &ref.c.record.Attempts[ref.index]
+		a.Pricing = nil
+		a.AudioGeneration = &usage
+	}
+}
+
 type Record struct {
 	ID        string    `json:"id"`
 	RequestID string    `json:"request_id"`
@@ -472,6 +492,13 @@ func price(a *Attempt) {
 	a.Cost.EstimatedAmount = nil
 	a.Cost.Amount = nil
 	a.Cost.Source = "unknown"
+	if usage := a.AudioGeneration; usage != nil && usage.USDPerSecond != nil {
+		if rate, ok := new(big.Rat).SetString(*usage.USDPerSecond); ok {
+			seconds := big.NewRat(usage.RequestedDurationMS, 1000)
+			amount := format(rate.Mul(rate, seconds))
+			a.Cost.EstimatedAmount = &amount
+		}
+	}
 	if p := a.Pricing; p != nil && a.Usage.InputTokens != nil && a.Usage.OutputTokens != nil {
 		input := *a.Usage.InputTokens
 		cached, write := int64(0), int64(0)

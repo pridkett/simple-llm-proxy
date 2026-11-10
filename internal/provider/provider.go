@@ -76,16 +76,17 @@ type Stream interface {
 
 // Deployment represents a specific model deployment.
 type Deployment struct {
-	CostPolicy   string                 // prefer_upstream (default), estimate_only, require_upstream
-	Decision     *config.DecisionConfig // nil for existing generation deployments
-	ModelName    string                 // User-facing model name
-	Provider     Provider               // The provider instance
-	ProviderName string                 // Provider name (e.g., "openai")
-	ActualModel  string                 // Actual model name sent to provider
-	APIKey       string                 // API key for this deployment
-	APIBase      string                 // Optional custom API base URL
-	RPM          int                    // Rate limit (requests per minute)
-	TPM          int                    // Rate limit (tokens per minute)
+	AudioCostPerSecond *float64
+	CostPolicy         string                 // prefer_upstream (default), estimate_only, require_upstream
+	Decision           *config.DecisionConfig // nil for existing generation deployments
+	ModelName          string                 // User-facing model name
+	Provider           Provider               // The provider instance
+	ProviderName       string                 // Provider name (e.g., "openai")
+	ActualModel        string                 // Actual model name sent to provider
+	APIKey             string                 // API key for this deployment
+	APIBase            string                 // Optional custom API base URL
+	RPM                int                    // Rate limit (requests per minute)
+	TPM                int                    // Rate limit (tokens per minute)
 }
 
 // DeploymentKey returns the stable string identity for this deployment.

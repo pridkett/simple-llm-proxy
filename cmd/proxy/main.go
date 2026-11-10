@@ -32,6 +32,7 @@ import (
 
 	// Register providers — blank imports trigger init() to self-register with the provider registry.
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/anthropic"
+	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/elevenlabs"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/gemini"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/minimax"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/ollama"
