@@ -47,7 +47,13 @@ func TestMessagesRoutesAcrossProvidersAndAccounts(t *testing.T) {
 		}
 		for _, stream := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/stream=%t", name, stream), func(t *testing.T) {
-				body := fmt.Sprintf(`{"model":%q,"max_tokens":20,"system":"Be brief","messages":[{"role":"user","content":"hello"}],"metadata":{"user_id":"sdk-user","session_id":"body-session"},"stream":%t}`, name, stream)
+				body := fmt.Sprintf(`{
+ "model":%q,"max_tokens":2048,"system":"Be brief","stream":%t,
+ "thinking":{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}},
+ "output_config":{"effort":"low","future_option":{"mode":"auto"}},
+ "messages":[{"role":"user","content":"hello"}],
+ "metadata":{"user_id":"sdk-user","session_id":"body-session"}
+}`, name, stream)
 				status, headers, data := messagesRequest(t, f, body, token)
 				if status != 200 {
 					t.Fatalf("messages: %d %s", status, data)
@@ -83,11 +89,20 @@ func TestMessagesRoutesAcrossProvidersAndAccounts(t *testing.T) {
 					t.Fatal("TTFT missing")
 				}
 				captured := <-f.captured
-				if captured["model"] != "wire-"+name || captured["max_tokens"] != float64(20) {
+				if captured["model"] != "wire-"+name || captured["max_tokens"] != float64(2048) {
 					t.Fatal("routing or max_tokens lost", captured)
 				}
 				if captured["session_id"] != nil || captured["metadata"] != nil {
 					t.Fatal("proxy metadata leaked", captured)
+				}
+				if name == "anthropic" {
+					thinking, _ := captured["thinking"].(map[string]any)
+					output, _ := captured["output_config"].(map[string]any)
+					if len(thinking) != 2 || thinking["type"] != "adaptive" || thinking["display"] != "summarized" || len(output) != 1 || output["effort"] != "low" {
+						t.Fatal("unexpected thinking controls", captured)
+					}
+				} else if captured["thinking"] != nil || captured["output_config"] != nil {
+					t.Fatal("Anthropic thinking controls leaked to another provider", captured)
 				}
 			})
 		}
@@ -144,6 +159,30 @@ func TestMessagesHTTPErrorContract(t *testing.T) {
 	}
 }
 
+func TestMessagesForwardsExplicitThinkingModes(t *testing.T) {
+	f := newMigrationFixture(t)
+	for _, test := range []struct {
+		mode, fields string
+		budget       any
+	}{
+		{mode: "disabled"},
+		{mode: "enabled", fields: `,"budget_tokens":1024`, budget: float64(1024)},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			body := fmt.Sprintf(`{"model":"anthropic","max_tokens":2048,"thinking":{"type":%q%s},"messages":[{"role":"user","content":"hello"}]}`, test.mode, test.fields)
+			status, _, data := messagesRequest(t, f, body, "master-only")
+			if status != 200 {
+				t.Fatal(status, string(data))
+			}
+			captured := <-f.captured
+			thinking, _ := captured["thinking"].(map[string]any)
+			if thinking["type"] != test.mode || thinking["budget_tokens"] != test.budget || captured["output_config"] != nil {
+				t.Fatal("unexpected thinking controls", captured)
+			}
+		})
+	}
+}
+
 func TestMessagesToolsAndImagesReachProviders(t *testing.T) {
 	f := newMigrationFixture(t)
 	for _, name := range []string{"openai", "openrouter", "anthropic", "ollama"} {
@@ -168,10 +207,14 @@ func TestMessagesToolsAndImagesReachProviders(t *testing.T) {
 			messages := captured["messages"].([]any)
 			first := messages[0].(map[string]any)["content"].([]any)[0].(map[string]any)
 			tools := captured["tools"].([]any)
-			if captured["thinking"] != nil || captured["output_config"] != nil || tools[0].(map[string]any)["eager_input_streaming"] != nil {
+			if captured["thinking"] != nil || tools[0].(map[string]any)["eager_input_streaming"] != nil {
 				t.Fatal("client compatibility options leaked upstream", captured)
 			}
 			if name == "anthropic" {
+				output, _ := captured["output_config"].(map[string]any)
+				if output["effort"] != "low" {
+					t.Fatal("effort lost on a tool turn", captured)
+				}
 				if first["type"] != "image" || first["source"].(map[string]any)["data"] != "YWJj" || tools[0].(map[string]any)["input_schema"] == nil || captured["tool_choice"].(map[string]any)["disable_parallel_tool_use"] != true {
 					t.Fatal(captured)
 				}
@@ -181,6 +224,9 @@ func TestMessagesToolsAndImagesReachProviders(t *testing.T) {
 					t.Fatal(captured)
 				}
 			} else {
+				if captured["output_config"] != nil {
+					t.Fatal("Anthropic effort leaked to another provider", captured)
+				}
 				if first["type"] != "image_url" || first["image_url"].(map[string]any)["url"] != "data:image/png;base64,YWJj" || captured["parallel_tool_calls"] != false || captured["tool_choice"] != "required" {
 					t.Fatal(captured)
 				}
