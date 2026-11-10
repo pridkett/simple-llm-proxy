@@ -295,6 +295,7 @@ type APIKey struct {
 	AllowDecisions bool      `json:"allow_decisions"`
 	ID             int64     `json:"id"`
 	ApplicationID  int64     `json:"application_id"`
+	TeamID         int64     `json:"-"` // populated on key-cache lookup
 	AppName        string    `json:"-"` // populated on key-cache lookup
 	TeamName       string    `json:"-"` // populated on key-cache lookup
 	Name           string    `json:"name"`

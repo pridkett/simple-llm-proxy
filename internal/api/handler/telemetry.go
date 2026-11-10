@@ -37,17 +37,7 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 	if id := middleware.RequestIDFromContext(ctx); id != "" {
 		attrs = append(attrs, attribute.String(proxyotel.RequestID, id))
 	}
-	if key := middleware.APIKeyFromContext(ctx); key != nil && key.Key != nil {
-		if key.TeamName != "" {
-			attrs = append(attrs, attribute.String(proxyotel.Team, key.TeamName))
-		}
-		if key.AppName != "" {
-			attrs = append(attrs, attribute.String(proxyotel.Application, key.AppName))
-		}
-		if key.Key.Name != "" {
-			attrs = append(attrs, attribute.String(proxyotel.APIKeyName, key.Key.Name))
-		}
-	}
+	attrs = append(attrs, middleware.KeyTraceAttributes(ctx)...)
 	if user := middleware.UserFromContext(ctx); user != nil && user.Email != "" {
 		attrs = append(attrs, attribute.String(proxyotel.UserEmail, user.Email))
 	}

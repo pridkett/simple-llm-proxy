@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -28,7 +29,8 @@ func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) 
 			if len(r.Header.Values("traceparent")) == 1 && trustedTracePeer(r.RemoteAddr, trustedPeers) {
 				ctx = (propagation.TraceContext{}).Extract(ctx, propagation.HeaderCarrier(r.Header))
 			}
-			ctx, span := tracer.Start(ctx, r.Method+" "+r.URL.Path, trace.WithSpanKind(trace.SpanKindServer))
+			ctx, span := tracer.Start(ctx, r.Method+" "+r.URL.Path,
+				trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(KeyTraceAttributes(ctx)...))
 			if id := RequestIDFromContext(ctx); id != "" {
 				span.SetAttributes(attribute.String(proxyotel.RequestID, id))
 			}
@@ -72,6 +74,35 @@ func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) 
 			next.ServeHTTP(rw, r.WithContext(ctx))
 		})
 	}
+}
+
+// KeyTraceAttributes describes the authenticated application key using database
+// IDs and display names. Langfuse maps the explicit prefix to filterable metadata.
+func KeyTraceAttributes(ctx context.Context) []attribute.KeyValue {
+	ck := APIKeyFromContext(ctx)
+	if ck == nil || ck.Key == nil {
+		return nil
+	}
+	const metadata = "langfuse.trace.metadata."
+	attrs := make([]attribute.KeyValue, 0, 9)
+	for _, record := range []struct {
+		field, name, legacyAttr string
+		id                      int64
+	}{
+		{"team", ck.TeamName, proxyotel.Team, ck.Key.TeamID},
+		{"application", ck.AppName, proxyotel.Application, ck.Key.ApplicationID},
+		{"api_key", ck.Key.Name, proxyotel.APIKeyName, ck.Key.ID},
+	} {
+		if record.name != "" {
+			attrs = append(attrs,
+				attribute.String(record.legacyAttr, record.name),
+				attribute.String(metadata+record.field+"_name", record.name))
+		}
+		if record.id > 0 {
+			attrs = append(attrs, attribute.String(metadata+record.field+"_id", strconv.FormatInt(record.id, 10)))
+		}
+	}
+	return attrs
 }
 
 func trustedTracePeer(remoteAddr string, prefixes []netip.Prefix) bool {

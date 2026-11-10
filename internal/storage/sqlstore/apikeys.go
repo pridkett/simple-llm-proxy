@@ -51,14 +51,14 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 	err := s.db.QueryRowContext(ctx, s.bind(`
 		SELECT k.id, k.application_id, k.name, k.key_prefix, k.key_hash,
 		       k.max_rpm, k.max_rpd, k.max_budget, k.soft_budget, k.is_active,
-		       k.created_at, k.allow_decisions, a.name, t.name
+		       k.created_at, k.allow_decisions, a.name, t.id, t.name
 		FROM api_keys k
 		JOIN applications a ON a.id = k.application_id
 		JOIN teams t ON t.id = a.team_id
 		WHERE k.key_hash = ?
 	`), keyHash).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
 		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions,
-		&key.AppName, &key.TeamName)
+		&key.AppName, &key.TeamID, &key.TeamName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
