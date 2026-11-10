@@ -72,12 +72,13 @@ func (s *Storage) ListUsers(ctx context.Context) ([]*storage.User, error) {
 
 // CreateTeam creates a new team with the given name.
 func (s *Storage) CreateTeam(ctx context.Context, name string) (*storage.Team, error) {
-	var id int64
-	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO teams (name) VALUES (?) RETURNING id`), name).Scan(&id)
+	team := &storage.Team{Name: name}
+	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO teams (name) VALUES (?) RETURNING id, created_at`), name).
+		Scan(&team.ID, &team.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create team: %w", err)
 	}
-	return &storage.Team{ID: id, Name: name}, nil
+	return team, nil
 }
 
 // DeleteTeam deletes the team with the given id.
@@ -174,7 +175,7 @@ func (s *Storage) ListTeamMembers(ctx context.Context, teamID int64) ([]*storage
 // ListMyTeams returns all teams the given user belongs to, joined with team info.
 func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.TeamMember, error) {
 	rows, err := s.db.QueryContext(ctx, s.bind(`
-		SELECT tm.team_id, tm.user_id, tm.role, t.name
+		SELECT tm.team_id, tm.user_id, tm.role, t.name, t.created_at
 		FROM team_members tm
 		JOIN teams t ON t.id = tm.team_id
 		WHERE tm.user_id = ?
@@ -187,7 +188,7 @@ func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.Te
 	memberships := make([]*storage.TeamMember, 0)
 	for rows.Next() {
 		m := &storage.TeamMember{}
-		if err := rows.Scan(&m.TeamID, &m.UserID, &m.Role, &m.TeamName); err != nil {
+		if err := rows.Scan(&m.TeamID, &m.UserID, &m.Role, &m.TeamName, &m.TeamCreatedAt); err != nil {
 			return nil, fmt.Errorf("scan team membership: %w", err)
 		}
 		memberships = append(memberships, m)
@@ -200,12 +201,13 @@ func (s *Storage) ListMyTeams(ctx context.Context, userID string) ([]*storage.Te
 
 // CreateApplication creates a new application scoped to the given team.
 func (s *Storage) CreateApplication(ctx context.Context, teamID int64, name string) (*storage.Application, error) {
-	var id int64
-	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO applications (team_id, name) VALUES (?, ?) RETURNING id`), teamID, name).Scan(&id)
+	app := &storage.Application{TeamID: teamID, Name: name}
+	err := s.db.QueryRowContext(ctx, s.bind(`INSERT INTO applications (team_id, name) VALUES (?, ?) RETURNING id, created_at`), teamID, name).
+		Scan(&app.ID, &app.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create application: %w", err)
 	}
-	return &storage.Application{ID: id, TeamID: teamID, Name: name}, nil
+	return app, nil
 }
 
 // DeleteApplication deletes the application with the given id.

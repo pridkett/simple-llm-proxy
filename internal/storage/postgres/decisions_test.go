@@ -20,12 +20,12 @@ func TestDecisionPermissionUpgradeAndTransactions(t *testing.T) {
 		t.Fatal("legacy PostgreSQL key gained decision access")
 	}
 	permission := true
-	created, err := s.CreateAPIKey(ctx, app.ID, "Decision key", "prefix2", "hash2", nil, nil, nil, nil, []string{"jev"}, &permission)
+	created, err := s.CreateAPIKey(ctx, app.ID, "Decision key", "prefix2", "hash2", nil, nil, nil, nil, []string{"jev"}, storage.APIKeyOptions{AllowDecisions: &permission})
 	check(t, err)
 	if !created.AllowDecisions {
 		t.Fatal("create permission lost")
 	}
-	check(t, s.UpdateAPIKey(ctx, key.ID, "enabled", nil, nil, nil, nil, []string{"jev"}, &permission))
+	check(t, s.UpdateAPIKey(ctx, key.ID, "enabled", nil, nil, nil, nil, []string{"jev"}, storage.APIKeyOptions{AllowDecisions: &permission}))
 	check(t, s.UpdateAPIKey(ctx, key.ID, "renamed", nil, nil, nil, nil, []string{"luna"}))
 	got, err := s.GetAPIKeyByID(ctx, key.ID)
 	check(t, err)
@@ -33,7 +33,7 @@ func TestDecisionPermissionUpgradeAndTransactions(t *testing.T) {
 		t.Fatalf("omitted permission reset: %+v", got)
 	}
 	permission = false
-	if err := s.UpdateAPIKey(ctx, key.ID, "bad", nil, nil, nil, nil, []string{"dup", "dup"}, &permission); err == nil {
+	if err := s.UpdateAPIKey(ctx, key.ID, "bad", nil, nil, nil, nil, []string{"dup", "dup"}, storage.APIKeyOptions{AllowDecisions: &permission}); err == nil {
 		t.Fatal("expected allowlist conflict")
 	}
 	got, err = s.GetAPIKeyByID(ctx, key.ID)
@@ -41,7 +41,7 @@ func TestDecisionPermissionUpgradeAndTransactions(t *testing.T) {
 	if !got.AllowDecisions || got.Name != "renamed" {
 		t.Fatalf("partial PostgreSQL update: %+v", got)
 	}
-	check(t, s.UpdateAPIKey(ctx, key.ID, "disabled", nil, nil, nil, nil, nil, &permission))
+	check(t, s.UpdateAPIKey(ctx, key.ID, "disabled", nil, nil, nil, nil, nil, storage.APIKeyOptions{AllowDecisions: &permission}))
 	keys, err := s.ListAPIKeys(ctx, app.ID)
 	check(t, err)
 	for _, k := range keys {

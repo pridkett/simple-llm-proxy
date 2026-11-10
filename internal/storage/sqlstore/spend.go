@@ -12,14 +12,14 @@ import (
 // Flush rows (model='_flush') are excluded to prevent double-counting.
 // Keys with zero spend in the date range are included (LEFT JOIN + COALESCE returns 0).
 //
-// NOTE: Only active keys (k.is_active = TRUE) are included. This means deactivated keys
+// NOTE: Only active, unexpired keys are included. This means deactivated keys
 // do not appear in historical spend views even if they had usage in the queried date range.
 // This is an intentional simplification for the initial Cost view. If historical reporting
 // for deactivated keys is needed in a future iteration, remove or make this filter configurable.
 // GetModelSpend returns spend grouped by model for the given date range and filters.
 // Uses the same JOIN and filter pattern as GetSpendSummary for consistency.
 func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters storage.SpendFilters) ([]storage.ModelSpendRow, error) {
-	const q = `
+	q := `
         SELECT
             ul.model,
             COALESCE(SUM(ul.total_cost), 0)         AS total_spend,
@@ -35,7 +35,7 @@ func (s *Storage) GetModelSpend(ctx context.Context, from, to time.Time, filters
         WHERE ul.model != '_flush'
           AND ul.request_time >= ?
           AND ul.request_time < ?
-          AND k.is_active = TRUE
+          AND ` + s.activeAPIKeySQL() + `
           AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)
@@ -85,7 +85,7 @@ func (s *Storage) GetDailySpend(ctx context.Context, from, to time.Time, filters
         WHERE ul.model != '_flush'
           AND ul.request_time >= ?
           AND ul.request_time < ?
-          AND k.is_active = TRUE
+          AND `+s.activeAPIKeySQL()+`
           AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)
@@ -124,7 +124,7 @@ func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filte
 	// GROUP BY lists all non-aggregated selected columns explicitly to ensure correctness
 	// across all SQL engines (SQLite's relaxed mode would permit omitting them, but doing
 	// so is non-standard and brittle if the schema or query changes).
-	const baseQuery = `
+	baseQuery := `
         SELECT
             k.id          AS key_id,
             k.name        AS key_name,
@@ -143,7 +143,7 @@ func (s *Storage) GetSpendSummary(ctx context.Context, from, to time.Time, filte
             AND ul.model != '_flush'
             AND ul.request_time >= ?
             AND ul.request_time < ?
-        WHERE k.is_active = TRUE
+        WHERE ` + s.activeAPIKeySQL() + `
           AND (CAST(? AS BIGINT) IS NULL OR t.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR a.id = ?)
           AND (CAST(? AS BIGINT) IS NULL OR k.id = ?)

@@ -41,6 +41,10 @@ enableAutoUnmount(afterEach)
 const clone = (data) => JSON.parse(JSON.stringify(data))
 let teams, apps, keys
 const secret = 'sk-app-' + 'a'.repeat(48)
+const createdAt = '2026-10-20T12:00:00Z'
+const createdDate = new Date(createdAt).toLocaleDateString()
+const localExpiry = '2099-10-20T12:34:56'
+const expiryISO = new Date(localExpiry).toISOString()
 
 async function render(path = '/teams') {
   const router = createRouter({
@@ -67,7 +71,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   user.value = { id: 'u1', is_admin: true }
   teams = [
-    { id: 1, name: 'Platform' },
+    { id: 1, name: 'Platform', created_at: createdAt },
     { id: 2, name: 'Research' }
   ]
   apps = [
@@ -80,6 +84,7 @@ beforeEach(() => {
         id: 1,
         application_id: 1,
         name: 'Production',
+        created_at: createdAt,
         key_prefix: 'abcd1234',
         is_active: true,
         max_budget: 20,
@@ -90,19 +95,19 @@ beforeEach(() => {
   }
   api.teams.mockImplementation(async () => clone(teams))
   api.myTeams.mockResolvedValue([
-    { team_id: 1, team_name: 'Platform', role: 'viewer' }
+    { team_id: 1, team_name: 'Platform', team_created_at: createdAt, role: 'viewer' }
   ])
   api.applications.mockImplementation(async (teamId) =>
     clone(apps.filter((a) => a.team_id === teamId))
   )
   api.apiKeys.mockImplementation(async (appId) => clone(keys[appId] ?? []))
   api.createTeam.mockImplementation(async (body) => {
-    const t = { id: 3, ...body }
+    const t = { id: 3, ...body, created_at: createdAt }
     teams.push(t)
     return clone(t)
   })
   api.createApplication.mockImplementation(async (body) => {
-    const a = { id: 3, ...body, created_at: '2026-10-20' }
+    const a = { id: 3, ...body, created_at: createdAt }
     apps.push(a)
     return clone(a)
   })
@@ -219,6 +224,7 @@ describe('Teams workspace', () => {
     expect(api.createAPIKey).not.toHaveBeenCalled()
     expect(router.currentRoute.value.path).toBe('/teams/3')
     expect(wrapper.get('h1').text()).toBe('Engineering')
+    expect(wrapper.text()).toContain(`Created ${createdDate}`)
     expect(wrapper.text()).toContain('No applications yet.')
   })
 
@@ -245,6 +251,43 @@ describe('Teams workspace', () => {
     expect(wrapper.find('dialog').exists()).toBe(false)
     await router.push('/teams')
     expect(router.currentRoute.value.path).toBe('/teams')
+  })
+
+  it('sets the default key expiration and shows the new application date without reloading', async () => {
+    const { wrapper, router } = await render('/teams/1/applications/new')
+    await wrapper.get('#application-name').setValue('Scheduled service')
+    await wrapper.get('#default-key-expiration').setValue(localExpiry)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.createAPIKey).toHaveBeenCalledWith(3, { name: 'Default', expires_at: expiryISO })
+    await button(wrapper, 'Done').trigger('click')
+    await router.push('/teams/1')
+    await flushPromises()
+    const row = wrapper.findAll('tbody tr').find((row) => row.text().includes('Scheduled service'))
+    expect(row.text()).toContain(createdDate)
+    expect(api.applications).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates an expiring key and can clear its deadline', async () => {
+    const { wrapper, router } = await render('/teams/1/applications/1/keys/new')
+    await wrapper.get('#key-name').setValue('Temporary worker')
+    await wrapper.get('#key-expiration').setValue(localExpiry)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.createAPIKey).toHaveBeenCalledWith(1, {
+      name: 'Temporary worker', allow_decisions: false, expires_at: expiryISO
+    })
+    await button(wrapper, 'Done').trigger('click')
+    const row = wrapper.findAll('tbody tr').find((row) => row.text().includes('Temporary worker'))
+    expect(row.text()).toContain(new Date(localExpiry).toLocaleDateString())
+    await router.push('/teams/1/applications/1/keys/10')
+    await flushPromises()
+    const input = wrapper.get('#key-expiration')
+    expect(input.element.value.split('.')[0]).toBe(localExpiry)
+    await input.setValue('')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.updateAPIKey).toHaveBeenCalledWith(10, expect.objectContaining({ expires_at: null }))
   })
 
   it('retries only the key after a partial creation failure', async () => {
@@ -354,12 +397,14 @@ describe('Teams workspace', () => {
     user.value = { id: 'u2', is_admin: false }
     const { wrapper, router } = await render('/teams')
     expect(wrapper.text()).toContain('Platform')
+    expect(wrapper.get('tbody tr').text()).toContain(createdDate)
     expect(wrapper.text()).not.toContain('Create team')
     expect(api.teams).not.toHaveBeenCalled()
     expect(api.teamMembers).not.toHaveBeenCalled()
     await router.push('/teams/1/applications/1')
     await flushPromises()
     expect(wrapper.text()).toContain('Production')
+    expect(wrapper.get('tbody tr').text()).toContain(createdDate)
     expect(wrapper.text()).not.toContain('Create key')
     expect(wrapper.text()).not.toContain('Revoke')
     await router.push('/teams/new')

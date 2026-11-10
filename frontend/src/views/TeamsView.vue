@@ -45,6 +45,7 @@
               <th class="px-4 py-3 font-medium">Name</th>
               <th class="px-4 py-3 font-medium">Applications</th>
               <th class="px-4 py-3 font-medium">Active keys</th>
+              <th class="px-4 py-3 font-medium">Created</th>
               <th v-if="isAdmin" class="px-4 py-3 font-medium">Members</th>
               <th v-if="isAdmin" class="px-4 py-3 font-medium">Usage &amp; cost</th>
               <th v-if="isAdmin" class="px-4 py-3">
@@ -65,6 +66,9 @@
                 {{ teamStats[team.id]?.applications ?? '—' }}
               </td>
               <td class="px-4 py-4">{{ teamStats[team.id]?.keys ?? '—' }}</td>
+              <td class="px-4 py-4 whitespace-nowrap" :title="formatDateTime(team.created_at)">
+                {{ formatDate(team.created_at) }}
+              </td>
               <td v-if="isAdmin" class="px-4 py-4">
                 {{ teamStats[team.id]?.members ?? '—' }}
               </td>
@@ -107,7 +111,7 @@
               </td>
             </tr>
             <tr v-if="!teams.length">
-              <td :colspan="isAdmin ? 6 : 3" class="px-4 py-8 text-gray-500 dark:text-gray-400">
+              <td :colspan="isAdmin ? 7 : 4" class="px-4 py-8 text-gray-500 dark:text-gray-400">
                 No teams yet.
               </td>
             </tr>
@@ -173,6 +177,11 @@
             autocomplete="off"
             class="input"
           />
+          <KeyExpirationInput
+            id="default-key-expiration"
+            v-model="defaultKeyExpiration"
+            label="Default key expiration"
+          />
           <p v-if="actionError" role="alert" class="text-sm text-red-600 dark:text-red-400">
             {{ actionError }}
           </p>
@@ -208,9 +217,14 @@
       </template>
       <template v-else>
         <div class="flex flex-wrap items-center justify-between gap-4">
-          <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            {{ currentTeam.name }}
-          </h1>
+          <div>
+            <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              {{ currentTeam.name }}
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400" :title="formatDateTime(currentTeam.created_at)">
+              Created {{ formatDate(currentTeam.created_at) }}
+            </p>
+          </div>
           <label v-if="teams.length > 1" class="text-sm text-gray-600 dark:text-gray-300"
             >Switch team
             <select
@@ -356,8 +370,8 @@
                     >
                   </td>
                   <td class="px-4 py-4">{{ appKeyCounts[app.id] ?? '—' }}</td>
-                  <td class="px-4 py-4">
-                    {{ new Date(app.created_at).toLocaleDateString() }}
+                  <td class="px-4 py-4 whitespace-nowrap" :title="formatDateTime(app.created_at)">
+                    {{ formatDate(app.created_at) }}
                   </td>
                   <td v-if="isAdmin" class="px-4 py-4">
                     <RouterLink
@@ -431,6 +445,8 @@ import { useSession } from '../composables/useSession.js'
 import TeamMembers from '../components/TeamMembers.vue'
 import ApplicationKeys from '../components/ApplicationKeys.vue'
 import KeyCreatedDialog from '../components/KeyCreatedDialog.vue'
+import KeyExpirationInput from '../components/KeyExpirationInput.vue'
+import { formatDate, formatDateTime, keyExpiration } from '../utils/dates.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -449,6 +465,7 @@ const busy = ref(false)
 const keyBusy = ref(false)
 const newTeamName = ref('')
 const newAppName = ref('')
+const defaultKeyExpiration = ref('')
 const partialApplication = ref(null)
 const newKey = ref(null)
 const selectedKey = ref(null)
@@ -508,7 +525,7 @@ async function loadTeams() {
         (isAdmin.value ? await api.teams() : await api.myTeams()) ?? []
       teams.value = isAdmin.value
         ? result
-        : result.map((m) => ({ id: m.team_id, name: m.team_name }))
+        : result.map((m) => ({ id: m.team_id, name: m.team_name, created_at: m.team_created_at }))
       loadedTeams = true
     } catch (e) {
       teamsError.value = e.message
@@ -591,6 +608,7 @@ async function loadContext() {
   selectedKey.value = null
   newTeamName.value = ''
   newAppName.value = ''
+  defaultKeyExpiration.value = ''
   partialApplication.value = null
   if (!loadedTeams) await loadTeams()
   if (version !== contextVersion) return
@@ -629,6 +647,7 @@ async function createApplication() {
   busy.value = true
   actionError.value = ''
   try {
+    const expiresAt = keyExpiration(defaultKeyExpiration.value)
     if (!partialApplication.value) {
       const result = await api.createApplication({
         team_id: currentTeam.value.id,
@@ -638,7 +657,9 @@ async function createApplication() {
       applications.value.push(result)
     }
     const app = partialApplication.value
-    const result = await api.createAPIKey(app.id, { name: 'Default' })
+    const key = { name: 'Default' }
+    if (expiresAt) key.expires_at = expiresAt
+    const result = await api.createAPIKey(app.id, key)
     appKeyCounts.value[app.id] = 1
     busy.value = false
     await router.push(applicationPath(app.id))

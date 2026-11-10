@@ -255,7 +255,7 @@ func (f *decisionFixture) key(t *testing.T, name string, enabled bool, allowed [
 	t.Helper()
 	token := "sk-app-test-" + name
 	hash := sha256.Sum256([]byte(token))
-	key, err := f.store.CreateAPIKey(context.Background(), f.appID, name, "prefix", hex.EncodeToString(hash[:]), maxRPM, nil, maxBudget, nil, allowed, &enabled)
+	key, err := f.store.CreateAPIKey(context.Background(), f.appID, name, "prefix", hex.EncodeToString(hash[:]), maxRPM, nil, maxBudget, nil, allowed, storage.APIKeyOptions{AllowDecisions: &enabled})
 	if err != nil {
 		t.Fatal(err)
 	}

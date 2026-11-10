@@ -164,7 +164,7 @@ func (g *gateway) authorize(w http.ResponseWriter, r *http.Request, server regis
 			fail(w, 500, "storage_error", "Could not check MCP access.")
 			return caller, false
 		}
-		if key == nil || !key.IsActive {
+		if key == nil || !key.IsUsableAt(time.Now()) {
 			unauthorized(w)
 			return caller, false
 		}

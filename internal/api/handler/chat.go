@@ -147,7 +147,7 @@ func chatCompletions(r *router.Router, store storage.Storage, sa *keystore.Spend
 				writeError(w, model.ErrBadRequest("API key not found"))
 				return
 			}
-			if !chargeKey.IsActive {
+			if !chargeKey.IsUsableAt(time.Now()) {
 				writeError(w, model.ErrBadRequest("API key is revoked"))
 				return
 			}

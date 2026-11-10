@@ -5,12 +5,13 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
 // CreateAPIKey creates a new key record and its allowlist entries in a transaction.
-func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) (*storage.APIKey, error) {
+func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix, keyHash string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, options ...storage.APIKeyOptions) (*storage.APIKey, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create api key begin tx: %w", err)
@@ -18,17 +19,15 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 	defer tx.Rollback() //nolint:errcheck
 
 	key := &storage.APIKey{}
-	permission := false
-	if len(allowDecisions) > 0 && allowDecisions[0] != nil {
-		permission = *allowDecisions[0]
+	var opts storage.APIKeyOptions
+	if len(options) > 0 {
+		opts = options[0]
 	}
-	err = tx.QueryRowContext(ctx, s.bind(`
-		INSERT INTO api_keys (application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, allow_decisions)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
-	`), appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget, permission).
-		Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions)
+	err = scanAPIKey(tx.QueryRowContext(ctx, s.bind(`
+		INSERT INTO api_keys (application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, allow_decisions, expires_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?)
+		RETURNING id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions, expires_at_ms
+	`), appID, name, keyPrefix, keyHash, maxRPM, maxRPD, maxBudget, softBudget, opts.AllowDecisions, expiryMillis(opts.ExpiresAt)), key)
 	if err != nil {
 		return nil, fmt.Errorf("create api key insert: %w", err)
 	}
@@ -48,17 +47,15 @@ func (s *Storage) CreateAPIKey(ctx context.Context, appID int64, name, keyPrefix
 // GetAPIKeyByHash looks up a key by SHA-256 hash. Returns (nil, nil) if not found.
 func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage.APIKey, error) {
 	key := &storage.APIKey{}
-	err := s.db.QueryRowContext(ctx, s.bind(`
+	err := scanAPIKey(s.db.QueryRowContext(ctx, s.bind(`
 		SELECT k.id, k.application_id, k.name, k.key_prefix, k.key_hash,
 		       k.max_rpm, k.max_rpd, k.max_budget, k.soft_budget, k.is_active,
-		       k.created_at, k.allow_decisions, a.name, t.id, t.name
+		       k.created_at, k.allow_decisions, k.expires_at_ms, a.name, t.id, t.name
 		FROM api_keys k
 		JOIN applications a ON a.id = k.application_id
 		JOIN teams t ON t.id = a.team_id
 		WHERE k.key_hash = ?
-	`), keyHash).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions,
-		&key.AppName, &key.TeamID, &key.TeamName)
+	`), keyHash), key, &key.AppName, &key.TeamID, &key.TeamName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -71,7 +68,7 @@ func (s *Storage) GetAPIKeyByHash(ctx context.Context, keyHash string) (*storage
 // ListAPIKeys returns all keys for an application, newest first.
 func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, s.bind(`
-		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
+		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions, expires_at_ms
 		FROM api_keys WHERE application_id = ? ORDER BY created_at DESC
 	`), appID)
 	if err != nil {
@@ -82,8 +79,7 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 	keys := make([]*storage.APIKey, 0)
 	for rows.Next() {
 		key := &storage.APIKey{}
-		if err := rows.Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-			&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions); err != nil {
+		if err := scanAPIKey(rows, key); err != nil {
 			return nil, fmt.Errorf("list api keys scan: %w", err)
 		}
 		keys = append(keys, key)
@@ -94,11 +90,10 @@ func (s *Storage) ListAPIKeys(ctx context.Context, appID int64) ([]*storage.APIK
 // GetAPIKeyByID looks up a key by its numeric ID. Returns (nil, nil) if not found.
 func (s *Storage) GetAPIKeyByID(ctx context.Context, id int64) (*storage.APIKey, error) {
 	key := &storage.APIKey{}
-	err := s.db.QueryRowContext(ctx, s.bind(`
-		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions
+	err := scanAPIKey(s.db.QueryRowContext(ctx, s.bind(`
+		SELECT id, application_id, name, key_prefix, key_hash, max_rpm, max_rpd, max_budget, soft_budget, is_active, created_at, allow_decisions, expires_at_ms
 		FROM api_keys WHERE id = ?
-	`), id).Scan(&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
-		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt, &key.AllowDecisions)
+	`), id), key)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -117,7 +112,7 @@ func (s *Storage) ListUserAccessibleKeys(ctx context.Context, userID string) ([]
 		JOIN applications a ON a.id = k.application_id
 		JOIN teams t ON t.id = a.team_id
 		JOIN team_members tm ON tm.team_id = t.id
-		WHERE tm.user_id = ? AND k.is_active = TRUE
+		WHERE tm.user_id = ? AND `+s.activeAPIKeySQL()+`
 		ORDER BY t.name, a.name, k.name
 	`), userID)
 	if err != nil {
@@ -190,10 +185,10 @@ func (s *Storage) UpdateKeyAllowedModels(ctx context.Context, keyID int64, model
 
 // UpdateAPIKey updates the mutable key fields and replaces the allowed model list
 // in a single transaction. Key hash, prefix, and is_active are unchanged.
-func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, allowDecisions ...*bool) error {
-	var permission *bool
-	if len(allowDecisions) > 0 {
-		permission = allowDecisions[0]
+func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, maxRPM, maxRPD *int, maxBudget, softBudget *float64, allowedModels []string, options ...storage.APIKeyOptions) error {
+	var opts storage.APIKeyOptions
+	if len(options) > 0 {
+		opts = options[0]
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -201,11 +196,20 @@ func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, ma
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	if _, err := tx.ExecContext(ctx, s.bind(`
-		UPDATE api_keys SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?, allow_decisions=COALESCE(?, allow_decisions)
-		WHERE id=?
-	`), name, maxRPM, maxRPD, maxBudget, softBudget, permission, keyID); err != nil {
+	result, err := tx.ExecContext(ctx, s.bind(`
+		UPDATE api_keys AS k
+		SET name=?, max_rpm=?, max_rpd=?, max_budget=?, soft_budget=?,
+		    allow_decisions=COALESCE(?, allow_decisions),
+		    expires_at_ms=CASE WHEN ? THEN ? ELSE expires_at_ms END
+		WHERE k.id=? AND `+s.activeAPIKeySQL()), name, maxRPM, maxRPD, maxBudget, softBudget,
+		opts.AllowDecisions, opts.SetExpiration, expiryMillis(opts.ExpiresAt), keyID)
+	if err != nil {
 		return fmt.Errorf("update api key: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("check updated api key: %w", err)
+	} else if n == 0 {
+		return storage.ErrInactiveAPIKey
 	}
 	if _, err := tx.ExecContext(ctx, s.bind(`DELETE FROM key_allowed_models WHERE key_id=?`), keyID); err != nil {
 		return fmt.Errorf("update api key delete models: %w", err)
@@ -216,6 +220,40 @@ func (s *Storage) UpdateAPIKey(ctx context.Context, keyID int64, name string, ma
 		}
 	}
 	return tx.Commit()
+}
+
+// Use the same deadline predicate for edits and queries that only include active keys.
+// The database checks the deadline during the update, alongside the revocation flag.
+func (s *Storage) activeAPIKeySQL() string {
+	nowMillis := "CAST(ROUND(unixepoch('subsec') * 1000) AS BIGINT)"
+	if s.dialect == PostgreSQL {
+		nowMillis = "FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)"
+	}
+	return "k.is_active = TRUE AND (k.expires_at_ms IS NULL OR k.expires_at_ms > " + nowMillis + ")"
+}
+
+func expiryMillis(expiry *time.Time) *int64 {
+	if expiry == nil {
+		return nil
+	}
+	ms := expiry.UnixMilli()
+	return &ms
+}
+
+func scanAPIKey(row interface{ Scan(...any) error }, key *storage.APIKey, extra ...any) error {
+	var expiry sql.NullInt64
+	fields := []any{&key.ID, &key.ApplicationID, &key.Name, &key.KeyPrefix, &key.KeyHash,
+		&key.MaxRPM, &key.MaxRPD, &key.MaxBudget, &key.SoftBudget, &key.IsActive, &key.CreatedAt,
+		&key.AllowDecisions, &expiry}
+	if err := row.Scan(append(fields, extra...)...); err != nil {
+		return err
+	}
+	if expiry.Valid {
+		t := time.UnixMilli(expiry.Int64).UTC()
+		key.ExpiresAt = &t
+		key.IsActive = key.IsUsableAt(time.Now())
+	}
+	return nil
 }
 
 // RecordKeySpend is a no-op stub — spend recording is handled by the extended

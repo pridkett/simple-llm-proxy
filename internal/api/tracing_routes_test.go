@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	proxyotel "github.com/pwagstro/simple_llm_proxy/internal/otel"
+	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -104,7 +105,7 @@ func TestModelTracesDistinguishSameNamedApplicationsAndKeys(t *testing.T) {
 		hash := hex.EncodeToString(digest[:])
 		const prefix = "key-prefix-sentinel"
 		enabled := true
-		key, err := f.store.CreateAPIKey(t.Context(), tc.appID, "production", prefix, hash, nil, nil, nil, nil, nil, &enabled)
+		key, err := f.store.CreateAPIKey(t.Context(), tc.appID, "production", prefix, hash, nil, nil, nil, nil, nil, storage.APIKeyOptions{AllowDecisions: &enabled})
 		if err != nil {
 			t.Fatal(err)
 		}

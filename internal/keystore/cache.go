@@ -28,11 +28,12 @@ type cacheEntry struct {
 }
 
 // Cache is an in-memory TTL cache for API key lookups.
-// Thread-safe via sync.Map. Designed so the storage backend can be swapped
+// Designed so the storage backend can be swapped
 // (e.g., Redis) without changing the calling interface.
 type Cache struct {
 	ttl   time.Duration
-	store sync.Map // map[string]*cacheEntry  (key = SHA-256 hex of token)
+	mu    sync.RWMutex // serializes invalidation with in-flight cache fills
+	store sync.Map     // map[string]*cacheEntry  (key = SHA-256 hex of token)
 }
 
 // New creates a new Cache. If ttl is 0, uses the 60-second default.
@@ -47,6 +48,9 @@ func New(ttl time.Duration) *Cache {
 // On cache miss or expiry, fetches from storage and caches the result.
 // Returns (nil, nil) if the key does not exist in storage.
 func (c *Cache) Get(ctx context.Context, token string, store storage.Storage) (*CachedKey, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	hash := hashKey(token)
 
 	if v, ok := c.store.Load(hash); ok {
@@ -84,6 +88,9 @@ func (c *Cache) Get(ctx context.Context, token string, store storage.Storage) (*
 // Invalidate removes all cache entries for the given key ID.
 // Called immediately when a key is revoked — does not wait for TTL expiry.
 func (c *Cache) Invalidate(keyID int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.store.Range(func(k, v any) bool {
 		if v.(*cacheEntry).keyID == keyID {
 			c.store.Delete(k)

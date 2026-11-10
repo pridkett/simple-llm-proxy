@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
@@ -65,7 +66,7 @@ func keyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 				writeError(w, model.ErrUnauthorized("invalid API key"))
 				return
 			}
-			if !ck.Key.IsActive {
+			if !ck.Key.IsUsableAt(time.Now()) {
 				writeError(w, model.ErrUnauthorized("API key has been revoked"))
 				return
 			}
