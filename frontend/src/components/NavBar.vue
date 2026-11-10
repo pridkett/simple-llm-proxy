@@ -64,6 +64,7 @@
                 Proxy settings
               </router-link>
               <button
+                v-if="!currentUser?.local_admin"
                 type="button"
                 class="block w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900 focus-visible:outline-none focus-visible:bg-indigo-50 dark:focus-visible:bg-indigo-950 focus-visible:text-indigo-700 dark:focus-visible:text-indigo-300"
                 @click="handleLogout"

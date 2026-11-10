@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -56,6 +57,9 @@ func (r *Reloader) Reload() (*Config, error) {
 	cfg, err := Load(r.path)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.LocalAdmin != r.Config().LocalAdmin {
+		return nil, fmt.Errorf("changes to local_admin require a server restart")
 	}
 
 	// Expand wildcards if any discovery providers are registered.

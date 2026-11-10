@@ -60,7 +60,6 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Get("/auth/login", handler.AuthLogin(oidcProvider))
 		mux.Get("/auth/callback", handler.AuthCallback(oidcProvider, store, sm))
 		mux.Post("/auth/logout", handler.AuthLogout(sm))
-		mux.Get("/admin/me", handler.AdminMe(store, sm))
 	})
 
 	// Group 1: /v1/* — machine clients, KeyAuth replaces old Auth() middleware.
@@ -103,11 +102,12 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Get("/v1/accounting/{id}", handler.AccountingDetail(store, false))
 	})
 
-	// Group 2: /admin/* — browser clients, session auth
+	// Group 2: /admin/* — browser clients
+	localAdmin := reloader.Config().LocalAdmin
 	mux.Group(func(mux chi.Router) {
-		mux.Use(sm.LoadAndSave)
-		mux.Use(middleware.RequireSession(store, sm))
+		mux.Use(middleware.BrowserAuth(store, sm, localAdmin)...)
 
+		mux.Get("/admin/me", handler.AdminMe(localAdmin.Enabled))
 		mux.Get("/admin/accounting/{id}", handler.AccountingDetail(store, true))
 		mux.Get("/admin/status", handler.AdminStatus(r, startTime))
 		mux.Get("/admin/config", handler.AdminConfig(reloader.Config))

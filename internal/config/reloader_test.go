@@ -84,6 +84,21 @@ func TestNewReloader_InvalidPath(t *testing.T) {
 	}
 }
 
+func TestReloadLocalAdminRequiresRestart(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewReloader(writeConfigFile(t, dir, baseConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfigFile(t, dir, updatedConfig+"\nlocal_admin: {enabled: true}\n")
+	if _, err := r.Reload(); err == nil {
+		t.Fatal("enabled local admin without a restart")
+	}
+	if r.Config().LocalAdmin.Enabled || len(r.Config().ModelList) != 1 {
+		t.Fatal("reload published a configuration that requires a restart")
+	}
+}
+
 func TestReloader_Config_ReturnsCurrent(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfigFile(t, dir, baseConfig)

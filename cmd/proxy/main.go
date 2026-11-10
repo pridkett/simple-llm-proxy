@@ -143,6 +143,8 @@ func main() {
 	}
 	if oidcProvider != nil {
 		log.Info().Str("issuer", cfg.OIDCSettings.IssuerURL).Msg("OIDC provider initialized")
+	} else if cfg.LocalAdmin.Enabled {
+		log.Warn().Msg("local admin enabled: loopback UI requests have administrator access without signing in")
 	} else {
 		log.Info().Msg("OIDC not configured — /auth/* endpoints will return 503")
 	}
@@ -270,7 +272,11 @@ func main() {
 	httpRouter := api.NewRouter(r, store, reloader, cm, startTime, spec, sm, oidcProvider, cache, rl, sa, dispatcher, otelTracer)
 
 	// Create server
-	addr := fmt.Sprintf(":%d", cfg.GeneralSettings.Port)
+	host := ""
+	if cfg.LocalAdmin.Enabled {
+		host = "127.0.0.1"
+	}
+	addr := fmt.Sprintf("%s:%d", host, cfg.GeneralSettings.Port)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      httpRouter,

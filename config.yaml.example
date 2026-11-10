@@ -125,6 +125,12 @@ general_settings:
   # Default: 2m. Increase for slow model loads or long streams. Requires a restart.
   # write_timeout: 5m
 
+# Optional automatic UI admin access for local development. Binds to 127.0.0.1.
+# Leave oidc_settings.issuer_url unset and restart the proxy after changes.
+# local_admin:
+#   enabled: true
+#   name: Local Admin
+
 # Optional native HTTPS Streamable HTTP MCP gateway. Restart after changes.
 # mcp:
 #   # Required for user grants and OAuth. Generate with openssl rand -base64 32.

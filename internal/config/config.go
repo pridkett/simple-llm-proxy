@@ -7,15 +7,16 @@ import (
 
 // Config represents the complete proxy configuration.
 type Config struct {
-	MCP             MCPSettings     `yaml:"mcp" json:"-"`
-	ModelList       []ModelConfig   `yaml:"model_list"`
-	RouterSettings  RouterSettings  `yaml:"router_settings"`
-	GeneralSettings GeneralSettings `yaml:"general_settings"`
-	LogSettings     LogSettings     `yaml:"log_settings"`
-	OIDCSettings    OIDCSettings    `yaml:"oidc_settings"`
-	OTelSettings    OTelSettings    `yaml:"otel_settings"`
-	ProviderPools   []ProviderPool  `yaml:"provider_pools"`
-	Webhooks        []WebhookConfig `yaml:"webhooks"`
+	MCP             MCPSettings        `yaml:"mcp" json:"-"`
+	ModelList       []ModelConfig      `yaml:"model_list"`
+	RouterSettings  RouterSettings     `yaml:"router_settings"`
+	GeneralSettings GeneralSettings    `yaml:"general_settings"`
+	LogSettings     LogSettings        `yaml:"log_settings"`
+	OIDCSettings    OIDCSettings       `yaml:"oidc_settings"`
+	LocalAdmin      LocalAdminSettings `yaml:"local_admin"`
+	OTelSettings    OTelSettings       `yaml:"otel_settings"`
+	ProviderPools   []ProviderPool     `yaml:"provider_pools"`
+	Webhooks        []WebhookConfig    `yaml:"webhooks"`
 }
 
 // OTelSettings configures optional OTLP trace export.
@@ -49,6 +50,12 @@ type OIDCSettings struct {
 	RedirectURL  string `yaml:"redirect_url"`  // MUST be real server path, NOT hash route
 	AdminGroup   string `yaml:"admin_group"`   // PocketID group name for proxy admins (default: "admin")
 	DevMode      bool   `yaml:"dev_mode"`      // When true, Cookie.Secure=false for local HTTP dev (default: false)
+}
+
+// LocalAdminSettings enables automatic administrator access on the loopback listener.
+type LocalAdminSettings struct {
+	Enabled bool   `yaml:"enabled"`
+	Name    string `yaml:"name"`
 }
 
 // LogSettings controls logging behavior.
@@ -178,6 +185,9 @@ func Defaults() *Config {
 		},
 		OIDCSettings: OIDCSettings{
 			AdminGroup: "admin",
+		},
+		LocalAdmin: LocalAdminSettings{
+			Name: "Local Admin",
 		},
 		OTelSettings: OTelSettings{
 			ServiceName:    "simple-llm-proxy",
