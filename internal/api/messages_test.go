@@ -131,7 +131,7 @@ func TestMessagesHTTPErrorContract(t *testing.T) {
 			t.Fatal("Retry-After lost")
 		}
 	}
-	for _, body := range []string{`{`, `{"model":"openai","max_tokens":1,"messages":[{"role":"user","content":"hi"}]} {}`, `{"model":"openai","messages":[{"role":"user","content":"hi"}]}`, `{"model":"openai","max_tokens":10,"thinking":{"type":"enabled"},"messages":[{"role":"user","content":"hi"}]}`} {
+	for _, body := range []string{`{`, `{"model":"openai","max_tokens":1,"messages":[{"role":"user","content":"hi"}]} {}`, `{"model":"openai","messages":[{"role":"user","content":"hi"}]}`, `{"model":"openai","max_tokens":10,"unknown_option":true,"messages":[{"role":"user","content":"hi"}]}`} {
 		status, _, data := messagesRequest(t, f, body, "master-only")
 		if status != 400 || !strings.Contains(string(data), `"type":"invalid_request_error"`) {
 			t.Fatal(status, string(data))
@@ -149,13 +149,15 @@ func TestMessagesToolsAndImagesReachProviders(t *testing.T) {
 	for _, name := range []string{"openai", "openrouter", "anthropic", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			body := fmt.Sprintf(`{
- "model":%q,"max_tokens":20,
+ "model":%q,"max_tokens":2048,
+ "thinking":{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}},
+ "output_config":{"effort":"low"},
  "messages":[
  {"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"YWJj"}},{"type":"text","text":"Describe this"}]},
- {"role":"assistant","content":[{"type":"tool_use","id":"call-a","name":"lookup","input":{"x":1}}]},
+ {"role":"assistant","content":[{"type":"thinking","thinking":"private","signature":"signed"},{"type":"redacted_thinking","data":"opaque"},{"type":"tool_use","id":"call-a","name":"lookup","input":{"x":1}}]},
  {"role":"user","content":[{"type":"tool_result","tool_use_id":"call-a","content":"result"},{"type":"text","text":"continue"}]}
  ],
- "tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"x":{"type":"integer"}}}}],
+ "tools":[{"name":"lookup","eager_input_streaming":true,"input_schema":{"type":"object","properties":{"x":{"type":"integer"}}}}],
  "tool_choice":{"type":"any","disable_parallel_tool_use":true}
 }`, name)
 			status, _, data := messagesRequest(t, f, body, "master-only")
@@ -166,6 +168,9 @@ func TestMessagesToolsAndImagesReachProviders(t *testing.T) {
 			messages := captured["messages"].([]any)
 			first := messages[0].(map[string]any)["content"].([]any)[0].(map[string]any)
 			tools := captured["tools"].([]any)
+			if captured["thinking"] != nil || captured["output_config"] != nil || tools[0].(map[string]any)["eager_input_streaming"] != nil {
+				t.Fatal("client compatibility options leaked upstream", captured)
+			}
 			if name == "anthropic" {
 				if first["type"] != "image" || first["source"].(map[string]any)["data"] != "YWJj" || tools[0].(map[string]any)["input_schema"] == nil || captured["tool_choice"].(map[string]any)["disable_parallel_tool_use"] != true {
 					t.Fatal(captured)

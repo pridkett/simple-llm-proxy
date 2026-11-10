@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -51,6 +52,63 @@ func TestRequestTranslation(t *testing.T) {
 	}
 }
 
+func TestRequestAcceptsThinkingOptions(t *testing.T) {
+	for _, test := range []struct {
+		name, thinking string
+	}{
+		{"disabled", `{"type":"disabled"}`},
+		{"enabled", `{"type":"enabled","budget_tokens":1024,"display":"summarized"}`},
+		{"adaptive", `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block","future_option":true}}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{
+ "model":"alias","max_tokens":2048,
+ "thinking":%s,
+ "output_config":{"effort":"low","future_option":{"mode":"auto"}},
+ "tools":[{"name":"lookup","eager_input_streaming":true,"input_schema":{"type":"object"}}],
+ "messages":[{"role":"user","content":"hello"}]
+}`, test.thinking)
+			var req Request
+			if err := json.Unmarshal([]byte(body), &req); err != nil {
+				t.Fatal(err)
+			}
+			chat, err := req.ChatRequest()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(chat.Tools) != 1 || chat.Tools[0].Function.Name != "lookup" || len(chat.Messages) != 1 || chat.Messages[0].Content != "hello" {
+				t.Fatalf("tool or message lost: %+v", chat)
+			}
+		})
+	}
+}
+
+func TestRequestSkipsAssistantThinkingBlocks(t *testing.T) {
+	var req Request
+	err := json.Unmarshal([]byte(`{
+ "model":"alias","max_tokens":100,
+ "messages":[
+  {"role":"assistant","content":[
+   {"type":"thinking","thinking":"private","signature":"signed"},
+   {"type":"redacted_thinking","data":"opaque"},
+   {"type":"text","text":"visible"}
+  ]},
+  {"role":"user","content":"continue"},
+  {"role":"assistant","content":[{"type":"thinking","thinking":"private","signature":"signed"}]}
+ ]
+}`), &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat, err := req.ChatRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.Messages) != 2 || chat.Messages[0].Role != "assistant" || chat.Messages[0].Content != "visible" || chat.Messages[1].Content != "continue" {
+		t.Fatalf("unexpected messages: %+v", chat.Messages)
+	}
+}
+
 func TestRequestValidation(t *testing.T) {
 	valid := `{"model":"any-alias","max_tokens":1,"messages":[{"role":"user","content":"hello"}]}`
 	for _, test := range []struct{ name, body string }{
@@ -61,12 +119,12 @@ func TestRequestValidation(t *testing.T) {
 		{"bad role", strings.Replace(valid, `"role":"user"`, `"role":"system"`, 1)},
 		{"null content", strings.Replace(valid, `"content":"hello"`, `"content":null`, 1)},
 		{"empty blocks", strings.Replace(valid, `"content":"hello"`, `"content":[]`, 1)},
-		{"unknown block", strings.Replace(valid, `"content":"hello"`, `"content":[{"type":"thinking","text":"secret"}]`, 1)},
+		{"unknown block", strings.Replace(valid, `"content":"hello"`, `"content":[{"type":"unknown","text":"secret"}]`, 1)},
+		{"thinking requires assistant", strings.Replace(valid, `"content":"hello"`, `"content":[{"type":"thinking","thinking":"secret","signature":"signed"}]`, 1)},
 		{"bad image", strings.Replace(valid, `"content":"hello"`, `"content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"bad"}}]`, 1)},
 		{"bad URL", strings.Replace(valid, `"content":"hello"`, `"content":[{"type":"image","source":{"type":"url","url":"file:///etc/passwd"}}]`, 1)},
 		{"bad tool input", strings.Replace(valid, `"role":"user","content":"hello"`, `"role":"assistant","content":[{"type":"tool_use","id":"a","name":"foo","input":null}]`, 1)},
 		{"result requires user", strings.Replace(valid, `"role":"user","content":"hello"`, `"role":"assistant","content":[{"type":"tool_result","tool_use_id":"a"}]`, 1)},
-		{"thinking", strings.Replace(valid, `"max_tokens":1`, `"max_tokens":1,"thinking":{"type":"enabled","budget_tokens":100}`, 1)},
 		{"top k", strings.Replace(valid, `"max_tokens":1`, `"max_tokens":1,"top_k":3`, 1)},
 		{"temperature", strings.Replace(valid, `"max_tokens":1`, `"max_tokens":1,"temperature":2`, 1)},
 		{"unknown tool", strings.Replace(valid, `"max_tokens":1`, `"max_tokens":1,"tool_choice":{"type":"tool","name":"missing"}`, 1)},
