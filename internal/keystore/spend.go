@@ -10,22 +10,28 @@ import (
 
 // FlushToStorage persists each key's in-memory spend total to storage.
 // Called every 30s by the flush loop in main.go, and once on graceful shutdown.
+// A key is written only when its total changed since the last successful
+// flush (or since startup), so idle keys add no rows.
 func (sa *SpendAccumulator) FlushToStorage(ctx context.Context, store storage.Storage) error {
 	var firstErr error
 	sa.totals.Range(func(k, v any) bool {
 		keyID := k.(int64)
 		ks := v.(*keySpend)
 		ks.mu.Lock()
-		total := ks.total
+		total, flushed := ks.total, ks.flushed
 		ks.mu.Unlock()
-		if total <= 0 {
+		if total <= 0 || total == flushed {
 			return true
 		}
 		if err := store.FlushKeySpend(ctx, keyID, total); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
+			return true
 		}
+		ks.mu.Lock()
+		ks.flushed = total
+		ks.mu.Unlock()
 		return true
 	})
 	return firstErr
@@ -34,8 +40,9 @@ func (sa *SpendAccumulator) FlushToStorage(ctx context.Context, store storage.St
 // keySpend holds a per-key spend total protected by a mutex.
 // float64 is not atomically incrementable without unsafe; mutex is the clean solution.
 type keySpend struct {
-	mu    sync.Mutex
-	total float64
+	mu      sync.Mutex
+	total   float64
+	flushed float64 // total at the last successful flush, or as restored at startup
 }
 
 // SpendAccumulator tracks running spend totals in memory.
@@ -58,7 +65,8 @@ func (sa *SpendAccumulator) InitFromStorage(ctx context.Context, store storage.S
 		return fmt.Errorf("spend accumulator init: %w", err)
 	}
 	for keyID, total := range totals {
-		ks := &keySpend{total: total}
+		// Restored totals are already in usage_logs; nothing new to flush yet.
+		ks := &keySpend{total: total, flushed: total}
 		sa.totals.Store(keyID, ks)
 	}
 	return nil
