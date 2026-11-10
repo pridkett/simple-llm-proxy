@@ -66,7 +66,7 @@ func chatCompletionsPath() *openapi3.PathItem {
 			Summary:     "Create chat completion",
 			Description: "Creates a model response for the given chat conversation. Supports streaming via Server-Sent Events when stream=true.",
 			OperationID: "createChatCompletion",
-			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
+			Parameters:  openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -117,7 +117,7 @@ func responsesPath() *openapi3.PathItem {
 			Summary:     "Create a response",
 			Description: "Creates a model response via the OpenAI Responses API. Supports streaming (stream=true) and background/long-running requests (background=true, poll GET /v1/responses/{id} for the result). Only model_name entries backed by an OpenAI deployment support this endpoint.",
 			OperationID: "createResponse",
-			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
+			Parameters:  openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -220,7 +220,7 @@ func embeddingsPath() *openapi3.PathItem {
 			Summary:     "Create embeddings",
 			Description: "Creates an embedding vector representing the input text",
 			OperationID: "createEmbeddings",
-			Parameters:  openapi3.Parameters{sessionHeaderParameter()},
+			Parameters:  openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 			RequestBody: &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
@@ -378,6 +378,10 @@ func adminLogsPath() *openapi3.PathItem {
 				{Value: &openapi3.Parameter{
 					Name: "session_id", In: "query", Description: "Exact client-supplied session ID; combines with other log filters",
 					Schema: sessionIDSchema(),
+				}},
+				{Value: &openapi3.Parameter{
+					Name: "client_user_id", In: "query", Description: "Exact client-supplied end-user ID (X-User-ID); combines with other log filters",
+					Schema: clientUserIDSchema(),
 				}},
 				&openapi3.ParameterRef{
 					Value: &openapi3.Parameter{
@@ -577,6 +581,14 @@ func buildSecuritySchemes() openapi3.SecuritySchemes {
 			},
 		},
 	}
+}
+
+func clientUserHeaderParameter() *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{Value: &openapi3.Parameter{
+		Name: "X-User-ID", In: "header",
+		Description: "End user of the calling application, recorded in request logs and exported as user.id/langfuse.user.id on traces. Attribution only; any key holder can set it.",
+		Schema:      clientUserIDSchema(),
+	}}
 }
 
 func sessionHeaderParameter() *openapi3.ParameterRef {

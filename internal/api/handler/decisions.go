@@ -143,7 +143,7 @@ func Decisions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			if store != nil {
 				logged := *d
 				logged.ModelName = decisionReq.Model
-				logRequest(logRequestParams{Store: store, Deployment: &logged, Endpoint: "/v1/" + format, APIKeyID: keyID, Status: err.StatusCode, StartTime: start, RequestID: requestID, SessionID: sessionID, PoolName: result.PoolName, CostKnown: true, ReqBodySnippet: snippet})
+				logRequest(logRequestParams{Store: store, Deployment: &logged, Endpoint: "/v1/" + format, APIKeyID: keyID, Status: err.StatusCode, StartTime: start, RequestID: requestID, SessionID: sessionID, ClientUserID: middleware.ClientUserIDFromContext(req.Context()), PoolName: result.PoolName, CostKnown: true, ReqBodySnippet: snippet})
 			}
 			model.WriteError(w, err)
 			return
@@ -163,7 +163,7 @@ func Decisions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			logged := *d
 			logged.ModelName = decisionReq.Model
 			body, _ := json.Marshal(response.Fields)
-			logRequest(logRequestParams{Store: store, Deployment: &logged, Endpoint: "/v1/" + format, APIKeyID: keyID, Usage: response.Usage, TotalCost: cost, CostKnown: true, Status: http.StatusOK, StartTime: start, RequestID: requestID, SessionID: sessionID, PoolName: result.PoolName, ReqBodySnippet: snippet, RespBodySnippet: decisionSnippet(body, cfg.BodySnippetLimit)})
+			logRequest(logRequestParams{Store: store, Deployment: &logged, Endpoint: "/v1/" + format, APIKeyID: keyID, Usage: response.Usage, TotalCost: cost, CostKnown: true, Status: http.StatusOK, StartTime: start, RequestID: requestID, SessionID: sessionID, ClientUserID: middleware.ClientUserIDFromContext(req.Context()), PoolName: result.PoolName, ReqBodySnippet: snippet, RespBodySnippet: decisionSnippet(body, cfg.BodySnippetLimit)})
 		}
 		router.SetRouteHeaders(w, result)
 		if known {

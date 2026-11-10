@@ -103,6 +103,19 @@
       <button class="btn-secondary text-xs py-2" type="submit">Filter session</button>
       <button v-if="filterSession" class="btn-secondary text-xs py-2" type="button" @click="removeSession">Clear session</button>
     </form>
+    <form class="mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="applyUser">
+      <div class="w-full sm:w-80">
+        <label for="user-filter" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">User ID</label>
+        <input id="user-filter" v-model="userSearch" class="input text-sm py-2 w-full"
+               placeholder="Exact X-User-ID" maxlength="256" />
+      </div>
+      <button class="btn-secondary text-xs py-2" type="submit">Filter user</button>
+      <button v-if="filterUser" class="btn-secondary text-xs py-2" type="button" @click="removeUser">Clear user</button>
+    </form>
+    <div v-if="filterUser" class="mb-4 rounded-lg border border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200" role="status">
+      <p class="font-medium">User <span class="font-mono break-all">{{ filterUser }}</span></p>
+      <p class="text-xs mt-1">{{ loading ? 'Loading requests…' : `${logsData?.total || 0} requests matching current filters` }} · {{ datePreset === null ? 'All time' : 'Selected date range' }}</p>
+    </div>
     <div v-if="filterSession" class="mb-4 rounded-lg border border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200" role="status">
       <p class="font-medium">Session <span class="font-mono break-all">{{ filterSession }}</span></p>
       <p class="text-xs mt-1">{{ loading ? 'Loading requests…' : `${logsData?.total || 0} requests matching current filters` }} · {{ datePreset === null ? 'All time' : 'Selected date range' }}</p>
@@ -201,6 +214,15 @@
                                       class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
                                       title="View all requests in this session">
                             {{ detailCache.get(log.request_id).session_id }}
+                          </RouterLink>
+                          <span v-else class="text-gray-400">—</span>
+                          <span class="text-gray-500 dark:text-gray-400">User ID</span>
+                          <RouterLink v-if="detailCache.get(log.request_id).client_user_id"
+                                      :to="{ path: '/logs', query: { client_user_id: detailCache.get(log.request_id).client_user_id } }"
+                                      @click="resetDimensions"
+                                      class="font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
+                                      title="View all requests from this user">
+                            {{ detailCache.get(log.request_id).client_user_id }}
                           </RouterLink>
                           <span v-else class="text-gray-400">—</span>
                           <span class="text-gray-500 dark:text-gray-400">Team</span>
@@ -351,6 +373,19 @@ function removeSession() {
   router.push({ query: { ...route.query, session_id: undefined } })
 }
 
+const filterUser = computed(() => typeof route.query.client_user_id === 'string' ? route.query.client_user_id : '')
+const userSearch = ref(filterUser.value)
+
+function applyUser() {
+  const userID = userSearch.value.trim()
+  router.push({ query: { ...route.query, client_user_id: userID || undefined } })
+}
+
+function removeUser() {
+  userSearch.value = ''
+  router.push({ query: { ...route.query, client_user_id: undefined } })
+}
+
 const logsData = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -407,7 +442,7 @@ const hasActiveFilters = computed(() => {
     filterKey.value !== null ||
     filterProvider.value !== '' ||
     filterPool.value !== '' ||
-    filterRequestType.value !== '' || filterModel.value !== '' || filterSession.value !== '' || filterUnattributed.value !== '' || reportBounds.value != null
+    filterRequestType.value !== '' || filterModel.value !== '' || filterSession.value !== '' || filterUser.value !== '' || filterUnattributed.value !== '' || reportBounds.value != null
 })
 
 function buildDateParams() {
@@ -445,6 +480,7 @@ async function load() {
       model: filterModel.value || undefined,
       request_type: filterRequestType.value || undefined,
       session_id: filterSession.value || undefined,
+      client_user_id: filterUser.value || undefined,
       team_id: filterTeam.value,
       app_id: filterApp.value,
       key_id: filterKey.value,
@@ -480,7 +516,7 @@ async function loadMeta() {
 
 // D-09: any filter change auto-fetches with offset reset
 watch(
-  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterRequestType, filterSession, filterUnattributed, reportBounds],
+  [datePreset, filterTeam, filterApp, filterKey, filterProvider, filterPool, filterModel, filterRequestType, filterSession, filterUser, filterUnattributed, reportBounds],
   () => {
     offset.value = 0
     load()
@@ -489,6 +525,11 @@ watch(
 
 watch(filterSession, (value) => {
   sessionSearch.value = value
+  expandedRows.value = new Set()
+})
+
+watch(filterUser, (value) => {
+  userSearch.value = value
   expandedRows.value = new Set()
 })
 
@@ -515,7 +556,10 @@ onMounted(async () => {
 
 function clearFilters() {
   resetDimensions()
-  removeSession()
+  // One navigation clears both client attribution filters.
+  sessionSearch.value = ''
+  userSearch.value = ''
+  router.push({ query: { ...route.query, session_id: undefined, client_user_id: undefined } })
 }
 
 function resetDimensions() {

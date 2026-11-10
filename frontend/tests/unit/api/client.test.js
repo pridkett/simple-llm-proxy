@@ -86,6 +86,16 @@ describe('api client', () => {
     expect(params.get('session_id')).toBe('play:1')
   })
 
+  it('sends the client user filter only when set', async () => {
+    mockFetch({ logs: [], total: 0 })
+    await api.logs({ client_user_id: 'user/1?x' })
+    await api.logs({ client_user_id: '' })
+    const first = new URL(global.fetch.mock.calls[0][0], 'https://proxy.test').searchParams
+    const second = new URL(global.fetch.mock.calls[1][0], 'https://proxy.test').searchParams
+    expect(first.get('client_user_id')).toBe('user/1?x')
+    expect(second.has('client_user_id')).toBe(false)
+  })
+
   describe('status()', () => {
     it('calls GET /admin/status', async () => {
       const payload = { status: 'healthy', uptime_seconds: 42, models: [] }

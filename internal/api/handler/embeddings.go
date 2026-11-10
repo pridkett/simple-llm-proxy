@@ -158,6 +158,7 @@ func Embeddings(r *router.Router, store storage.Storage, sa *keystore.SpendAccum
 				IsStreaming:     false,
 				RequestID:       requestID,
 				SessionID:       sessionID,
+				ClientUserID:    middleware.ClientUserIDFromContext(ctx),
 				TTFTMs:          nil,
 				RespBodySnippet: "",
 				ReqBodySnippet:  reqBodySnippet,

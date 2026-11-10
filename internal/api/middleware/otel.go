@@ -32,9 +32,15 @@ func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) 
 			if id := RequestIDFromContext(ctx); id != "" {
 				span.SetAttributes(attribute.String(proxyotel.RequestID, id))
 			}
-			if userID := clientUserID(r.Header.Get(ClientUserIDHeader)); userID != "" {
+			userID := ClientUserIDFromContext(ctx)
+			if userID == "" {
+				// Without the ClientUser middleware (as in isolated tests), parse the header here.
+				if userID = clientUserID(r.Header.Get(ClientUserIDHeader)); userID != "" {
+					ctx = context.WithValue(ctx, clientUserIDKey{}, userID)
+				}
+			}
+			if userID != "" {
 				span.SetAttributes(ClientUserAttributes(userID)...)
-				ctx = context.WithValue(ctx, clientUserIDKey{}, userID)
 			}
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 			defer func() {
@@ -91,6 +97,19 @@ func trustedTracePeer(remoteAddr string, prefixes []netip.Prefix) bool {
 const ClientUserIDHeader = "X-User-ID"
 
 type clientUserIDKey struct{}
+
+// ClientUser records a valid X-User-ID in the request context for logging and
+// tracing, independent of whether tracing is enabled.
+func ClientUser() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if userID := clientUserID(r.Header.Get(ClientUserIDHeader)); userID != "" {
+				r = r.WithContext(context.WithValue(r.Context(), clientUserIDKey{}, userID))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // ClientUserIDFromContext returns the X-User-ID accepted for this request.
 func ClientUserIDFromContext(ctx context.Context) string {

@@ -204,6 +204,7 @@ func (w *Worker) logCompletion(job *storage.ResponsesJob, d *provider.Deployment
 		RequestID:        fmt.Sprintf("responses-%s", job.ID),
 		APIKeyID:         job.APIKeyID,
 		SessionID:        job.SessionID,
+		ClientUserID:     job.ClientUserID,
 		Model:            job.ModelName,
 		Provider:         d.ProviderName,
 		Endpoint:         "/v1/responses",
