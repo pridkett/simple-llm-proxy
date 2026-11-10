@@ -295,6 +295,7 @@ func handleNonStreamingResponse(
 			IsStreaming:     false,
 			RequestID:       requestID,
 			SessionID:       sessionID,
+			ClientUserID:    middleware.ClientUserIDFromContext(ctx),
 			TTFTMs:          nil,
 			RespBodySnippet: "",
 			ReqBodySnippet:  reqBodySnippet,
@@ -398,6 +399,7 @@ func handleStreamingResponse(
 					IsStreaming:     true,
 					RequestID:       requestID,
 					SessionID:       sessionID,
+					ClientUserID:    middleware.ClientUserIDFromContext(ctx),
 					TTFTMs:          ttftMs,
 					RespBodySnippet: snippetBuilder.String(),
 					ReqBodySnippet:  reqBodySnippet,
@@ -522,6 +524,7 @@ type logRequestParams struct {
 	IsStreaming     bool
 	RequestID       string
 	SessionID       string
+	ClientUserID    string
 	TTFTMs          *int64
 	RespBodySnippet string
 	ReqBodySnippet  *string // nil = disabled (limit=0) → SQL NULL; &"" = empty body; &"..." = captured snippet
@@ -557,6 +560,7 @@ func logRequest(p logRequestParams) {
 	log := &storage.RequestLog{
 		RequestID:        p.RequestID,
 		SessionID:        p.SessionID,
+		ClientUserID:     p.ClientUserID,
 		APIKeyID:         p.APIKeyID,
 		Model:            p.Deployment.ModelName,
 		Provider:         p.Deployment.ProviderName,

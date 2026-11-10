@@ -23,6 +23,7 @@ type logDetailEntry struct {
 	// --- logEntry fields (verbatim copy — do not embed) ---
 	RequestID     string    `json:"request_id"`
 	SessionID     string    `json:"session_id"`
+	ClientUserID  string    `json:"client_user_id"`
 	Model         string    `json:"model"`
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
@@ -72,6 +73,7 @@ func AdminLogDetail(store storage.Storage) http.HandlerFunc {
 			RequestID:    log.RequestID,
 			AccountingID: log.AccountingID, CostSource: log.CostSource, CostKnown: log.CostKnown, CostCoverage: log.CostCoverage,
 			SessionID:        log.SessionID,
+			ClientUserID:     log.ClientUserID,
 			Model:            log.Model,
 			Provider:         log.Provider,
 			Endpoint:         log.Endpoint,

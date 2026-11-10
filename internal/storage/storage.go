@@ -345,6 +345,7 @@ type RequestLog struct {
 	UsageKnown    bool // false when the upstream omitted usage; zero tokens are then unknown
 	RequestID     string
 	SessionID     string // client-supplied log grouping ID; empty = ungrouped
+	ClientUserID  string // client-supplied end-user ID (X-User-ID); empty = unattributed
 	APIKeyID      *int64 // nil when authenticated via master key
 	Model         string
 	Provider      string
@@ -379,11 +380,12 @@ type RequestLog struct {
 // All pointer fields are nil when no filter is applied.
 // String fields use empty-string sentinel: empty = no filter (consistent with Model).
 type LogsFilter struct {
-	RequestType string // empty = all; decision or other, derived from canonical endpoint
-	SessionID   string // exact match; empty = no session filter
-	Model       string // empty string means no filter
-	TeamID      *int64
-	AppID       *int64
+	RequestType  string // empty = all; decision or other, derived from canonical endpoint
+	SessionID    string // exact match; empty = no session filter
+	ClientUserID string // exact match on X-User-ID; empty = no user filter
+	Model        string // empty string means no filter
+	TeamID       *int64
+	AppID        *int64
 	// New v1.2 filter dimensions (per SCHEMA-03, D-03 through D-05):
 	Provider     string     // empty string = no filter (same pattern as Model)
 	PoolName     string     // empty string = no filter (same pattern as Model)
@@ -490,6 +492,7 @@ type WebhookSubscription struct {
 type ResponsesJob struct {
 	AccountingID  string
 	SessionID     string // log attribution retained across background polling
+	ClientUserID  string // X-User-ID retained across background polling
 	ID            string
 	APIKeyID      *int64 // nil when authenticated via master key
 	DeploymentKey string // provider:model:api_base — re-resolves the deployment for polling

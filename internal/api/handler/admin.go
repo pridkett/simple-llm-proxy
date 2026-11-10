@@ -143,6 +143,7 @@ type logEntry struct {
 
 	RequestID     string    `json:"request_id"`
 	SessionID     string    `json:"session_id"`
+	ClientUserID  string    `json:"client_user_id"`
 	Model         string    `json:"model"`
 	Provider      string    `json:"provider"`
 	Endpoint      string    `json:"endpoint"`
@@ -202,6 +203,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 		}
 		filters.Model = req.URL.Query().Get("model")
 		filters.SessionID = req.URL.Query().Get("session_id")
+		filters.ClientUserID = req.URL.Query().Get("client_user_id")
 		if v := req.URL.Query().Get("team_id"); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 				filters.TeamID = &n
@@ -258,6 +260,7 @@ func AdminLogs(store storage.Storage) http.HandlerFunc {
 				RequestID:    l.RequestID,
 				AccountingID: l.AccountingID, CostSource: l.CostSource, CostKnown: l.CostKnown, CostCoverage: l.CostCoverage,
 				SessionID:     l.SessionID,
+				ClientUserID:  l.ClientUserID,
 				Model:         l.Model,
 				Provider:      l.Provider,
 				Endpoint:      l.Endpoint,

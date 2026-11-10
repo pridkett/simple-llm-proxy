@@ -209,8 +209,11 @@ using lowercase hex. Keys for the same application share the namespace.
 Send `X-User-ID` to attribute a model request to the calling application's
 end user. The trimmed value is exported unchanged as `user.id` and
 `langfuse.user.id` on the HTTP and model spans. Values longer than 256 bytes or
-containing control characters are ignored. Any key holder can set it, so treat
-it as attribution, not identity. For OpenWebUI, add `"X-User-ID": "{{USER_ID}}"`
+containing control characters are ignored. The same value is stored with the
+request log, shown as "User ID" under Attribution on the Logs page, and
+filterable there or through `GET /admin/logs?client_user_id=<id>` (exact match,
+works with tracing disabled). Any key holder can set it, so treat it as
+attribution, not identity. For OpenWebUI, add `"X-User-ID": "{{USER_ID}}"`
 next to `"X-Session-ID": "{{CHAT_ID}}"` in the connection headers.
 Use `llmproxy.request_id` to join traces to proxy logs.
 

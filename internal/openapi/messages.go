@@ -20,7 +20,7 @@ func messagesPath() *openapi3.PathItem {
 	return &openapi3.PathItem{Post: &openapi3.Operation{
 		Tags: []string{"Chat"}, Summary: "Create an Anthropic-compatible message", OperationID: "createMessage",
 		Description: "Uses any configured model_name and the shared chat router. Supports text, system prompts, URL/base64 images, client tools and tool results, and streaming. Target model capabilities apply. Cache hints are accepted without a caching guarantee. Thinking, server tools, documents, top_k, and other unsupported options return 400. anthropic-version is accepted for SDK compatibility.",
-		Parameters:  openapi3.Parameters{sessionHeaderParameter(), {Value: &openapi3.Parameter{Name: "anthropic-version", In: "header", Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}, Example: "2023-06-01"}}},
+		Parameters:  openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter(), {Value: &openapi3.Parameter{Name: "anthropic-version", In: "header", Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}, Example: "2023-06-01"}}},
 		Security:    &openapi3.SecurityRequirements{{"anthropicApiKey": {}}, {bearerAuthName: {}}},
 		RequestBody: &openapi3.RequestBodyRef{Value: &openapi3.RequestBody{Required: true, Content: openapi3.Content{"application/json": {Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/AnthropicMessagesRequest"}}}}},
 		Responses:   responses,

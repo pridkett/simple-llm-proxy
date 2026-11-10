@@ -352,6 +352,10 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_endpoint_time ON usage_logs(endpoint, request_time DESC)`,
 		sqlstore.MCPConnectionsSchema,
 		sqlstore.MCPOAuthSchema,
+		// Client-supplied end-user attribution (X-User-ID), parallel to session_id.
+		`ALTER TABLE usage_logs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_usage_logs_client_user_time ON usage_logs(client_user_id, request_time DESC) WHERE client_user_id <> ''`,
+		`ALTER TABLE responses_jobs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for i, sql := range migrations {

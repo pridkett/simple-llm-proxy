@@ -148,6 +148,7 @@ func (s *callAccounting) logEntry(rec *accounting.Record) *storage.RequestLog {
 	}
 	entry := storage.AccountingLog(rec, s.model, s.endpoint, s.start)
 	entry.SessionID = s.session
+	entry.ClientUserID = middleware.ClientUserIDFromContext(s.ctx)
 	entry.IsStreaming = s.streaming
 	if s.logParams != nil {
 		p := s.logParams

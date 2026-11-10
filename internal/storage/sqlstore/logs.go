@@ -26,6 +26,10 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		whereClauses = append(whereClauses, "ul.session_id <> ''", "ul.session_id = ?")
 		whereArgs = append(whereArgs, filters.SessionID)
 	}
+	if filters.ClientUserID != "" {
+		whereClauses = append(whereClauses, "ul.client_user_id <> ''", "ul.client_user_id = ?")
+		whereArgs = append(whereArgs, filters.ClientUserID)
+	}
 	if filters.Model != "" {
 		whereClauses = append(whereClauses, "ul.model = ?")
 		whereArgs = append(whereArgs, filters.Model)
@@ -111,7 +115,7 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 		       ul.req_body_snippet,
 		       COALESCE(ul.resp_body_snippet, ''),
 		       ul.cache_read_tokens,
-		       ul.cache_write_tokens, ul.usage_known, ul.session_id, ul.accounting_id, ul.cost_source, ul.cost_known, ul.cost_coverage
+		       ul.cache_write_tokens, ul.usage_known, ul.session_id, ul.client_user_id, ul.accounting_id, ul.cost_source, ul.cost_known, ul.cost_coverage
 		FROM usage_logs ul
 		LEFT JOIN api_keys ak ON ul.api_key_id = ak.id
 		LEFT JOIN applications app ON ak.application_id = app.id
@@ -143,7 +147,7 @@ func (s *Storage) GetLogs(ctx context.Context, limit, offset int, filters storag
 			&entry.RespBodySnippet,
 			&entry.CacheReadTokens,  // plain int — NOT NULL DEFAULT 0 in DB
 			&entry.CacheWriteTokens, // plain int — NOT NULL DEFAULT 0 in DB
-			&entry.UsageKnown, &entry.SessionID, &entry.AccountingID, &entry.CostSource, &entry.CostKnown, &entry.CostCoverage,
+			&entry.UsageKnown, &entry.SessionID, &entry.ClientUserID, &entry.AccountingID, &entry.CostSource, &entry.CostKnown, &entry.CostCoverage,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning log: %w", err)
 		}
@@ -177,8 +181,8 @@ func (s *Storage) insertRequestLog(ctx context.Context, db logExecutor, log *sto
 			status_code, latency_ms, request_time,
 			is_streaming, deployment_key,
 			pool_name, ttft_ms, req_body_snippet, resp_body_snippet,
-			cache_read_tokens, cache_write_tokens, usage_known, session_id, accounting_id, cost_source, cost_known, cost_coverage
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			cache_read_tokens, cache_write_tokens, usage_known, session_id, client_user_id, accounting_id, cost_source, cost_known, cost_coverage
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`),
 		log.RequestID,
 		log.APIKeyID,
@@ -199,7 +203,7 @@ func (s *Storage) insertRequestLog(ctx context.Context, db logExecutor, log *sto
 		log.RespBodySnippet,
 		log.CacheReadTokens,
 		log.CacheWriteTokens,
-		log.UsageKnown, log.SessionID, log.AccountingID, log.CostSource, log.CostKnown, log.CostCoverage,
+		log.UsageKnown, log.SessionID, log.ClientUserID, log.AccountingID, log.CostSource, log.CostKnown, log.CostCoverage,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting log: %w", err)

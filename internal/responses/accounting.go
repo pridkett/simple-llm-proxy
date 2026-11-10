@@ -47,6 +47,7 @@ func FinishAccounting(ctx context.Context, store storage.Storage, job *storage.R
 	entry := storage.AccountingLog(rec, job.ModelName, "/v1/responses", job.CreatedAt)
 	if entry != nil {
 		entry.SessionID = job.SessionID
+		entry.ClientUserID = job.ClientUserID
 		if statusErr != nil {
 			entry.StatusCode = 502
 		}

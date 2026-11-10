@@ -918,6 +918,7 @@ func logEntrySchema() *openapi3.SchemaRef {
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
 				"session_id":        sessionIDSchema(),
+				"client_user_id":    clientUserIDSchema(),
 				"request_id":        {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
 				"model":             {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
 				"provider":          {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
@@ -1081,5 +1082,13 @@ func sessionIDSchema() *openapi3.SchemaRef {
 	return &openapi3.SchemaRef{Value: &openapi3.Schema{
 		Type: &openapi3.Types{"string"}, MaxLength: &maxLength,
 		Description: "Client-supplied session ID for log grouping (up to 256 UTF-8 bytes, no control characters). Also accepts metadata.session_id or metadata.litellm_session_id. Whitespace is trimmed; an empty ID leaves the request ungrouped. Proxy-only session fields are not forwarded upstream.",
+	}}
+}
+
+func clientUserIDSchema() *openapi3.SchemaRef {
+	return &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type:        &openapi3.Types{"string"},
+		MaxLength:   openapi3.Uint64Ptr(256),
+		Description: "Client-supplied end-user ID from X-User-ID (up to 256 bytes, no control characters, whitespace trimmed); empty when absent.",
 	}}
 }

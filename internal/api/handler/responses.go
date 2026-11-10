@@ -163,7 +163,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		if respReq.Background && !respResult.IsTerminal() {
 			acc.savePending()
 			if store != nil {
-				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq, sessionID, acc.collector.Snapshot(false).ID); err != nil {
+				if err := persistResponsesJob(store, respResult, result.DeploymentUsed, result.PoolName, apiKeyID, &respReq, sessionID, middleware.ClientUserIDFromContext(ctx), acc.collector.Snapshot(false).ID); err != nil {
 					acc.err = err
 					operation.fail(err)
 					// The upstream job was already created — the client must not receive a
@@ -205,6 +205,7 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 				IsStreaming:     false,
 				RequestID:       requestID,
 				SessionID:       sessionID,
+				ClientUserID:    middleware.ClientUserIDFromContext(ctx),
 				TTFTMs:          nil,
 				RespBodySnippet: "",
 				ReqBodySnippet:  reqBodySnippet,
@@ -276,6 +277,7 @@ func handleResponsesStream(
 					IsStreaming:     true,
 					RequestID:       requestID,
 					SessionID:       sessionID,
+					ClientUserID:    middleware.ClientUserIDFromContext(ctx),
 					TTFTMs:          nil,
 					RespBodySnippet: "",
 					ReqBodySnippet:  reqBodySnippet,
@@ -320,7 +322,7 @@ func handleResponsesStream(
 // subsequent GET /v1/responses/{id} would 404 with no visible error. Uses a
 // detached 5s context (not the request's) so the write isn't aborted by a client
 // disconnect racing the insert.
-func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest, sessionID string, accountingID string) error {
+func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d *provider.Deployment, poolName string, apiKeyID *int64, req *model.ResponsesRequest, sessionID, clientUserID string, accountingID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -338,6 +340,7 @@ func persistResponsesJob(store storage.Storage, resp *model.ResponsesResponse, d
 		AccountingID:  accountingID,
 		ID:            resp.ID,
 		SessionID:     sessionID,
+		ClientUserID:  clientUserID,
 		APIKeyID:      apiKeyID,
 		DeploymentKey: d.DeploymentKey(),
 		ModelName:     d.ModelName,

@@ -21,7 +21,7 @@ func decisionsPath(systemOne bool, operationID string) *openapi3.PathItem {
 	response.Required = []string{"answers"}
 	return &openapi3.PathItem{Post: &openapi3.Operation{
 		Tags: []string{"Decisions"}, Summary: "Create a decision", Description: description, OperationID: operationID,
-		Parameters: openapi3.Parameters{sessionHeaderParameter()}, Security: &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
+		Parameters: openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter()}, Security: &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 		RequestBody: &openapi3.RequestBodyRef{Value: &openapi3.RequestBody{Required: true, Content: openapi3.NewContentWithJSONSchema(request)}},
 		Responses: openapi3.NewResponses(
 			openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{Value: &openapi3.Response{Description: strPtr("Typed answers, preserving upstream extensions and usage"), Content: openapi3.NewContentWithJSONSchema(response)}}),
