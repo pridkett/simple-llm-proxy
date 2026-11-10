@@ -26,6 +26,7 @@ type Provider struct {
 	baseURL        string
 	client         *http.Client
 	safetySettings []geminiSafetySetting
+	extraHeaders   map[string]string
 }
 
 // --- Gemini-native request types ---
@@ -132,6 +133,7 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		baseURL:        baseURL,
 		client:         &http.Client{},
 		safetySettings: settings,
+		extraHeaders:   opts.ExtraHeaders,
 	}
 }
 
@@ -162,6 +164,9 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 		return nil, fmt.Errorf("gemini: creating request: %w", err)
 	}
 
+	for name, value := range p.extraHeaders {
+		httpReq.Header.Set(name, value)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-goog-api-key", p.apiKey)
 
@@ -217,6 +222,9 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		return nil, fmt.Errorf("gemini: creating request: %w", err)
 	}
 
+	for name, value := range p.extraHeaders {
+		httpReq.Header.Set(name, value)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-goog-api-key", p.apiKey)
 

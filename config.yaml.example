@@ -113,11 +113,14 @@ model_list:
 
   # Anthropic-compatible endpoint with custom base URL
   # Use api_base to point at a custom Anthropic-compatible gateway or proxy.
+  # extra_headers also works for Gemini and applies to streaming and non-streaming chat.
   # - model_name: my-gateway-claude
   #   litellm_params:
   #     model: anthropic/claude-3-5-sonnet-20240620
   #     api_key: os.environ/ANTHROPIC_API_KEY
   #     api_base: os.environ/ANTHROPIC_BASE_URL  # e.g. https://my-gateway.example.com/v1
+  #     extra_headers:
+  #       User-Agent: example-client/1.0
 
   # Direct MiniMax Coding Plan (OpenAI-compatible Chat Completions).
   # Keep these distinct from any openrouter/minimax/... routes.
