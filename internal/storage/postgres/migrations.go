@@ -36,6 +36,9 @@ var migrations = []string{baseline, `
 	`ALTER TABLE usage_logs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT '';
      CREATE INDEX idx_usage_logs_client_user_time ON usage_logs(client_user_id, request_time DESC) WHERE client_user_id <> '';
      ALTER TABLE responses_jobs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT '';`,
+	// Spend snapshots were written for every key every 30s even when idle and
+	// are never read back; keep only the latest per key.
+	`DELETE FROM usage_logs WHERE model = '_flush' AND id NOT IN (SELECT MAX(id) FROM usage_logs WHERE model = '_flush' GROUP BY api_key_id);`,
 }
 
 func (s *Storage) migrate(ctx context.Context) error {

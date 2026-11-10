@@ -15,7 +15,7 @@ import (
 // newTestStorage creates an in-memory SQLite storage for testing.
 func newTestStorage(t *testing.T) *Storage {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", withSQLiteTimeFormat(":memory:")) // same time format as New
 	if err != nil {
 		t.Fatalf("opening in-memory db: %v", err)
 	}

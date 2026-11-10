@@ -356,6 +356,13 @@ func (s *Storage) migrate(ctx context.Context) error {
 		`ALTER TABLE usage_logs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_logs_client_user_time ON usage_logs(client_user_id, request_time DESC) WHERE client_user_id <> ''`,
 		`ALTER TABLE responses_jobs ADD COLUMN client_user_id TEXT NOT NULL DEFAULT ''`,
+		// Spend snapshots were written for every key every 30s even when idle and
+		// are never read back; keep only the latest per key.
+		`DELETE FROM usage_logs WHERE model = '_flush' AND id NOT IN (SELECT MAX(id) FROM usage_logs WHERE model = '_flush' GROUP BY api_key_id)`,
+		// Request times were stored as time.Time.String() ("... +0000 UTC");
+		// rewrite them in the format the driver now writes so SQLite's date
+		// functions and string comparisons see one format.
+		`UPDATE usage_logs SET request_time = replace(request_time, ' +0000 UTC', '+00:00') WHERE request_time GLOB '* +0000 UTC'`,
 	}
 
 	for i, sql := range migrations {
