@@ -149,6 +149,16 @@ func observeUsage(a *Attempt, u *model.Usage) {
 	data := u.AccountingJSON()
 	var raw map[string]json.RawMessage
 	json.Unmarshal(data, &raw)
+	for _, field := range []string{"prompt_tokens_details", "completion_tokens_details", "input_tokens_details", "output_tokens_details"} {
+		var details struct {
+			Audio int64 `json:"audio_tokens"`
+		}
+		if json.Unmarshal(raw[field], &details) == nil && details.Audio > 0 {
+			a.Pricing = nil
+			warn(a, "local pricing does not cover audio tokens")
+			break
+		}
+	}
 	if !a.nativeCaptured {
 		mergeNative(a, data)
 	}
@@ -327,6 +337,19 @@ func (c *Collector) recordProvider(i int) string {
 	defer c.mu.Unlock()
 	return c.record.Attempts[i].Provider
 }
+
+// SkipEstimate keeps upstream usage and cost evidence, but disables pricing
+// when the available local rates do not cover an operation.
+func SkipEstimate(ctx context.Context, reason string) {
+	if ref, ok := ctx.Value(attemptKey{}).(attemptRef); ok {
+		ref.c.mu.Lock()
+		defer ref.c.mu.Unlock()
+		a := &ref.c.record.Attempts[ref.index]
+		a.Pricing = nil
+		warn(a, reason)
+	}
+}
+
 func EndAttempt(ctx context.Context, err error) {
 	ref, ok := ctx.Value(attemptKey{}).(attemptRef)
 	if !ok {

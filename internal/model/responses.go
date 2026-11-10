@@ -6,6 +6,7 @@ import "encoding/json"
 // Input accepts either a plain string or a structured array of input items
 // (OpenAI's union type) — the proxy passes it through largely unmodified.
 type ResponsesRequest struct {
+	rawFields          map[string]json.RawMessage
 	Model              string            `json:"model"`
 	Input              any               `json:"input"`
 	Instructions       string            `json:"instructions,omitempty"`
@@ -25,6 +26,7 @@ type ResponsesRequest struct {
 // ResponsesResponse represents an OpenAI Responses API response, returned both
 // from a synchronous create call and from GET /v1/responses/{id}.
 type ResponsesResponse struct {
+	rawFields          map[string]json.RawMessage
 	ProxyAccounting    any                  `json:"proxy_accounting,omitempty"`
 	ID                 string               `json:"id"`
 	Object             string               `json:"object"`
@@ -54,13 +56,14 @@ func (r *ResponsesResponse) IsTerminal() bool {
 
 // ResponseOutputItem is one entry in ResponsesResponse.Output. Type discriminates
 // the shape (e.g. "message", "reasoning", "function_call"); the proxy stores and
-// forwards the raw item rather than fully modeling every OpenAI item variant.
+// preserves extension fields such as the result of an image generation call.
 type ResponseOutputItem struct {
-	ID      string                `json:"id,omitempty"`
-	Type    string                `json:"type"`
-	Role    string                `json:"role,omitempty"`
-	Status  string                `json:"status,omitempty"`
-	Content []ResponseContentPart `json:"content,omitempty"`
+	rawFields map[string]json.RawMessage
+	ID        string                `json:"id,omitempty"`
+	Type      string                `json:"type"`
+	Role      string                `json:"role,omitempty"`
+	Status    string                `json:"status,omitempty"`
+	Content   []ResponseContentPart `json:"content,omitempty"`
 
 	// Function/tool call fields (Type == "function_call").
 	CallID    string          `json:"call_id,omitempty"`
@@ -73,15 +76,17 @@ type ResponseOutputItem struct {
 // ResponseContentPart is a single content part within a ResponseOutputItem
 // (e.g. {"type": "output_text", "text": "..."}).
 type ResponseContentPart struct {
-	Type    string `json:"type"`
-	Text    string `json:"text,omitempty"`
-	Refusal string `json:"refusal,omitempty"`
+	rawFields map[string]json.RawMessage
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	Refusal   string `json:"refusal,omitempty"`
 }
 
 // ResponsesStreamEvent represents one SSE event from a streaming Responses API
 // call (e.g. "response.created", "response.output_text.delta", "response.completed").
 // The proxy forwards these largely verbatim to the client.
 type ResponsesStreamEvent struct {
+	rawFields      map[string]json.RawMessage
 	Type           string              `json:"type"`
 	SequenceNumber int                 `json:"sequence_number,omitempty"`
 	Response       *ResponsesResponse  `json:"response,omitempty"`
@@ -90,4 +95,64 @@ type ResponsesStreamEvent struct {
 	OutputIndex    *int                `json:"output_index,omitempty"`
 	ContentIndex   *int                `json:"content_index,omitempty"`
 	Item           *ResponseOutputItem `json:"item,omitempty"`
+}
+
+func (x *ResponsesRequest) UnmarshalJSON(data []byte) error {
+	type wire ResponsesRequest
+	fields, err := readObject(data, (*wire)(x))
+	x.rawFields = fields
+	return err
+}
+
+func (x ResponsesRequest) MarshalJSON() ([]byte, error) {
+	type wire ResponsesRequest
+	return writeObject(wire(x), x.rawFields)
+}
+
+func (x *ResponsesResponse) UnmarshalJSON(data []byte) error {
+	type wire ResponsesResponse
+	fields, err := readObject(data, (*wire)(x))
+	x.rawFields = fields
+	return err
+}
+
+func (x ResponsesResponse) MarshalJSON() ([]byte, error) {
+	type wire ResponsesResponse
+	return writeObject(wire(x), x.rawFields)
+}
+
+func (x *ResponseOutputItem) UnmarshalJSON(data []byte) error {
+	type wire ResponseOutputItem
+	fields, err := readObject(data, (*wire)(x))
+	x.rawFields = fields
+	return err
+}
+
+func (x ResponseOutputItem) MarshalJSON() ([]byte, error) {
+	type wire ResponseOutputItem
+	return writeObject(wire(x), x.rawFields)
+}
+
+func (x *ResponseContentPart) UnmarshalJSON(data []byte) error {
+	type wire ResponseContentPart
+	fields, err := readObject(data, (*wire)(x))
+	x.rawFields = fields
+	return err
+}
+
+func (x ResponseContentPart) MarshalJSON() ([]byte, error) {
+	type wire ResponseContentPart
+	return writeObject(wire(x), x.rawFields)
+}
+
+func (x *ResponsesStreamEvent) UnmarshalJSON(data []byte) error {
+	type wire ResponsesStreamEvent
+	fields, err := readObject(data, (*wire)(x))
+	x.rawFields = fields
+	return err
+}
+
+func (x ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
+	type wire ResponsesStreamEvent
+	return writeObject(wire(x), x.rawFields)
 }

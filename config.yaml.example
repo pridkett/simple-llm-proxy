@@ -33,6 +33,44 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
     rpm: 200
 
+  # Native OpenAI Images, Audio, and Realtime aliases. Enable the models you need.
+  # - model_name: gpt-image-2.5-sunburst
+  #   litellm_params:
+  #     model: openai/gpt-image-2.5-sunburst
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-image-2.6-sunburst
+  #   litellm_params:
+  #     model: openai/gpt-image-2.6-sunburst
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-image-2.6-flare
+  #   litellm_params:
+  #     model: openai/gpt-image-2.6-flare
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-audio-1.5
+  #   litellm_params:
+  #     model: openai/gpt-audio-1.5
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-4o-mini-tts
+  #   litellm_params:
+  #     model: openai/gpt-4o-mini-tts
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-transcribe
+  #   litellm_params:
+  #     model: openai/gpt-transcribe
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-realtime-2.1
+  #   litellm_params:
+  #     model: openai/gpt-realtime-2.1
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-live-transcribe
+  #   litellm_params:
+  #     model: openai/gpt-live-transcribe
+  #     api_key: os.environ/OPENAI_API_KEY
+  # - model_name: gpt-realtime-translate
+  #   litellm_params:
+  #     model: openai/gpt-realtime-translate
+  #     api_key: os.environ/OPENAI_API_KEY
+
   # OpenAI-compatible endpoint with custom base URL
   # Use api_base to point at any OpenAI-compatible service (Azure, vLLM, LM Studio, etc.)
   # api_base supports os.environ/ expansion just like api_key.

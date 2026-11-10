@@ -6,8 +6,9 @@ require (
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/getkin/kin-openapi v0.128.0
-	github.com/google/uuid v1.6.0
 	github.com/go-chi/chi/v5 v5.2.4
+	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/rs/zerolog v1.34.0
 	go.opentelemetry.io/otel v1.46.0

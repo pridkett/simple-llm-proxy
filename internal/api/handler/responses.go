@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
@@ -96,6 +97,12 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		var respStream provider.ResponsesStream
 		result := r.Route(ctx, respReq.Model, stickyKey, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
 			ctx := acc.attemptCtx
+			for _, tool := range respReq.Tools {
+				if tool.Type == "image_generation" {
+					accounting.SkipEstimate(ctx, "local pricing does not cover the image generation tool")
+					break
+				}
+			}
 			rp, ok := d.Provider.(provider.ResponsesProvider)
 			if !ok {
 				operation.failedAttempt(d, errNotResponsesProvider)

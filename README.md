@@ -341,6 +341,11 @@ model_list:
 | POST | `/v1/chat/completions` | Chat completions (streaming supported) |
 | POST | `/v1/messages` | Anthropic-compatible Messages to any configured chat model (streaming supported) |
 | POST | `/v1/embeddings` | Generate embeddings (compatible providers) |
+| POST | `/v1/responses` | OpenAI Responses, including the image generation tool |
+| POST | `/v1/images/generations`, `/v1/images/edits` | OpenAI image generation and editing |
+| POST | `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech, file transcription, and file translation |
+| GET | `/v1/realtime`, `/v1/realtime/translations` | OpenAI Realtime WebSocket upgrade |
+| POST | `/v1/realtime/calls`, `/v1/realtime/client_secrets` | OpenAI WebRTC setup for the proxy master key |
 
 ### Authentication
 
@@ -349,6 +354,32 @@ All `/v1/*` endpoints accept authentication via bearer token. `/v1/messages` als
 ```bash
 curl -H "Authorization: Bearer your-app-key" http://localhost:8080/v1/models
 ```
+
+### OpenAI images, audio, and Realtime
+
+Configure native OpenAI aliases in `model_list` with an OpenAI API key. The
+[example config](config.yaml.example) includes media and Realtime aliases. Use
+the alias in `model` for Images, Audio, and Chat Completions. Dedicated image
+edits and file transcription accept multipart uploads. Speech can return binary
+audio, and upstream SSE is forwarded as it arrives.
+
+For the Responses image tool, use a supported OpenAI chat model alias as the
+top-level `model`. Set the tool's model to its OpenAI ID, for example
+`"tools":[{"type":"image_generation","model":"gpt-image-2.6-sunburst"}]`.
+
+Open a WebSocket with a proxy bearer key and `?model=<alias>`. Use
+`/v1/realtime?intent=transcription&model=<alias>` for live transcription and
+`/v1/realtime/translations?model=<alias>` for live translation. The proxy uses
+the selected deployment for the lifetime of the socket. WebRTC setup uses the
+master key from a trusted backend. Set `session.model` to the alias in the
+JSON client-secret request or the multipart call request, where `sdp` holds
+the offer. The media flows directly between the peer and OpenAI.
+
+Realtime sessions require a key and pool without spend caps. WebSocket
+admission counts once against request limits, and reported token totals are
+recorded when the socket closes. Use `X-LLM-Accounting-ID` to retrieve
+accounting after native media requests. The proxy records cost as unknown
+when neither upstream cost nor applicable local rates are available.
 
 ### Streaming
 
