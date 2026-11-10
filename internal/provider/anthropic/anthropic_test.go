@@ -1,9 +1,75 @@
 package anthropic
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/model"
+	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
+
+func TestAnthropicExtraHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stream bool
+	}{
+		{name: "non-streaming"},
+		{name: "streaming", stream: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for name, want := range map[string]string{
+					"User-Agent":        "example-client/1.0",
+					"x-api-key":         "test-key",
+					"anthropic-version": anthropicVersion,
+					"Content-Type":      "application/json",
+				} {
+					if got := r.Header.Get(name); got != want {
+						t.Errorf("%s = %q, want %q", name, got, want)
+					}
+				}
+				if tc.stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+					io.WriteString(w, "data: {\"type\":\"message_stop\"}\n\n")
+					return
+				}
+				io.WriteString(w, `{}`)
+			}))
+			defer server.Close()
+
+			p := New(provider.ProviderOptions{
+				APIKey:  "test-key",
+				APIBase: server.URL,
+				ExtraHeaders: map[string]string{
+					"user-agent":        "example-client/1.0",
+					"X-Api-Key":         "override-key",
+					"Anthropic-Version": "override-version",
+					"content-type":      "text/plain",
+				},
+			})
+			req := &model.ChatCompletionRequest{
+				Model:    "test",
+				Messages: []model.Message{{Role: "user", Content: "Hello"}},
+			}
+			if !tc.stream {
+				if _, err := p.ChatCompletion(t.Context(), req); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			stream, err := p.ChatCompletionStream(t.Context(), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			if _, err := stream.Recv(); err != io.EOF {
+				t.Errorf("expected io.EOF, got %v", err)
+			}
+		})
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Phase 13 Plan 03 — Anthropic cache token translation tests (GREEN)

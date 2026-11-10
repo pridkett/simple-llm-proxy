@@ -433,12 +433,18 @@ func TestTranslateGeminiResponseSAFETYEmptyParts(t *testing.T) {
 	}
 }
 
-func TestChatCompletionRequestURL(t *testing.T) {
+func TestChatCompletionRequestURLAndHeaders(t *testing.T) {
 	var receivedURL string
 	var receivedAPIKey string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedURL = r.URL.Path
 		receivedAPIKey = r.Header.Get("x-goog-api-key")
+		if got := r.UserAgent(); got != "example-client/1.0" {
+			t.Errorf("User-Agent = %q, want example-client/1.0", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", got)
+		}
 		resp := geminiResponse{
 			Candidates: []geminiCandidate{
 				{
@@ -462,6 +468,11 @@ func TestChatCompletionRequestURL(t *testing.T) {
 	p := New(provider.ProviderOptions{
 		APIKey:  "test-api-key-123",
 		APIBase: server.URL,
+		ExtraHeaders: map[string]string{
+			"User-Agent":     "example-client/1.0",
+			"X-Goog-Api-Key": "override-key",
+			"content-type":   "text/plain",
+		},
 	})
 
 	_, err := p.ChatCompletion(context.Background(), &model.ChatCompletionRequest{
@@ -546,12 +557,18 @@ func TestNewProviderSafetySettings(t *testing.T) {
 
 // --- Streaming Tests ---
 
-func TestChatCompletionStreamURL(t *testing.T) {
+func TestChatCompletionStreamURLAndHeaders(t *testing.T) {
 	var receivedURL string
 	var receivedAPIKey string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedURL = r.URL.RequestURI()
 		receivedAPIKey = r.Header.Get("x-goog-api-key")
+		if got := r.UserAgent(); got != "example-client/1.0" {
+			t.Errorf("User-Agent = %q, want example-client/1.0", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", got)
+		}
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			t.Fatal("expected flusher")
@@ -568,6 +585,11 @@ func TestChatCompletionStreamURL(t *testing.T) {
 	p := New(provider.ProviderOptions{
 		APIKey:  "stream-key-456",
 		APIBase: server.URL,
+		ExtraHeaders: map[string]string{
+			"User-Agent":     "example-client/1.0",
+			"X-Goog-Api-Key": "override-key",
+			"content-type":   "text/plain",
+		},
 	})
 
 	stream, err := p.ChatCompletionStream(context.Background(), &model.ChatCompletionRequest{

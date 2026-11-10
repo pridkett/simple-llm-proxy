@@ -119,6 +119,14 @@ server-wide from the end of request headers through the last response write,
 including streamed responses. Restart the proxy after changing it. Clients and
 reverse proxies can enforce shorter deadlines of their own.
 
+### Upstream request headers
+
+Set `litellm_params.extra_headers` on a model entry to send headers such as
+`User-Agent` to an upstream gateway. Anthropic and Gemini apply these headers to
+both streaming and non-streaming requests. Their provider-set headers take
+precedence, including `Content-Type`, Anthropic's `x-api-key` and
+`anthropic-version`, and Gemini's `x-goog-api-key`.
+
 ### Environment Variable Expansion
 
 Use `os.environ/VAR_NAME` syntax to reference environment variables:

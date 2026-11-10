@@ -23,9 +23,10 @@ const (
 
 // Provider implements the Anthropic provider.
 type Provider struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	apiKey       string
+	baseURL      string
+	client       *http.Client
+	extraHeaders map[string]string
 }
 
 // New creates a new Anthropic provider.
@@ -35,9 +36,10 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		baseURL = strings.TrimSuffix(opts.APIBase, "/")
 	}
 	return &Provider{
-		apiKey:  opts.APIKey,
-		baseURL: baseURL,
-		client:  &http.Client{},
+		apiKey:       opts.APIKey,
+		baseURL:      baseURL,
+		client:       &http.Client{},
+		extraHeaders: opts.ExtraHeaders,
 	}
 }
 
@@ -148,6 +150,9 @@ func (p *Provider) ChatCompletion(ctx context.Context, req *model.ChatCompletion
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
+	for name, value := range p.extraHeaders {
+		httpReq.Header.Set(name, value)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", p.apiKey)
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
@@ -193,6 +198,9 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *model.ChatComp
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
+	for name, value := range p.extraHeaders {
+		httpReq.Header.Set(name, value)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", p.apiKey)
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
