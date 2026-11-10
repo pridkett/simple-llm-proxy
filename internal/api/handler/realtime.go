@@ -171,17 +171,21 @@ func writeRealtime(conn *websocket.Conn, kind int, data []byte) error {
 var errRealtimeEvent = errors.New("invalid Realtime event or attempt to change the routed model")
 
 func realtimeClientEvent(data []byte, alias, actual string, transcribe bool) ([]byte, error) {
-	var header struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(data, &header); err != nil || header.Type == "" {
+	var event map[string]json.RawMessage
+	var eventType string
+	if json.Unmarshal(data, &event) != nil || json.Unmarshal(event["type"], &eventType) != nil || eventType == "" {
 		return nil, errRealtimeEvent
 	}
-	if header.Type != "session.update" {
-		return data, nil
+	// Reject case variants and emit one type field, so the proxy and the
+	// upstream agree on the event type used to enforce model pinning.
+	for field := range event {
+		if field != "type" && strings.EqualFold(field, "type") {
+			return nil, errRealtimeEvent
+		}
 	}
-	var event map[string]json.RawMessage
-	_ = json.Unmarshal(data, &event)
+	if eventType != "session.update" {
+		return json.Marshal(event)
+	}
 	session, err := mediaSession(event["session"])
 	if err != nil {
 		return nil, errRealtimeEvent

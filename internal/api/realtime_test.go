@@ -52,7 +52,7 @@ func TestOpenAIRealtimeWebSocket(t *testing.T) {
 					return
 				}
 				_, audio, err := conn.ReadMessage()
-				if err != nil || string(audio) != `{"type":"input_audio_buffer.append","audio":"eA=="}` {
+				if err != nil || string(audio) != `{"audio":"eA==","type":"input_audio_buffer.append"}` {
 					t.Errorf("upstream audio: %s %v", audio, err)
 					return
 				}
@@ -144,20 +144,25 @@ func TestOpenAIRealtimeRejectsUnscopedAccess(t *testing.T) {
 			t.Errorf("%s: response %v error %v, want %d", tc.query, resp, err, tc.status)
 		}
 	}
-	conn, _, err := dialMedia(t, f, "/v1/realtime?model=openai", "master-only")
-	if err != nil {
-		t.Fatal(err)
+	for _, event := range []string{
+		`{"type":"session.update","session":{"model":"unauthorized"}}`,
+		`{"type":"session.update","TYPE":"response.create","session":{"model":"unauthorized"}}`,
+	} {
+		conn, _, err := dialMedia(t, f, "/v1/realtime?model=openai", "master-only")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(event)); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err = conn.ReadMessage()
+		if !websocket.IsCloseError(err, websocket.ClosePolicyViolation) {
+			t.Fatal("expected policy violation", err)
+		}
 	}
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	event := map[string]any{"type": "session.update", "session": map[string]string{"model": "unauthorized"}}
-	if err := conn.WriteJSON(event); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = conn.ReadMessage()
-	if !websocket.IsCloseError(err, websocket.ClosePolicyViolation) {
-		t.Fatal("expected policy violation", err)
-	}
+
 }
 
 func dialMedia(t *testing.T, f *migrationFixture, path, key string) (*websocket.Conn, *http.Response, error) {
