@@ -25,6 +25,19 @@ type ChatCompletionRequest struct {
 	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
 	ToolChoice          any             `json:"tool_choice,omitempty"`
 	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
+	// AnthropicOptions is set by the Messages translator and read by the native Anthropic adapter.
+	AnthropicOptions *AnthropicOptions `json:"-"`
+}
+
+type AnthropicOptions struct {
+	Thinking *AnthropicThinking
+	Effort   string
+}
+
+type AnthropicThinking struct {
+	Type         string `json:"type"`
+	BudgetTokens *int   `json:"budget_tokens,omitempty"`
+	Display      string `json:"display,omitempty"`
 }
 
 // Message represents a chat message.

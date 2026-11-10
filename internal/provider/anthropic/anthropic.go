@@ -54,17 +54,18 @@ func (p *Provider) SupportsEmbeddings() bool {
 // Anthropic request/response types
 
 type anthropicRequest struct {
-	ToolChoice   map[string]any     `json:"tool_choice,omitempty"`
-	OutputConfig map[string]any     `json:"output_config,omitempty"`
-	Model        string             `json:"model"`
-	Messages     []anthropicMessage `json:"messages"`
-	MaxTokens    int                `json:"max_tokens"`
-	System       string             `json:"system,omitempty"`
-	Temperature  *float64           `json:"temperature,omitempty"`
-	TopP         *float64           `json:"top_p,omitempty"`
-	StopSeq      []string           `json:"stop_sequences,omitempty"`
-	Stream       bool               `json:"stream,omitempty"`
-	Tools        []anthropicTool    `json:"tools,omitempty"`
+	ToolChoice   map[string]any           `json:"tool_choice,omitempty"`
+	OutputConfig map[string]any           `json:"output_config,omitempty"`
+	Thinking     *model.AnthropicThinking `json:"thinking,omitempty"`
+	Model        string                   `json:"model"`
+	Messages     []anthropicMessage       `json:"messages"`
+	MaxTokens    int                      `json:"max_tokens"`
+	System       string                   `json:"system,omitempty"`
+	Temperature  *float64                 `json:"temperature,omitempty"`
+	TopP         *float64                 `json:"top_p,omitempty"`
+	StopSeq      []string                 `json:"stop_sequences,omitempty"`
+	Stream       bool                     `json:"stream,omitempty"`
+	Tools        []anthropicTool          `json:"tools,omitempty"`
 }
 
 type anthropicMessage struct {
@@ -295,7 +296,9 @@ func (p *Provider) translateRequest(req *model.ChatCompletionRequest) (*anthropi
 	}
 
 	// Extract system message and convert messages
+	hasTools := len(req.Tools) > 0
 	for _, msg := range req.Messages {
+		hasTools = hasTools || len(msg.ToolCalls) > 0 || msg.Role == "tool"
 		if msg.Role == "system" {
 			content := extractTextContent(msg.Content)
 			if anthReq.System != "" {
@@ -359,6 +362,19 @@ func (p *Provider) translateRequest(req *model.ChatCompletionRequest) (*anthropi
 			return nil, model.ErrBadRequest("Anthropic structured output requires response_format.json_schema.schema")
 		}
 		anthReq.OutputConfig = map[string]any{"format": map[string]any{"type": "json_schema", "schema": schema.Schema}}
+	}
+
+	if options := req.AnthropicOptions; options != nil {
+		// Tool continuations need signed reasoning blocks, which the proxy cannot replay.
+		if !hasTools {
+			anthReq.Thinking = options.Thinking
+		}
+		if options.Effort != "" {
+			if anthReq.OutputConfig == nil {
+				anthReq.OutputConfig = map[string]any{}
+			}
+			anthReq.OutputConfig["effort"] = options.Effort
+		}
 	}
 
 	return anthReq, nil

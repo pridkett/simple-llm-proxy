@@ -90,7 +90,7 @@ func TestStreamErrorsAreNotSuccess(t *testing.T) {
 
 func TestStructuredOutputAndToolControls(t *testing.T) {
 	var req model.ChatCompletionRequest
-	data := `{"model":"test","messages":[{"role":"user","content":"hello"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"},"strict":true}}],"tool_choice":{"type":"function","function":{"name":"lookup"}},"parallel_tool_calls":false,"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{}}}}}`
+	data := `{"model":"test","messages":[{"role":"user","content":"hello"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"},"strict":true}}],"tool_choice":{"type":"function","function":{"name":"lookup"}},"parallel_tool_calls":false,"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{}}}},"thinking":{"type":"adaptive"},"output_config":{"effort":"low"}}`
 	if err := json.Unmarshal([]byte(data), &req); err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +104,9 @@ func TestStructuredOutputAndToolControls(t *testing.T) {
 	}
 	if got.Tools[0].Strict == nil || !*got.Tools[0].Strict || got.OutputConfig["format"] == nil {
 		t.Fatal("structured settings lost")
+	}
+	if got.Thinking != nil || got.OutputConfig["effort"] != nil {
+		t.Fatal("Messages thinking controls forwarded for a Chat Completions request")
 	}
 	for _, choice := range []string{"auto", "none", "required"} {
 		req.ToolChoice = choice
@@ -121,5 +124,32 @@ func TestStructuredOutputAndToolControls(t *testing.T) {
 	req.ResponseFormat = &model.ResponseFormat{Type: "json_object"}
 	if _, err := p.translateRequest(&req); err == nil {
 		t.Fatal("unsupported format silently dropped")
+	}
+}
+
+func TestThinkingIsOmittedWhenToolsAreAvailableOrInHistory(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		tools    []model.Tool
+		messages []model.Message
+	}{
+		{name: "available tool", tools: []model.Tool{{Type: "function", Function: model.FunctionDef{Name: "lookup"}}}},
+		{name: "assistant tool call", messages: []model.Message{{Role: "assistant", ToolCalls: []model.ToolCall{{ID: "call-a"}}}}},
+		{name: "user tool result", messages: []model.Message{{Role: "tool", ToolCallID: "call-a", Content: "result"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := &model.ChatCompletionRequest{
+				Messages:         test.messages,
+				Tools:            test.tools,
+				AnthropicOptions: &model.AnthropicOptions{Thinking: &model.AnthropicThinking{Type: "adaptive"}, Effort: "low"},
+			}
+			got, err := (&Provider{}).translateRequest(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Thinking != nil || got.OutputConfig["effort"] != "low" {
+				t.Fatalf("unexpected tool-turn options: %+v", got)
+			}
+		})
 	}
 }

@@ -120,9 +120,21 @@ func (r *Request) ChatRequest() (*model.ChatCompletionRequest, error) {
 			return nil, fmt.Errorf("stop_sequences must contain nonempty strings")
 		}
 	}
-	// Thinking, OutputConfig, and per-tool EagerInputStreaming are accepted
-	// for client compatibility and omitted from the provider request.
 	chat := &model.ChatCompletionRequest{Model: r.Model, MaxTokens: &r.MaxTokens, Stream: r.Stream, Temperature: r.Temperature, TopP: r.TopP, Stop: r.StopSequences}
+	// Binding controls apply to signed thinking history, which this translator discards.
+	var options model.AnthropicOptions
+	if r.Thinking != nil {
+		options.Thinking = &model.AnthropicThinking{Type: r.Thinking.Type, BudgetTokens: r.Thinking.BudgetTokens, Display: r.Thinking.Display}
+	}
+	var output struct {
+		Effort string `json:"effort"`
+	}
+	if len(r.OutputConfig) > 0 && json.Unmarshal(r.OutputConfig, &output) == nil {
+		options.Effort = output.Effort
+	}
+	if options.Thinking != nil || options.Effort != "" {
+		chat.AnthropicOptions = &options
+	}
 	if r.Stream {
 		chat.StreamOptions = &model.StreamOptions{IncludeUsage: true}
 	}

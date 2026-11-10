@@ -456,15 +456,21 @@ base64/URL user images, client tool schemas, assistant `tool_use`, user
 `stop_sequences`, and `metadata.user_id`. Tool errors are conveyed to the model
 with a `Tool error:` prefix. Vision and tool use require a capable target model.
 
-This endpoint implements the portable Messages subset. Unsupported fields and
-content types return HTTP 400, including extended thinking, `top_k`, server
-tools, documents, and beta-only options. Token counting, batches, and files
-endpoints are not implemented. Cache-control hints are accepted but do not
-guarantee provider caching. A matched `stop_sequence` is returned only when the
-upstream reports it; other providers may report `end_turn` instead. Usage comes
-from the upstream; initial streaming usage may be zero until final counts arrive.
-If the upstream omits usage, response counts are zero and stored usage remains
-unknown. See [ADR 014](adr/014-anthropic-messages-api.md) for the design and plan.
+Native Anthropic deployments receive `output_config.effort` and, when the
+request contains neither tools nor tool history, `thinking` mode, budget, and
+display settings. Claude model support varies. The proxy skips assistant
+thinking history and returns text and tool calls. It accepts
+`thinking.block_binding` and `eager_input_streaming` for client compatibility.
+
+Unsupported fields and content types return HTTP 400, including `top_k`,
+server tools, documents, and mid-conversation tool changes. Token counting,
+batches, and files endpoints are not implemented. Cache-control hints are
+accepted but do not guarantee provider caching. A matched `stop_sequence` is
+returned only when the upstream reports it. Other providers may report
+`end_turn` instead. Usage comes from the upstream, so initial streaming usage
+may be zero until final counts arrive. If the upstream omits usage, response
+counts are zero and stored usage remains unknown. See
+[ADR 014](adr/014-anthropic-messages-api.md) for the design and plan.
 
 ### OpenAPI Specification
 
