@@ -77,6 +77,14 @@ func Parse(data []byte) (*Config, error) {
 		if v, ok := gs["port"].(int); ok {
 			cfg.GeneralSettings.Port = v
 		}
+		if v, exists := gs["write_timeout"]; exists {
+			value, _ := v.(string)
+			timeout, err := time.ParseDuration(value)
+			if err != nil || timeout <= 0 {
+				return nil, fmt.Errorf("general_settings.write_timeout must be a positive duration such as 5m")
+			}
+			cfg.GeneralSettings.WriteTimeout = timeout
+		}
 		if v, ok := gs["body_snippet_limit"].(int); ok {
 			cfg.GeneralSettings.BodySnippetLimit = v
 		}

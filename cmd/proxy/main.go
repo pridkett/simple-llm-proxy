@@ -275,7 +275,7 @@ func main() {
 		Addr:         addr,
 		Handler:      httpRouter,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second, // Long timeout for streaming
+		WriteTimeout: cfg.GeneralSettings.WriteTimeout,
 		IdleTimeout:  120 * time.Second,
 	}
 

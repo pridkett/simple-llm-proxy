@@ -76,6 +76,9 @@ general_settings:
 	if cfg.GeneralSettings.Port != 9090 {
 		t.Errorf("Expected port 9090, got %d", cfg.GeneralSettings.Port)
 	}
+	if cfg.GeneralSettings.WriteTimeout != 2*time.Minute {
+		t.Errorf("default WriteTimeout: got %v, want 2m", cfg.GeneralSettings.WriteTimeout)
+	}
 }
 
 func TestParseEnvExpansion(t *testing.T) {
@@ -525,6 +528,7 @@ general_settings:
   master_key: test-key
   database_url: ./test.db
   port: 8080
+  write_timeout: 5m
   body_snippet_limit: 100
   log_retention_days: 7
 `
@@ -532,11 +536,25 @@ general_settings:
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+	if cfg.GeneralSettings.WriteTimeout != 5*time.Minute {
+		t.Errorf("WriteTimeout: got %v, want 5m", cfg.GeneralSettings.WriteTimeout)
+	}
 	if cfg.GeneralSettings.BodySnippetLimit != 100 {
 		t.Errorf("BodySnippetLimit: got %d, want 100", cfg.GeneralSettings.BodySnippetLimit)
 	}
 	if cfg.GeneralSettings.LogRetentionDays != 7 {
 		t.Errorf("LogRetentionDays: got %d, want 7", cfg.GeneralSettings.LogRetentionDays)
+	}
+}
+
+func TestRejectInvalidWriteTimeout(t *testing.T) {
+	for _, value := range []string{"120", "5minutes", "0s", "-5m", "null"} {
+		t.Run(value, func(t *testing.T) {
+			_, err := Parse([]byte("general_settings:\n  write_timeout: " + value))
+			if err == nil {
+				t.Fatal("invalid write_timeout accepted")
+			}
+		})
 	}
 }
 

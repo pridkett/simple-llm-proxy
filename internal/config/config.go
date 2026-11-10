@@ -114,6 +114,8 @@ type GeneralSettings struct {
 	MasterKey   string `yaml:"master_key"`
 	DatabaseURL string `yaml:"database_url"`
 	Port        int    `yaml:"port"`
+	// WriteTimeout bounds response writes, including streamed responses. Default: 2m.
+	WriteTimeout time.Duration `yaml:"write_timeout"`
 	// BodySnippetLimit is the maximum number of bytes captured from request/response bodies
 	// for observability snippets. 0 disables body capture entirely. Default: 500.
 	BodySnippetLimit int `yaml:"body_snippet_limit"`
@@ -163,6 +165,7 @@ func Defaults() *Config {
 		GeneralSettings: GeneralSettings{
 			Port:             8080,
 			DatabaseURL:      "./proxy.db",
+			WriteTimeout:     2 * time.Minute,
 			BodySnippetLimit: 500,
 			LogRetentionDays: 30,
 		},
