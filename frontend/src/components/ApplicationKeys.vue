@@ -72,6 +72,16 @@
             <th
               class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
             >
+              Created
+            </th>
+            <th
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
+            >
+              Expires
+            </th>
+            <th
+              class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"
+            >
               Status
             </th>
             <th
@@ -84,7 +94,7 @@
         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="keys.length === 0">
             <td
-              colspan="6"
+              colspan="8"
               class="px-4 py-8 text-center text-sm text-gray-400 italic"
             >
               No keys yet.
@@ -144,6 +154,12 @@
                 ${{ (keySpend[key.id] ?? 0).toFixed(4) }} /
                 {{ key.max_budget != null ? `$${key.max_budget.toFixed(2)}` : '∞' }}
               </span>
+            </td>
+            <td class="px-4 py-3 text-sm whitespace-nowrap" :title="formatDateTime(key.created_at)">
+              {{ formatDate(key.created_at) }}
+            </td>
+            <td class="px-4 py-3 text-sm whitespace-nowrap">
+              {{ key.expires_at ? formatDateTime(key.expires_at) : 'Never' }}
             </td>
             <td class="px-4 py-3 text-sm">
               <span
@@ -341,6 +357,8 @@
           />
         </div>
 
+        <KeyExpirationInput id="key-expiration" v-model="form.expiresAt" />
+
         <details :open="!!editingKey">
           <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-300">
             Models and limits
@@ -493,6 +511,8 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import { useSession } from '../composables/useSession.js'
+import KeyExpirationInput from './KeyExpirationInput.vue'
+import { formatDate, formatDateTime, keyExpiration, toLocalDateTime } from '../utils/dates.js'
 
 const { currentUser } = useSession()
 const route = useRoute()
@@ -519,15 +539,17 @@ const submitting = ref(false)
 const formError = ref(null)
 const editingKey = ref(null)
 const formRef = ref(null)
-const form = ref({
+const blankForm = {
   name: '',
   allowedModels: '',
   allowDecisions: false,
   maxRPM: '',
   maxRPD: '',
   maxBudget: '',
-  softBudget: ''
-})
+  softBudget: '',
+  expiresAt: ''
+}
+const form = ref({ ...blankForm })
 
 // Model autocomplete
 const availableModels = ref([])
@@ -622,7 +644,8 @@ function fillKeyForm(key) {
     maxRPM: key.max_rpm ?? '',
     maxRPD: key.max_rpd ?? '',
     maxBudget: key.max_budget ?? '',
-    softBudget: key.soft_budget ?? ''
+    softBudget: key.soft_budget ?? '',
+    expiresAt: toLocalDateTime(key.expires_at)
   }
   revokeConfirm.value = null
   formError.value = null
@@ -633,15 +656,7 @@ function fillKeyForm(key) {
 
 function cancelEdit() {
   editingKey.value = null
-  form.value = {
-    name: '',
-    allowedModels: '',
-  allowDecisions: false,
-    maxRPM: '',
-    maxRPD: '',
-    maxBudget: '',
-    softBudget: ''
-  }
+  form.value = { ...blankForm }
   formError.value = null
 }
 
@@ -710,6 +725,9 @@ function buildFormBody() {
     )
   ]
   const body = { name: form.value.name.trim(), allow_decisions: form.value.allowDecisions }
+  if (form.value.expiresAt !== toLocalDateTime(editingKey.value?.expires_at)) {
+    body.expires_at = keyExpiration(form.value.expiresAt)
+  }
   if (allowedModels.length > 0) body.allowed_models = allowedModels
   else body.allowed_models = []
   const rpm = parseOptionalInt(form.value.maxRPM)
@@ -738,6 +756,7 @@ async function handleSubmitForm() {
       await api.updateAPIKey(editingKey.value.id, buildFormBody())
       cancelEdit()
       if (selectedApp.value) await loadKeys(selectedApp.value.id)
+      emit('changed')
       emit('busy', false)
       await router.push(applicationPath.value)
     } else {
@@ -751,15 +770,7 @@ async function handleSubmitForm() {
       emit('created', result.key)
       await loadKeys(selectedApp.value.id)
       emit('changed')
-      form.value = {
-        name: '',
-        allowedModels: '',
-  allowDecisions: false,
-        maxRPM: '',
-        maxRPD: '',
-        maxBudget: '',
-        softBudget: ''
-      }
+      form.value = { ...blankForm }
     }
   } catch (e) {
     formError.value = e.message

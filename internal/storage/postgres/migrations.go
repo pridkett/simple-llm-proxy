@@ -39,6 +39,7 @@ var migrations = []string{baseline, `
 	// Spend snapshots were written for every key every 30s even when idle and
 	// are never read back; keep only the latest per key.
 	`DELETE FROM usage_logs WHERE model = '_flush' AND id NOT IN (SELECT MAX(id) FROM usage_logs WHERE model = '_flush' GROUP BY api_key_id);`,
+	`ALTER TABLE api_keys ADD COLUMN expires_at_ms BIGINT;`,
 }
 
 func (s *Storage) migrate(ctx context.Context) error {

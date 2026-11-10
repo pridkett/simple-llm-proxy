@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -43,7 +45,7 @@ func computeSHA256Hex(token string) string {
 }
 
 // ptr helpers
-func intPtr(v int) *int          { return &v }
+func intPtr(v int) *int             { return &v }
 func float64Ptr(v float64) *float64 { return &v }
 
 // newTestComponents creates test-ready keystore dependencies with the given storage data.
@@ -240,4 +242,35 @@ func TestKeyAuth_APIKeyFromContext_NilWhenAbsent(t *testing.T) {
 	if ck != nil {
 		t.Error("expected nil from empty context, got non-nil")
 	}
+}
+
+func TestKeyAuthRejectsCachedKeyAtExpiration(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const token = "sk-app-expiring"
+		hash := computeSHA256Hex(token)
+		expiry := time.Now().Add(time.Second)
+		keys := map[string]*storage.APIKey{hash: {ID: 1, IsActive: true, ExpiresAt: &expiry}}
+		store, cache, rl, sa := newTestComponents(keys, nil)
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		model := KeyAuth("", store, cache, rl, sa)(next)
+		accounting := KeyAuthReadOnly("", store, cache)(next)
+		check := func(handler http.Handler, want int) {
+			t.Helper()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != want {
+				t.Fatalf("want %d, got %d %s", want, w.Code, w.Body)
+			}
+		}
+		check(model, http.StatusOK)
+		delete(keys, hash) // Both authorization paths now rely on the warm cache.
+		check(accounting, http.StatusOK)
+		time.Sleep(time.Until(expiry))
+		check(model, http.StatusUnauthorized)
+		check(accounting, http.StatusUnauthorized)
+	})
 }

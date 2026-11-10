@@ -78,11 +78,16 @@ func TestGatewayCredentialsAndSessions(t *testing.T) {
 	appToken := "sk-app-" + strings.Repeat("a", 48)
 	appKey, err := store.CreateAPIKey(ctx, app.ID, "key", "aaaaaaaa", digest(appToken), nil, nil, nil, nil, nil)
 	must(t, err)
+	expiredToken := "sk-app-" + strings.Repeat("b", 48)
+	past := time.Now().Add(-time.Hour)
+	expiredKey, err := store.CreateAPIKey(ctx, app.ID, "expired", "bbbbbbbb", digest(expiredToken),
+		nil, nil, nil, nil, nil, storage.APIKeyOptions{ExpiresAt: &past})
+	must(t, err)
 	cfg := config.Defaults()
 	cfg.MCP.CredentialKey[0] = 123
 	cfg.MCP.Servers = map[string]config.MCPServer{
 		"personal": {URL: upstream.URL + "/personal", Scope: "user", Header: "Authorization", AllowedUserIDs: []string{"alice", "bob"}},
-		"shared":   {URL: upstream.URL + "/shared", Scope: "shared", Header: "X-Api-Key", SharedKey: "shared-secret", AllowedAppKeyIDs: []int64{appKey.ID}},
+		"shared":   {URL: upstream.URL + "/shared", Scope: "shared", Header: "X-Api-Key", SharedKey: "shared-secret", AllowedAppKeyIDs: []int64{appKey.ID, expiredKey.ID}},
 		"redirect": {URL: upstream.URL + "/redirect", Scope: "none", AllowedAppKeyIDs: []int64{appKey.ID}},
 	}
 
@@ -185,6 +190,7 @@ func TestGatewayCredentialsAndSessions(t *testing.T) {
 	check(do("POST", "/mcp/personal", replacement, message, nil), 401)
 	check(do("DELETE", personal, "", "", aliceCookie), 204)
 	check(do("POST", personal+"/token", "", "", aliceCookie), 409)
+	check(do("POST", "/mcp/shared", expiredToken, message, nil), 401)
 	must(t, store.RevokeAPIKey(ctx, appKey.ID))
 	check(do("POST", "/mcp/shared", appToken, message, nil), 401)
 }

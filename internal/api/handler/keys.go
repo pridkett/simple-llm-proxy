@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
@@ -20,6 +22,30 @@ import (
 type keyListItem struct {
 	*storage.APIKey
 	AllowedModels []string `json:"allowed_models"`
+}
+
+type keySettings struct {
+	Name           string          `json:"name"`
+	AllowDecisions *bool           `json:"allow_decisions"`
+	AllowedModels  []string        `json:"allowed_models"`
+	MaxRPM         *int            `json:"max_rpm"`
+	MaxRPD         *int            `json:"max_rpd"`
+	MaxBudget      *float64        `json:"max_budget"`
+	SoftBudget     *float64        `json:"soft_budget"`
+	ExpiresAt      json.RawMessage `json:"expires_at"`
+}
+
+func (body keySettings) options() (storage.APIKeyOptions, *model.ProxyError) {
+	opts := storage.APIKeyOptions{AllowDecisions: body.AllowDecisions, SetExpiration: body.ExpiresAt != nil}
+	if opts.SetExpiration {
+		if err := json.Unmarshal(body.ExpiresAt, &opts.ExpiresAt); err != nil {
+			return opts, model.ErrBadRequest("expires_at must be an RFC3339 date and time or null")
+		}
+		if opts.ExpiresAt != nil && !opts.ExpiresAt.Truncate(time.Millisecond).After(time.Now()) {
+			return opts, model.ErrBadRequest("expires_at must be in the future")
+		}
+	}
+	return opts, nil
 }
 
 // AdminListKeys handles GET /admin/applications/{id}/keys
@@ -66,17 +92,14 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		var body struct {
-			AllowDecisions *bool    `json:"allow_decisions"`
-			Name           string   `json:"name"`
-			AllowedModels  []string `json:"allowed_models"`
-			MaxRPM         *int     `json:"max_rpm"`
-			MaxRPD         *int     `json:"max_rpd"`
-			MaxBudget      *float64 `json:"max_budget"`
-			SoftBudget     *float64 `json:"soft_budget"`
-		}
+		var body keySettings
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 			model.WriteError(w, model.ErrBadRequest("name is required"))
+			return
+		}
+		opts, validationError := body.options()
+		if validationError != nil {
+			model.WriteError(w, validationError)
 			return
 		}
 
@@ -95,7 +118,7 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 		keyHash := hex.EncodeToString(hashBytes[:])
 
 		key, err := store.CreateAPIKey(r.Context(), appID, body.Name, keyPrefix, keyHash,
-			body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, body.AllowDecisions)
+			body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, opts)
 		if err != nil {
 			model.WriteError(w, model.ErrInternal("failed to create key"))
 			return
@@ -115,6 +138,7 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 			"is_active":       key.IsActive,
 			"allow_decisions": key.AllowDecisions,
 			"created_at":      key.CreatedAt,
+			"expires_at":      key.ExpiresAt,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -124,7 +148,7 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 }
 
 // AdminUpdateKey handles PATCH /admin/api-keys/{id}
-// Admin only. Updates the mutable fields of a key (name, limits, budget, allowed models).
+// Admin only. Updates the mutable fields of an active key, including its expiration.
 // Immediately invalidates the cache entry so changes take effect on the next request.
 func AdminUpdateKey(store storage.Storage, cache *keystore.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -138,20 +162,25 @@ func AdminUpdateKey(store storage.Storage, cache *keystore.Cache) http.HandlerFu
 			model.WriteError(w, model.ErrBadRequest("invalid key id"))
 			return
 		}
-		var body struct {
-			AllowDecisions *bool    `json:"allow_decisions"`
-			Name           string   `json:"name"`
-			AllowedModels  []string `json:"allowed_models"`
-			MaxRPM         *int     `json:"max_rpm"`
-			MaxRPD         *int     `json:"max_rpd"`
-			MaxBudget      *float64 `json:"max_budget"`
-			SoftBudget     *float64 `json:"soft_budget"`
-		}
+		var body keySettings
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 			model.WriteError(w, model.ErrBadRequest("name is required"))
 			return
 		}
-		if err := store.UpdateAPIKey(r.Context(), id, body.Name, body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, body.AllowDecisions); err != nil {
+		opts, validationError := body.options()
+		if validationError != nil {
+			model.WriteError(w, validationError)
+			return
+		}
+		if err := store.UpdateAPIKey(r.Context(), id, body.Name, body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, opts); err != nil {
+			if errors.Is(err, storage.ErrInactiveAPIKey) {
+				model.WriteError(w, &model.ProxyError{
+					StatusCode: http.StatusConflict,
+					Type:       "invalid_request_error",
+					Message:    "API key is revoked, expired, or no longer exists",
+				})
+				return
+			}
 			model.WriteError(w, model.ErrInternal("failed to update key"))
 			return
 		}

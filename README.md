@@ -495,7 +495,12 @@ including changes while the page is open.
 Use **Teams** to create a team by name, then manage its applications, API keys,
 and members in one workspace. Creating an application automatically creates a
 **Default** API key and displays it once for copying. Keys allow all models with
-no rate or budget limits unless you set them in key settings.
+no rate or budget limits unless you set them in key settings. Administrators can
+set, change, or clear an active key’s expiration. The workspace displays dates
+in the browser’s time zone. At its deadline, a key is revoked and cannot be
+reactivated. The management API accepts a future RFC3339 `expires_at` with
+millisecond precision, or `null` to clear it. Omitting the field on an update
+keeps the current deadline.
 
 Breadcrumbs and shareable URLs preserve your location within a team. Existing
 `/#/applications` and `/#/keys?team_id=...&app_id=...` links redirect into the

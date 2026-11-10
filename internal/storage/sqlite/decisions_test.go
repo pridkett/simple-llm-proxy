@@ -37,7 +37,7 @@ func TestDecisionKeyMigrationAndAtomicPermissions(t *testing.T) {
 		t.Fatalf("legacy key unexpectedly enabled: %+v %v", old, err)
 	}
 	permission := true
-	if err := s.UpdateAPIKey(ctx, key.ID, "enabled", nil, nil, nil, nil, []string{"jev"}, &permission); err != nil {
+	if err := s.UpdateAPIKey(ctx, key.ID, "enabled", nil, nil, nil, nil, []string{"jev"}, storage.APIKeyOptions{AllowDecisions: &permission}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.UpdateAPIKey(ctx, key.ID, "renamed", nil, nil, nil, nil, []string{"luna"}); err != nil {
@@ -50,7 +50,7 @@ func TestDecisionKeyMigrationAndAtomicPermissions(t *testing.T) {
 	permission = false
 	// A duplicate allowlist makes the transaction fail. Permission and name must
 	// roll back with the allowlist, not silently disable or broaden the key.
-	if err := s.UpdateAPIKey(ctx, key.ID, "bad", nil, nil, nil, nil, []string{"dup", "dup"}, &permission); err == nil {
+	if err := s.UpdateAPIKey(ctx, key.ID, "bad", nil, nil, nil, nil, []string{"dup", "dup"}, storage.APIKeyOptions{AllowDecisions: &permission}); err == nil {
 		t.Fatal("expected allowlist conflict")
 	}
 	got, err := s.GetAPIKeyByID(ctx, key.ID)

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // TestMigrate verifies that migrate() creates all expected tables and indexes.
@@ -98,12 +99,42 @@ func TestMigrationIdempotency(t *testing.T) {
 		t.Fatalf("second migrate() call failed (not idempotent): %v", err)
 	}
 
-	// Include the MCP connection migration.
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 67 {
-		t.Errorf("expected 67 rows in schema_migrations, got %d", count)
+	if count != 68 {
+		t.Errorf("expected 68 rows in schema_migrations, got %d", count)
+	}
+}
+
+func TestKeyExpirationMigrationPreservesExistingKeys(t *testing.T) {
+	s := newTestStorage(t)
+	ctx := context.Background()
+	team, err := s.CreateTeam(ctx, "Legacy team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := s.CreateApplication(ctx, team.ID, "Legacy app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := s.CreateAPIKey(ctx, app.ID, "Legacy key", "prefix", "legacy-hash", nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE api_keys DROP COLUMN expires_at_ms;
+		DELETE FROM schema_migrations WHERE version = 68`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := s.GetAPIKeyByHash(ctx, key.KeyHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy == nil || !legacy.IsUsableAt(time.Now()) || legacy.ExpiresAt != nil || !legacy.CreatedAt.Equal(key.CreatedAt) {
+		t.Fatalf("migration changed legacy key: %+v", legacy)
 	}
 }
