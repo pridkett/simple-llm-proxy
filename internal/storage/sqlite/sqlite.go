@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -18,7 +20,7 @@ type Storage struct {
 
 // New creates a new SQLite storage.
 func New(dbPath string) (*Storage, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", withSQLiteTimeFormat(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
@@ -75,4 +77,20 @@ func (s *Storage) Close() error {
 // Used by the SCS session store to share the same database connection.
 func (s *Storage) DB() *sql.DB {
 	return s.db
+}
+
+// withSQLiteTimeFormat makes the driver store time.Time values as
+// "2006-01-02 15:04:05.999999999-07:00", which SQLite's date and time
+// functions understand. The driver's default is time.Time.String()
+// ("... +0000 UTC"), for which date(request_time) returns NULL. An explicit
+// _time_format in the DSN is left alone.
+func withSQLiteTimeFormat(dsn string) string {
+	path, query, hasQuery := strings.Cut(dsn, "?")
+	if hasQuery {
+		if values, err := url.ParseQuery(query); err == nil && values.Has("_time_format") {
+			return dsn
+		}
+		return path + "?" + query + "&_time_format=sqlite"
+	}
+	return dsn + "?_time_format=sqlite"
 }
