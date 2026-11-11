@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type OpenAIMedia struct {
+type Media struct {
 	Router   *router.Router
 	Store    storage.Storage
 	Spend    *keystore.SpendAccumulator
@@ -36,7 +36,7 @@ type OpenAIMedia struct {
 var errRealtimeBudget = errors.New("Realtime sessions require a pool without a spend cap")
 
 // HTTP serves the explicitly registered native media endpoints.
-func (h OpenAIMedia) HTTP(path string) http.HandlerFunc {
+func (h Media) HTTP(path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		realtime := strings.HasPrefix(path, "/realtime/")
 		if realtime && middleware.APIKeyFromContext(req.Context()) != nil {
@@ -58,48 +58,70 @@ func (h OpenAIMedia) HTTP(path string) http.HandlerFunc {
 		}
 
 		var response *http.Response
-		h.route(w, req, input.model, input.sessionID, realtime, func(ctx context.Context, p provider.MediaProvider, actual string) error {
-			body, contentType, err := input.open(actual)
+		h.route(w, req, input.model, input.sessionID, openAIMediaRoute(realtime), func(ctx context.Context, d *provider.Deployment) error {
+			body, contentType, err := input.open(d.ActualModel)
 			if err != nil {
 				return err
 			}
 			defer body.Close()
-			response, err = p.ForwardMedia(ctx, path, contentType, body, req.Header)
+			response, err = d.Provider.(provider.MediaProvider).ForwardMedia(ctx, path, contentType, body, req.Header)
 			return err
 		}, func(ctx context.Context, _ string) (int, bool, error) {
-			defer response.Body.Close()
-			for _, name := range []string{"Content-Type", "Content-Disposition", "Location", "OpenAI-Request-ID"} {
-				if value := response.Header.Get(name); value != "" {
-					w.Header().Set(name, value)
-				}
-			}
-			w.Header().Set("Cache-Control", "no-store")
-			contentType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
-			sse := contentType == "text/event-stream"
-			audio := strings.HasPrefix(contentType, "audio/") || contentType == "application/octet-stream"
-			var output io.Writer = w
-			if sse || audio {
-				w.Header().Set("X-Accel-Buffering", "no")
-				output = mediaFlushWriter{w}
-			}
-			w.WriteHeader(response.StatusCode)
-			if sse || audio {
-				_ = http.NewResponseController(w).Flush()
-			}
-			if sse {
-				return response.StatusCode, true, copyMediaEvents(ctx, output, response.Body)
-			}
-			if contentType == "application/json" {
-				return response.StatusCode, false, copyMediaJSON(ctx, output, response.Body)
-			}
-			_, err := io.Copy(output, response.Body)
-			return response.StatusCode, audio, err
+			return deliverMediaHTTP(ctx, w, response, "Location", "OpenAI-Request-ID")
 		})
 	}
 }
 
-func (h OpenAIMedia) route(w http.ResponseWriter, req *http.Request, alias, sessionID string, realtime bool,
-	attempt func(context.Context, provider.MediaProvider, string) error,
+func deliverMediaHTTP(ctx context.Context, w http.ResponseWriter, response *http.Response, extraHeaders ...string) (int, bool, error) {
+	defer response.Body.Close()
+	for _, name := range append([]string{"Content-Type", "Content-Disposition"}, extraHeaders...) {
+		if value := response.Header.Get(name); value != "" {
+			w.Header().Set(name, value)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	contentType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	sse := contentType == "text/event-stream"
+	audio := strings.HasPrefix(contentType, "audio/") || contentType == "application/octet-stream"
+	var output io.Writer = w
+	if sse || audio {
+		w.Header().Set("X-Accel-Buffering", "no")
+		output = mediaFlushWriter{w}
+	}
+	w.WriteHeader(response.StatusCode)
+	if sse || audio {
+		_ = http.NewResponseController(w).Flush()
+	}
+	if sse {
+		return response.StatusCode, true, copyMediaEvents(ctx, output, response.Body)
+	}
+	if contentType == "application/json" {
+		return response.StatusCode, false, copyMediaJSON(ctx, output, response.Body)
+	}
+	_, err := io.Copy(output, response.Body)
+	return response.StatusCode, audio, err
+}
+
+type mediaRoute struct {
+	providerName, operation       string
+	realtime, stopOnUpstreamError bool
+	eligible                      func(*provider.Deployment) bool
+}
+
+func openAIMediaRoute(realtime bool) mediaRoute {
+	return mediaRoute{
+		providerName: "openai",
+		operation:    "openai_media",
+		realtime:     realtime,
+		eligible: func(d *provider.Deployment) bool {
+			_, supported := d.Provider.(provider.MediaProvider)
+			return supported && d.Decision == nil
+		},
+	}
+}
+
+func (h Media) route(w http.ResponseWriter, req *http.Request, alias, sessionID string, route mediaRoute,
+	attempt func(context.Context, *provider.Deployment) error,
 	deliver func(context.Context, string) (int, bool, error),
 ) {
 	ctx := req.Context()
@@ -110,7 +132,7 @@ func (h OpenAIMedia) route(w http.ResponseWriter, req *http.Request, alias, sess
 			model.WriteError(w, model.ErrForbidden("model not allowed: "+alias))
 			return
 		}
-		if realtime && ck.Key.MaxBudget != nil {
+		if route.realtime && ck.Key.MaxBudget != nil {
 			model.WriteError(w, model.ErrForbidden("Realtime sessions require an API key without a spend cap"))
 			return
 		}
@@ -118,29 +140,29 @@ func (h OpenAIMedia) route(w http.ResponseWriter, req *http.Request, alias, sess
 		sticky = ck.Key.KeyHash
 	}
 
-	ctx, operation := beginOperation(ctx, h.Tracer, "openai_media", alias, realtime, sessionID)
+	ctx, operation := beginOperation(ctx, h.Tracer, route.operation, alias, route.realtime, sessionID)
 	defer operation.end()
 	ctx, acc := startAccounting(ctx, w, req, h.Store, h.Spend, h.CostMap, h.Router, alias, req.URL.Path, sessionID, keyID, true)
 	defer acc.close()
 	options := acc.options(1)
-	options.Eligible = func(d *provider.Deployment) bool {
-		_, supported := d.Provider.(provider.MediaProvider)
-		return supported && d.Decision == nil
-	}
+	options.Eligible = route.eligible
+	options.StopOnUpstreamError = route.stopOnUpstreamError
 	var pool string
 	before := options.BeforeAttempt
 	options.BeforeAttempt = func(d *provider.Deployment, name string) {
 		before(d, name)
 		pool = name
-		accounting.SkipEstimate(acc.attemptCtx, "local pricing does not cover this media operation")
+		if route.providerName == "openai" {
+			accounting.SkipEstimate(acc.attemptCtx, "local pricing does not cover this media operation")
+		}
 	}
 	result := h.Router.Route(ctx, alias, sticky, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
-		if realtime && h.Router.BudgetManager() != nil {
+		if route.realtime && h.Router.BudgetManager() != nil {
 			if _, capped := h.Router.BudgetManager().GetCap(pool); capped {
 				return nil, nil, provider.NewHTTPError("openai", http.StatusUnprocessableEntity, nil, nil, errRealtimeBudget)
 			}
 		}
-		err := attempt(acc.attemptCtx, d.Provider.(provider.MediaProvider), d.ActualModel)
+		err := attempt(acc.attemptCtx, d)
 		if err != nil {
 			operation.failedAttempt(d, err)
 		}
@@ -154,7 +176,11 @@ func (h OpenAIMedia) route(w http.ResponseWriter, req *http.Request, alias, sess
 		acc.streaming = false
 		acc.complete()
 		operation.fail(result.Error)
-		model.WriteError(w, mediaRouteError(result))
+		if route.stopOnUpstreamError && acc.attemptCtx != nil {
+			model.WriteError(w, model.ErrProviderError(route.providerName, result.Error))
+		} else {
+			model.WriteError(w, mediaRouteError(route.providerName, result))
+		}
 		return
 	}
 	acc.responseStatus, acc.streaming, acc.err = deliver(acc.attemptCtx, result.DeploymentUsed.ActualModel)
@@ -167,7 +193,7 @@ func (h OpenAIMedia) route(w http.ResponseWriter, req *http.Request, alias, sess
 	operation.finish(result, nil, cost, acc.hasCost())
 }
 
-func mediaRouteError(result *router.RouteResult) *model.ProxyError {
+func mediaRouteError(providerName string, result *router.RouteResult) *model.ProxyError {
 	if errors.Is(result.Error, errRealtimeBudget) {
 		return model.ErrForbidden(errRealtimeBudget.Error())
 	}
@@ -178,7 +204,7 @@ func mediaRouteError(result *router.RouteResult) *model.ProxyError {
 	if errors.As(result.Error, &proxyErr) {
 		return proxyErr
 	}
-	return model.ErrProviderError("openai", result.Error)
+	return model.ErrProviderError(providerName, result.Error)
 }
 
 type mediaFlushWriter struct{ http.ResponseWriter }

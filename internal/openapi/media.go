@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 )
 
 func addMediaPaths(paths *openapi3.Paths) {
@@ -52,6 +53,44 @@ func addMediaPaths(paths *openapi3.Paths) {
 		}
 		paths.Set(route.path, &openapi3.PathItem{Get: op})
 	}
+	addElevenLabsPaths(paths)
+}
+
+func addElevenLabsPaths(paths *openapi3.Paths) {
+	sound := openapi3.NewObjectSchema().
+		WithProperty("text", openapi3.NewStringSchema()).
+		WithProperty("duration_seconds", openapi3.NewFloat64Schema().WithMin(0.5).WithMax(30)).
+		WithProperty("loop", openapi3.NewBoolSchema()).
+		WithProperty("prompt_influence", openapi3.NewFloat64Schema().WithMin(0).WithMax(1)).
+		WithRequired([]string{"model", "text", "duration_seconds"})
+	music := openapi3.NewObjectSchema().
+		WithProperty("prompt", openapi3.NewStringSchema()).
+		WithProperty("music_length_ms", openapi3.NewIntegerSchema().WithMin(3000).WithMax(600000)).
+		WithProperty("force_instrumental", openapi3.NewBoolSchema()).
+		WithRequired([]string{"model", "prompt", "music_length_ms"})
+	for _, route := range []struct {
+		path, id, summary, metadataHeader string
+		body                              *openapi3.Schema
+	}{
+		{config.ElevenLabsSoundPath, "generateSoundEffect", "Generate an ElevenLabs sound effect", "character-cost", sound},
+		{config.ElevenLabsMusicPath, "generateMusic", "Generate an ElevenLabs music file", "song-id", music},
+	} {
+		op := mediaOperation(route.id, route.summary, http.StatusOK, []string{"audio/mpeg", "audio/wav", "application/octet-stream"})
+		op.Description = "Set model to a configured ElevenLabs alias for this operation. The response is binary audio. Use X-LLM-Accounting-ID to retrieve the final usage record."
+		route.body.WithProperty("model", openapi3.NewStringSchema())
+		op.RequestBody = &openapi3.RequestBodyRef{Value: openapi3.NewRequestBody().WithRequired(true).WithJSONSchema(route.body)}
+		op.Parameters = openapi3.Parameters{
+			&openapi3.ParameterRef{Value: openapi3.NewQueryParameter("output_format").WithSchema(openapi3.NewStringSchema())},
+		}
+		ok := op.Responses.Status(http.StatusOK).Value
+		ok.Headers = openapi3.Headers{}
+		for _, name := range []string{"X-LLM-Accounting-ID", route.metadataHeader} {
+			ok.Headers[name] = &openapi3.HeaderRef{Value: &openapi3.Header{Parameter: openapi3.Parameter{
+				Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()},
+			}}}
+		}
+		paths.Set("/v1"+route.path, &openapi3.PathItem{Post: op})
+	}
 }
 
 func mediaOperation(id, summary string, status int, formats []string) *openapi3.Operation {
@@ -60,7 +99,7 @@ func mediaOperation(id, summary string, status int, formats []string) *openapi3.
 		schema := openapi3.NewStringSchema()
 		if format == "application/json" {
 			schema = openapi3.NewObjectSchema()
-		} else if format == "application/octet-stream" {
+		} else if format == "application/octet-stream" || format == "audio/mpeg" || format == "audio/wav" {
 			schema = schema.WithFormat("binary")
 		}
 		content[format] = &openapi3.MediaType{Schema: &openapi3.SchemaRef{Value: schema}}

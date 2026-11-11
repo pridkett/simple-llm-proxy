@@ -50,6 +50,8 @@ func TestSpec_HasExpectedPaths(t *testing.T) {
 		"/v1/audio/speech",
 		"/v1/audio/transcriptions",
 		"/v1/audio/translations",
+		"/v1/sound-generation",
+		"/v1/music",
 		"/v1/realtime",
 		"/v1/realtime/translations",
 		"/v1/realtime/calls",

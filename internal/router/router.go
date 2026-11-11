@@ -53,43 +53,9 @@ func New(cfg *config.Config, store storage.Storage) (*Router, error) {
 
 	// Register deployments from config
 	for _, mc := range cfg.ModelList {
-		if mc.CostPolicy != "" && mc.CostPolicy != "prefer_upstream" && mc.CostPolicy != "estimate_only" && mc.CostPolicy != "require_upstream" {
-			return nil, fmt.Errorf("invalid cost_policy for %s: %s", mc.ModelName, mc.CostPolicy)
-		}
-		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
-
-		opts := buildProviderOptions(mc)
-		decisionConfig, err := config.NormalizeDecision(mc.Decision)
+		deployment, err := buildDeployment(mc, r.deployments[mc.ModelName])
 		if err != nil {
-			return nil, fmt.Errorf("model %s: %w", mc.ModelName, err)
-		}
-		var prov provider.Provider
-		if decisionConfig != nil {
-			prov, err = decisionprovider.New(parsed.Provider, opts, decisionConfig)
-		} else {
-			prov, err = provider.Get(parsed.Provider, opts)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
-		}
-
-		deployment := &provider.Deployment{
-			ModelName:    mc.ModelName,
-			CostPolicy:   mc.CostPolicy,
-			Decision:     decisionConfig,
-			Provider:     prov,
-			ProviderName: parsed.Provider,
-			ActualModel:  parsed.ModelName,
-			APIKey:       mc.LiteLLMParams.APIKey,
-			APIBase:      mc.LiteLLMParams.APIBase,
-			RPM:          mc.RPM,
-			TPM:          mc.TPM,
-		}
-
-		for _, existing := range r.deployments[mc.ModelName] {
-			if (existing.Decision == nil) != (deployment.Decision == nil) {
-				return nil, fmt.Errorf("model %q cannot mix decision and generation deployments; use separate aliases", mc.ModelName)
-			}
+			return nil, err
 		}
 		r.deployments[mc.ModelName] = append(r.deployments[mc.ModelName], deployment)
 	}
@@ -282,40 +248,9 @@ type PoolDeploymentInfoItem struct {
 func (r *Router) Reload(cfg *config.Config) error {
 	newDeployments := make(map[string][]*provider.Deployment)
 	for _, mc := range cfg.ModelList {
-		if mc.CostPolicy != "" && mc.CostPolicy != "prefer_upstream" && mc.CostPolicy != "estimate_only" && mc.CostPolicy != "require_upstream" {
-			return fmt.Errorf("invalid cost_policy for %s: %s", mc.ModelName, mc.CostPolicy)
-		}
-		parsed := config.ParseModelString(mc.LiteLLMParams.Model)
-		opts := buildProviderOptions(mc)
-		decisionConfig, err := config.NormalizeDecision(mc.Decision)
+		deployment, err := buildDeployment(mc, newDeployments[mc.ModelName])
 		if err != nil {
-			return fmt.Errorf("model %s: %w", mc.ModelName, err)
-		}
-		var prov provider.Provider
-		if decisionConfig != nil {
-			prov, err = decisionprovider.New(parsed.Provider, opts, decisionConfig)
-		} else {
-			prov, err = provider.Get(parsed.Provider, opts)
-		}
-		if err != nil {
-			return fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
-		}
-		deployment := &provider.Deployment{
-			ModelName:    mc.ModelName,
-			CostPolicy:   mc.CostPolicy,
-			Decision:     decisionConfig,
-			Provider:     prov,
-			ProviderName: parsed.Provider,
-			ActualModel:  parsed.ModelName,
-			APIKey:       mc.LiteLLMParams.APIKey,
-			APIBase:      mc.LiteLLMParams.APIBase,
-			RPM:          mc.RPM,
-			TPM:          mc.TPM,
-		}
-		for _, existing := range newDeployments[mc.ModelName] {
-			if (existing.Decision == nil) != (deployment.Decision == nil) {
-				return fmt.Errorf("model %q cannot mix decision and generation deployments; use separate aliases", mc.ModelName)
-			}
+			return err
 		}
 		newDeployments[mc.ModelName] = append(newDeployments[mc.ModelName], deployment)
 	}
@@ -495,6 +430,55 @@ func (r *Router) GetPoolStatus() []PoolStatusInfo {
 		return result[i].Name < result[j].Name
 	})
 	return result
+}
+
+func buildDeployment(mc config.ModelConfig, existing []*provider.Deployment) (*provider.Deployment, error) {
+	if mc.CostPolicy != "" && mc.CostPolicy != "prefer_upstream" && mc.CostPolicy != "estimate_only" && mc.CostPolicy != "require_upstream" {
+		return nil, fmt.Errorf("invalid cost_policy for %s: %s", mc.ModelName, mc.CostPolicy)
+	}
+	if err := mc.ValidateAudio(); err != nil {
+		return nil, fmt.Errorf("model %s: %w", mc.ModelName, err)
+	}
+	parsed := config.ParseModelString(mc.LiteLLMParams.Model)
+	opts := buildProviderOptions(mc)
+	decisionConfig, err := config.NormalizeDecision(mc.Decision)
+	if err != nil {
+		return nil, fmt.Errorf("model %s: %w", mc.ModelName, err)
+	}
+	var prov provider.Provider
+	if decisionConfig != nil {
+		prov, err = decisionprovider.New(parsed.Provider, opts, decisionConfig)
+	} else {
+		prov, err = provider.Get(parsed.Provider, opts)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
+	}
+
+	deployment := &provider.Deployment{
+		ModelName:          mc.ModelName,
+		CostPolicy:         mc.CostPolicy,
+		AudioCostPerSecond: mc.AudioCostPerSecond,
+		Decision:           decisionConfig,
+		Provider:           prov,
+		ProviderName:       parsed.Provider,
+		ActualModel:        parsed.ModelName,
+		APIKey:             mc.LiteLLMParams.APIKey,
+		APIBase:            mc.LiteLLMParams.APIBase,
+		RPM:                mc.RPM,
+		TPM:                mc.TPM,
+	}
+	for _, d := range existing {
+		if (d.Decision == nil) != (deployment.Decision == nil) {
+			return nil, fmt.Errorf("model %q cannot mix decision and generation deployments; use separate aliases", mc.ModelName)
+		}
+		if d.ProviderName == "elevenlabs" || deployment.ProviderName == "elevenlabs" {
+			if d.ProviderName != deployment.ProviderName || config.ElevenLabsAudioPath(d.ActualModel) != config.ElevenLabsAudioPath(deployment.ActualModel) {
+				return nil, fmt.Errorf("model %q cannot mix ElevenLabs audio operations or providers; use separate aliases", mc.ModelName)
+			}
+		}
+	}
+	return deployment, nil
 }
 
 // buildProviderOptions constructs a ProviderOptions from a ModelConfig, mapping

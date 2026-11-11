@@ -20,7 +20,7 @@ import (
 const realtimeWriteTimeout = 15 * time.Second
 
 // Realtime relays a model-scoped WebSocket session using the deployment key.
-func (h OpenAIMedia) Realtime(path string) http.HandlerFunc {
+func (h Media) Realtime(path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !websocket.IsWebSocketUpgrade(req) {
 			model.WriteError(w, model.ErrBadRequest("WebSocket upgrade required"))
@@ -47,12 +47,12 @@ func (h OpenAIMedia) Realtime(path string) http.HandlerFunc {
 		}
 
 		var upstream *websocket.Conn
-		h.route(w, req, alias, req.Header.Get("X-Session-ID"), true, func(ctx context.Context, p provider.MediaProvider, actual string) error {
+		h.route(w, req, alias, req.Header.Get("X-Session-ID"), openAIMediaRoute(true), func(ctx context.Context, d *provider.Deployment) error {
 			if !transcribe {
-				query.Set("model", actual)
+				query.Set("model", d.ActualModel)
 			}
 			var err error
-			upstream, err = p.ConnectRealtime(ctx, path, query, req.Header)
+			upstream, err = d.Provider.(provider.MediaProvider).ConnectRealtime(ctx, path, query, req.Header)
 			return err
 		}, func(ctx context.Context, actual string) (int, bool, error) {
 			defer upstream.Close()

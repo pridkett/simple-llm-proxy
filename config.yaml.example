@@ -71,6 +71,17 @@ model_list:
   #     model: openai/gpt-realtime-translate
   #     api_key: os.environ/OPENAI_API_KEY
 
+  # ElevenLabs audio generation. Keep this key in the proxy's environment.
+  # - model_name: game-sfx
+  #   litellm_params:
+  #     model: elevenlabs/eleven_text_to_sound_v3
+  #     api_key: os.environ/ELEVENLABS_API_KEY
+  #   # audio_cost_per_second: 0.002  # Optional estimate in USD. Set your own rate.
+  # - model_name: game-music
+  #   litellm_params:
+  #     model: elevenlabs/music_v2
+  #     api_key: os.environ/ELEVENLABS_API_KEY
+
   # OpenAI-compatible endpoint with custom base URL
   # Use api_base to point at any OpenAI-compatible service (Azure, vLLM, LM Studio, etc.)
   # api_base supports os.environ/ expansion just like api_key.

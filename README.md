@@ -352,6 +352,7 @@ model_list:
 | POST | `/v1/responses` | OpenAI Responses, including the image generation tool |
 | POST | `/v1/images/generations`, `/v1/images/edits` | OpenAI image generation and editing |
 | POST | `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech, file transcription, and file translation |
+| POST | `/v1/sound-generation`, `/v1/music` | ElevenLabs sound effect and music file generation |
 | GET | `/v1/realtime`, `/v1/realtime/translations` | OpenAI Realtime WebSocket upgrade |
 | POST | `/v1/realtime/calls`, `/v1/realtime/client_secrets` | OpenAI WebRTC setup for the proxy master key |
 
@@ -388,6 +389,42 @@ admission counts once against request limits, and reported token totals are
 recorded when the socket closes. Use `X-LLM-Accounting-ID` to retrieve
 accounting after native media requests. The proxy records cost as unknown
 when neither upstream cost nor applicable local rates are available.
+
+### ElevenLabs sound effects and music
+
+Enable the ElevenLabs deployments in [the example config](config.yaml.example)
+and set `ELEVENLABS_API_KEY` in the proxy's environment. Issue each agent run
+an expiring app key with `allowed_models` set to the sound or music aliases it
+needs. Use the proxy app key as the bearer token.
+
+```sh
+curl --fail-with-body -D sfx.headers -o rain.mp3 \
+  -H "Authorization: Bearer $APP_KEY" -H 'Content-Type: application/json' \
+  "$PROXY_URL/v1/sound-generation?output_format=mp3_44100_128" \
+  -d '{"model":"game-sfx","text":"soft rain on a tent","duration_seconds":5,"loop":true}'
+
+curl --fail-with-body -D music.headers -o forest.mp3 \
+  -H "Authorization: Bearer $APP_KEY" -H 'Content-Type: application/json' \
+  "$PROXY_URL/v1/music?output_format=mp3_44100_128" \
+  -d '{"model":"game-music","prompt":"quiet forest exploration music","music_length_ms":20000,"force_instrumental":true}'
+```
+
+Sound effects require `text` and `duration_seconds` from 0.5 to 30. The proxy
+rounds sound duration to the nearest millisecond. The optional fields are `loop`
+and `prompt_influence`. Music requires `prompt` and an integer `music_length_ms`
+from 3,000 to 600,000, subject to the selected model and account limits.
+`force_instrumental` is optional. The proxy sets `model_id` from the alias and
+accepts `output_format` as a query parameter. Long generations may require
+raising `general_settings.write_timeout`.
+
+Read the final record using the response's `X-LLM-Accounting-ID`. Each attempt
+records the requested duration and, when available, the sound effect's
+`character-cost` or the music generation's `song-id`. Set a deployment's optional
+`audio_cost_per_second` to estimate USD from the requested duration. Without a
+rate, the dollar cost is unknown and does not count toward a spend cap.
+Configured estimates count toward existing spend caps after completion, so
+use request limits and an upstream credit quota to bound usage independently.
+See [accounting details](docs/accounting.md).
 
 ### Streaming
 

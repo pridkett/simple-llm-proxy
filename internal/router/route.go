@@ -64,6 +64,9 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 		if result.Error == nil {
 			return result
 		}
+		if len(result.DeploymentsTried) > 0 && stopOnUpstreamError(result.Error, opts) {
+			return result
+		}
 
 		// A budget-exhausted or incompatible primary pool can use another pool
 		// serving this alias. Incompatible candidates never consume upstream quota.
@@ -88,7 +91,7 @@ func (r *Router) Route(ctx context.Context, modelName string, stickyKey string, 
 					FailoverReasons: result.FailoverReasons, // carry forward
 				}
 				altResult = r.routePool(ctx, altPool, stickyKey, cb, altResult, opts...)
-				if altResult.Error == nil {
+				if altResult.Error == nil || (len(altResult.DeploymentsTried) > 0 && stopOnUpstreamError(altResult.Error, opts)) {
 					return altResult
 				}
 				// Merge failover reasons from failed attempt.
@@ -180,6 +183,10 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 					r.ReportFailure(stickyDep)
 					result.FailoverReasons = append(result.FailoverReasons, FailoverError)
 				}
+				if stopOnUpstreamError(err, opts) {
+					result.Error = err
+					return result
+				}
 				healthy = removeDeployment(healthy, stickyDep)
 			}
 			// If cachedKey found but deployment not in healthy list, fall through
@@ -231,6 +238,10 @@ func (r *Router) routePool(ctx context.Context, pool *Pool, stickyKey string, cb
 		} else {
 			r.ReportFailure(deployment)
 			result.FailoverReasons = append(result.FailoverReasons, FailoverError)
+		}
+		if stopOnUpstreamError(err, opts) {
+			result.Error = err
+			return result
 		}
 
 		// Remove the failed deployment from the healthy slice.
@@ -320,11 +331,22 @@ func (r *Router) routeLegacy(ctx context.Context, modelName string, cb RouteCall
 			r.ReportFailure(d)
 			result.FailoverReasons = append(result.FailoverReasons, FailoverError)
 		}
+		if stopOnUpstreamError(err, opts) {
+			break
+		}
 	}
 
 	// All retries exhausted.
 	result.Error = lastErr
 	return result
+}
+
+func stopOnUpstreamError(err error, opts []RouteOptions) bool {
+	if len(opts) == 0 || !opts[0].StopOnUpstreamError {
+		return false
+	}
+	var rateLimit *provider.RateLimitError
+	return !errors.As(err, &rateLimit) || !rateLimit.Local
 }
 
 // removeDeployment returns a new slice with the target deployment removed.

@@ -44,6 +44,17 @@ Both SQLite and PostgreSQL persist the same records and atomic finalization.
 Records follow the configured request-log retention period, including pending
 records left by an interrupted process.
 
+ElevenLabs sound effect and music responses keep their binary audio body. Fetch
+the final record using `X-LLM-Accounting-ID` after the download. An attempt's
+`audio_generation` contains `requested_duration_ms` and, when provided,
+`character_cost` (sound effects) or `song_id` (music). These are provider
+metadata. With `audio_cost_per_second` configured, a successful upstream
+generation records `estimated_usd_per_second` and computes a USD estimate
+from the requested duration. The estimate follows the deployment's
+`cost_policy` and contributes to spend when selected. Without a selected
+estimate, USD cost is unknown. Frameworks can use authorized admin or master
+access to retrieve the record after an agent key expires.
+
 A representative response is:
 
 ```json
