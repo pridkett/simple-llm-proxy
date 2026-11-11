@@ -110,9 +110,9 @@ type ProviderOptions struct {
 	ExtraHeaders map[string]string
 
 	// Provider-specific options parsed from config extra_params.
-	// Gemini safety settings, MiniMax XML toggle, etc.
-	SafetySettings []SafetySetting // Gemini only
-	XMLToolCalls   *bool           // MiniMax: nil = default (enabled), non-nil = explicit
+	SafetySettings         []SafetySetting // Gemini only
+	XMLToolCalls           *bool           // MiniMax: nil = default (enabled), non-nil = explicit
+	AnthropicPromptCaching bool            // Anthropic automatic prompt caching
 }
 
 // SafetySetting configures a Gemini safety threshold.

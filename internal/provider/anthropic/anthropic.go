@@ -23,10 +23,11 @@ const (
 
 // Provider implements the Anthropic provider.
 type Provider struct {
-	apiKey       string
-	baseURL      string
-	client       *http.Client
-	extraHeaders map[string]string
+	apiKey        string
+	baseURL       string
+	client        *http.Client
+	extraHeaders  map[string]string
+	promptCaching bool
 }
 
 // New creates a new Anthropic provider.
@@ -36,10 +37,11 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		baseURL = strings.TrimSuffix(opts.APIBase, "/")
 	}
 	return &Provider{
-		apiKey:       opts.APIKey,
-		baseURL:      baseURL,
-		client:       &http.Client{},
-		extraHeaders: opts.ExtraHeaders,
+		apiKey:        opts.APIKey,
+		baseURL:       baseURL,
+		client:        &http.Client{},
+		extraHeaders:  opts.ExtraHeaders,
+		promptCaching: opts.AnthropicPromptCaching,
 	}
 }
 
@@ -66,6 +68,11 @@ type anthropicRequest struct {
 	StopSeq      []string                 `json:"stop_sequences,omitempty"`
 	Stream       bool                     `json:"stream,omitempty"`
 	Tools        []anthropicTool          `json:"tools,omitempty"`
+	CacheControl *anthropicCacheControl   `json:"cache_control,omitempty"`
+}
+
+type anthropicCacheControl struct {
+	Type string `json:"type"`
 }
 
 type anthropicMessage struct {
@@ -284,6 +291,9 @@ func (p *Provider) translateRequest(req *model.ChatCompletionRequest) (*anthropi
 		Temperature: req.Temperature,
 		TopP:        req.TopP,
 		StopSeq:     req.Stop,
+	}
+	if p.promptCaching {
+		anthReq.CacheControl = &anthropicCacheControl{Type: "ephemeral"}
 	}
 
 	// Handle max_tokens - Anthropic requires it
