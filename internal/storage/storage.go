@@ -295,38 +295,53 @@ type Application struct {
 // ErrInactiveAPIKey indicates that a revoked, expired, or missing key cannot be edited.
 var ErrInactiveAPIKey = errors.New("API key is inactive")
 
+// IssuedAPIKeyStorage revokes a key only when it belongs to the given issuer and application.
+// Revoking an existing owned key is idempotent, including after it expires.
+type IssuedAPIKeyStorage interface {
+	RevokeIssuedAPIKey(ctx context.Context, appID int64, issuerID string, keyID int64) (bool, error)
+}
+
 // APIKeyOptions controls decision access and expiration. On update, SetExpiration
 // distinguishes leaving the current deadline unchanged from clearing it.
 type APIKeyOptions struct {
 	AllowDecisions *bool
 	ExpiresAt      *time.Time
 	SetExpiration  bool
+	IssuerID       string // set at creation, immutable
 }
 
 // APIKey represents a per-application API key with enforcement limits.
 // Full plaintext key is NEVER stored — only the prefix (first 8 hex chars) and SHA-256 hash.
 type APIKey struct {
-	AllowDecisions bool       `json:"allow_decisions"`
-	ID             int64      `json:"id"`
-	ApplicationID  int64      `json:"application_id"`
-	TeamID         int64      `json:"-"` // populated on key-cache lookup
-	AppName        string     `json:"-"` // populated on key-cache lookup
-	TeamName       string     `json:"-"` // populated on key-cache lookup
-	Name           string     `json:"name"`
-	KeyPrefix      string     `json:"key_prefix"`  // first 8 chars after "sk-app-"
-	KeyHash        string     `json:"-"`           // SHA-256 hex — never serialized to JSON
-	MaxRPM         *int       `json:"max_rpm"`     // nil = unlimited
-	MaxRPD         *int       `json:"max_rpd"`     // nil = unlimited
-	MaxBudget      *float64   `json:"max_budget"`  // nil = unlimited (hard cap)
-	SoftBudget     *float64   `json:"soft_budget"` // nil = no alert threshold
-	IsActive       bool       `json:"is_active"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ExpiresAt      *time.Time `json:"expires_at"`
+	AllowDecisions  bool       `json:"allow_decisions"`
+	ID              int64      `json:"id"`
+	ApplicationID   int64      `json:"application_id"`
+	TeamID          int64      `json:"-"` // populated on key-cache lookup
+	AppName         string     `json:"-"` // populated on key-cache lookup
+	TeamName        string     `json:"-"` // populated on key-cache lookup
+	Name            string     `json:"name"`
+	KeyPrefix       string     `json:"key_prefix"`  // first 8 chars after "sk-app-"
+	KeyHash         string     `json:"-"`           // SHA-256 hex — never serialized to JSON
+	MaxRPM          *int       `json:"max_rpm"`     // nil = unlimited
+	MaxRPD          *int       `json:"max_rpd"`     // nil = unlimited
+	MaxBudget       *float64   `json:"max_budget"`  // nil = unlimited (hard cap)
+	SoftBudget      *float64   `json:"soft_budget"` // nil = no alert threshold
+	IsActive        bool       `json:"is_active"`
+	CreatedAt       time.Time  `json:"created_at"`
+	ExpiresAt       *time.Time `json:"expires_at"`
+	IssuerID        string     `json:"issuer_id,omitempty"`
+	IssuerRevokedAt *time.Time `json:"issuer_revoked_at,omitempty"`
 }
 
 // IsUsableAt applies the expiration deadline even when the key is cached.
 func (k *APIKey) IsUsableAt(now time.Time) bool {
-	return k.IsActive && (k.ExpiresAt == nil || now.Before(*k.ExpiresAt))
+	if !k.IsActive {
+		return false
+	}
+	if k.ExpiresAt == nil {
+		return k.IssuerID == ""
+	}
+	return now.Before(*k.ExpiresAt)
 }
 
 // AccessibleKey is an API key enriched with team and application context,

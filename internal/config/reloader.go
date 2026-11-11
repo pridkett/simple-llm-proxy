@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -11,6 +12,7 @@ import (
 type Reloader struct {
 	path               string
 	ptr                atomic.Pointer[Config]
+	reloadMu           sync.Mutex
 	discoveryProviders []DiscoveryProvider
 }
 
@@ -54,6 +56,14 @@ func (r *Reloader) Config() *Config {
 // the new config takes effect.
 // Returns the new config on success.
 func (r *Reloader) Reload() (*Config, error) {
+	return r.ReloadWithApply(nil)
+}
+
+// ReloadWithApply publishes the configuration only after apply succeeds.
+func (r *Reloader) ReloadWithApply(apply func(*Config) error) (*Config, error) {
+	r.reloadMu.Lock()
+	defer r.reloadMu.Unlock()
+
 	cfg, err := Load(r.path)
 	if err != nil {
 		return nil, err
@@ -68,6 +78,11 @@ func (r *Reloader) Reload() (*Config, error) {
 		defer cancel()
 		if err := ExpandWildcards(ctx, cfg, r.discoveryProviders); err != nil {
 			return nil, err
+		}
+	}
+	if apply != nil {
+		if err := apply(cfg); err != nil {
+			return nil, fmt.Errorf("apply reloaded config: %w", err)
 		}
 	}
 

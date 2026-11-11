@@ -1,12 +1,12 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -103,48 +103,39 @@ func AdminCreateKey(store storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		// Generate cryptographically secure key: sk-app-{48 hex chars}
-		rawBytes := make([]byte, 24) // 24 bytes → 48 hex chars
-		if _, err := rand.Read(rawBytes); err != nil {
-			model.WriteError(w, model.ErrInternal("failed to generate key"))
-			return
-		}
-		hexPart := hex.EncodeToString(rawBytes) // 48 hex chars
-		fullKey := "sk-app-" + hexPart
-		keyPrefix := hexPart[:8] // first 8 hex chars for display
-
-		// SHA-256 hash for storage — never store plaintext
-		hashBytes := sha256.Sum256([]byte(fullKey))
-		keyHash := hex.EncodeToString(hashBytes[:])
-
-		key, err := store.CreateAPIKey(r.Context(), appID, body.Name, keyPrefix, keyHash,
-			body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, opts)
+		key, token, err := createAppKey(r.Context(), store, appID, body, opts)
 		if err != nil {
 			model.WriteError(w, model.ErrInternal("failed to create key"))
 			return
 		}
-
-		// Return full key ONCE. key.KeyHash is json:"-" — not serialized.
-		resp := map[string]interface{}{
-			"key":             fullKey, // plaintext — shown once only
-			"id":              key.ID,
-			"name":            key.Name,
-			"key_prefix":      fmt.Sprintf("sk-app-%s...", key.KeyPrefix),
-			"application_id":  key.ApplicationID,
-			"max_rpm":         key.MaxRPM,
-			"max_rpd":         key.MaxRPD,
-			"max_budget":      key.MaxBudget,
-			"soft_budget":     key.SoftBudget,
-			"is_active":       key.IsActive,
-			"allow_decisions": key.AllowDecisions,
-			"created_at":      key.CreatedAt,
-			"expires_at":      key.ExpiresAt,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(resp)
+		writeCreatedAppKey(w, key, token, nil)
 	}
+}
+
+func createAppKey(ctx context.Context, store storage.Storage, appID int64, body keySettings, opts storage.APIKeyOptions) (*storage.APIKey, string, error) {
+	var raw [24]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return nil, "", err
+	}
+	encoded := hex.EncodeToString(raw[:])
+	token := "sk-app-" + encoded
+	hash := sha256.Sum256([]byte(token))
+	key, err := store.CreateAPIKey(ctx, appID, body.Name, encoded[:8], hex.EncodeToString(hash[:]),
+		body.MaxRPM, body.MaxRPD, body.MaxBudget, body.SoftBudget, body.AllowedModels, opts)
+	return key, token, err
+}
+
+func writeCreatedAppKey(w http.ResponseWriter, key *storage.APIKey, token string, allowedModels []string) {
+	response := struct {
+		*storage.APIKey
+		Token         string   `json:"key"`
+		Prefix        string   `json:"key_prefix"`
+		AllowedModels []string `json:"allowed_models,omitempty"`
+	}{key, token, "sk-app-" + key.KeyPrefix + "...", allowedModels}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
 }
 
 // AdminUpdateKey handles PATCH /admin/api-keys/{id}

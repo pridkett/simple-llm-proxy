@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/api/middleware"
 	"github.com/pwagstro/simple_llm_proxy/internal/costmap"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
@@ -19,9 +21,12 @@ func Models(r *router.Router) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		models := r.ListModels()
 
-		data := make([]model.ModelInfo, len(models))
-		for i, name := range models {
-			data[i] = model.ModelInfo{
+		data := make([]model.ModelInfo, 0, len(models))
+		for _, name := range models {
+			if !issuedKeyAllowsModel(req, name) {
+				continue
+			}
+			info := model.ModelInfo{
 				ID:      name,
 				Object:  "model",
 				Created: time.Now().Unix(),
@@ -29,8 +34,9 @@ func Models(r *router.Router) http.HandlerFunc {
 			}
 			deps, _ := r.DecisionDeployments(name)
 			for _, d := range deps {
-				data[i].DecisionDeployments = append(data[i].DecisionDeployments, d.Decision)
+				info.DecisionDeployments = append(info.DecisionDeployments, d.Decision)
 			}
+			data = append(data, info)
 		}
 
 		resp := model.ModelsResponse{
@@ -49,6 +55,10 @@ func ModelDetail(r *router.Router, cm *costmap.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		modelName, ok := modelNameFromRequest(w, req)
 		if !ok {
+			return
+		}
+		if !issuedKeyAllowsModel(req, modelName) {
+			model.WriteError(w, model.ErrModelNotFound(modelName))
 			return
 		}
 
@@ -96,6 +106,11 @@ func ModelDetail(r *router.Router, cm *costmap.Manager) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	}
+}
+
+func issuedKeyAllowsModel(req *http.Request, model string) bool {
+	key := middleware.APIKeyFromContext(req.Context())
+	return key == nil || key.Key.IssuerID == "" || slices.Contains(key.AllowedModels, model)
 }
 
 // PatchModelMapping handles PATCH /v1/models/{model}/cost_map_key.

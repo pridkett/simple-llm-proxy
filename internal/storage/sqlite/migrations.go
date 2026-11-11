@@ -364,6 +364,8 @@ func (s *Storage) migrate(ctx context.Context) error {
 		// functions and string comparisons see one format.
 		`UPDATE usage_logs SET request_time = replace(request_time, ' +0000 UTC', '+00:00') WHERE request_time GLOB '* +0000 UTC'`,
 		`ALTER TABLE api_keys ADD COLUMN expires_at_ms BIGINT`,
+		`ALTER TABLE api_keys ADD COLUMN issuer_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_keys ADD COLUMN issuer_revoked_at_ms BIGINT`,
 	}
 
 	for i, sql := range migrations {

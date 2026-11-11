@@ -7,16 +7,17 @@ import (
 
 // Config represents the complete proxy configuration.
 type Config struct {
-	MCP             MCPSettings        `yaml:"mcp" json:"-"`
-	ModelList       []ModelConfig      `yaml:"model_list"`
-	RouterSettings  RouterSettings     `yaml:"router_settings"`
-	GeneralSettings GeneralSettings    `yaml:"general_settings"`
-	LogSettings     LogSettings        `yaml:"log_settings"`
-	OIDCSettings    OIDCSettings       `yaml:"oidc_settings"`
-	LocalAdmin      LocalAdminSettings `yaml:"local_admin"`
-	OTelSettings    OTelSettings       `yaml:"otel_settings"`
-	ProviderPools   []ProviderPool     `yaml:"provider_pools"`
-	Webhooks        []WebhookConfig    `yaml:"webhooks"`
+	MCP             MCPSettings          `yaml:"mcp" json:"-"`
+	KeyIssuers      map[string]KeyIssuer `yaml:"-" json:"-"`
+	ModelList       []ModelConfig        `yaml:"model_list"`
+	RouterSettings  RouterSettings       `yaml:"router_settings"`
+	GeneralSettings GeneralSettings      `yaml:"general_settings"`
+	LogSettings     LogSettings          `yaml:"log_settings"`
+	OIDCSettings    OIDCSettings         `yaml:"oidc_settings"`
+	LocalAdmin      LocalAdminSettings   `yaml:"local_admin"`
+	OTelSettings    OTelSettings         `yaml:"otel_settings"`
+	ProviderPools   []ProviderPool       `yaml:"provider_pools"`
+	Webhooks        []WebhookConfig      `yaml:"webhooks"`
 }
 
 // OTelSettings configures optional OTLP trace export.

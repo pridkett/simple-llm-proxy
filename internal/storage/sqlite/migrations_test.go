@@ -103,8 +103,8 @@ func TestMigrationIdempotency(t *testing.T) {
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting schema_migrations: %v", err)
 	}
-	if count != 68 {
-		t.Errorf("expected 68 rows in schema_migrations, got %d", count)
+	if count != 70 {
+		t.Errorf("expected 70 rows in schema_migrations, got %d", count)
 	}
 }
 
@@ -124,7 +124,9 @@ func TestKeyExpirationMigrationPreservesExistingKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE api_keys DROP COLUMN expires_at_ms;
-		DELETE FROM schema_migrations WHERE version = 68`); err != nil {
+		ALTER TABLE api_keys DROP COLUMN issuer_revoked_at_ms;
+		ALTER TABLE api_keys DROP COLUMN issuer_id;
+		DELETE FROM schema_migrations WHERE version >= 68`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.migrate(ctx); err != nil {
@@ -134,7 +136,8 @@ func TestKeyExpirationMigrationPreservesExistingKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacy == nil || !legacy.IsUsableAt(time.Now()) || legacy.ExpiresAt != nil || !legacy.CreatedAt.Equal(key.CreatedAt) {
+	if legacy == nil || !legacy.IsUsableAt(time.Now()) || legacy.ExpiresAt != nil ||
+		legacy.IssuerID != "" || legacy.IssuerRevokedAt != nil || !legacy.CreatedAt.Equal(key.CreatedAt) {
 		t.Fatalf("migration changed legacy key: %+v", legacy)
 	}
 }

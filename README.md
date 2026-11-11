@@ -619,7 +619,61 @@ Breadcrumbs and shareable URLs preserve your location within a team. Existing
 `/#/applications` and `/#/keys?team_id=...&app_id=...` links redirect into the
 workspace. If first-key creation fails, the application remains available and
 the form offers a retry without creating another application. Team, application,
-key, and membership changes remain restricted to system administrators.
+key, and membership changes in the browser remain restricted to system
+administrators.
+
+### Headless app key issuance
+
+Create an application in **Teams** and add a `key_issuers` entry in
+[the example config](config.yaml.example). An issuer is bound to one
+application ID, a model allowlist, and a maximum lifetime. Generate its token
+with `ISSUER_TOKEN="sk-issuer-$(openssl rand -hex 32)"` and provision it to the
+proxy's configured environment variable and the trusted framework. Give each
+agent only the app key minted for its run.
+
+The framework calls `POST /v1/key-issuance/keys` with the issuer bearer token
+and a name, future RFC3339 `expires_at`, and a nonempty `allowed_models` subset.
+The response contains the stable `id` for attribution and the plaintext
+`key` once. For example, to request a 15-minute key using `jq`:
+
+```sh
+payload=$(jq -n --arg run "$RUN_ID" '{
+  name: $run,
+  expires_at: (now + 900 | todateiso8601),
+  allowed_models: ["game-sfx", "game-music"],
+  max_rpm: 5
+}')
+issued=$(printf 'Authorization: Bearer %s\n' "$ISSUER_TOKEN" |
+  curl --fail --silent --show-error -H @- -H 'Content-Type: application/json' \
+    --data "$payload" "$PROXY_URL/v1/key-issuance/keys")
+key_id=$(printf '%s' "$issued" | jq -er .id)
+app_key=$(printf '%s' "$issued" | jq -er .key)
+unset issued
+```
+
+Store `key_id` alongside the run ID for usage attribution and pass `app_key`
+to the agent for model calls. Revoke the key at the end of the run:
+
+```sh
+printf 'Authorization: Bearer %s\n' "$ISSUER_TOKEN" |
+  curl --fail --silent --show-error -H @- -X DELETE \
+    "$PROXY_URL/v1/key-issuance/keys/$key_id"
+```
+
+An issuer can revoke only keys it created for its configured application.
+Repeated revocations return `204`. Issuance and revocation log the issuer,
+application, and key IDs. Issued keys are checked against shared storage on
+each request, so revocation takes effect on subsequent requests across replicas.
+
+Configured `max_rpm`, `max_rpd`, and `max_budget` are per-key ceilings and
+defaults. Requests can supply tighter limits and an optional `soft_budget`.
+Granting `allow_decisions: true` on a request requires the issuer to allow it
+as well. Rotate the issuer credential by changing its secret and restarting
+the proxy, or reload the config to switch to a different environment variable
+already available to the process. Keep the issuer ID and application ID to
+retain access to revocation. Removing an issuer disables future issuance but
+its existing app keys remain usable until revoked or expired. Issued keys
+require a deadline and a model allowlist to authenticate.
 
 ## Session logs
 

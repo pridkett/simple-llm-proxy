@@ -121,13 +121,9 @@ type reloadResponse struct {
 // Note: changes to master_key, port, and database_url require a server restart.
 func AdminReload(reloader *config.Reloader, r *router.Router) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		newCfg, err := reloader.Reload()
+		_, err := reloader.ReloadWithApply(r.Reload)
 		if err != nil {
-			model.WriteError(w, model.ErrInternalServer("failed to reload config file", err))
-			return
-		}
-		if err := r.Reload(newCfg); err != nil {
-			model.WriteError(w, model.ErrInternalServer("failed to apply reloaded config", err))
+			model.WriteError(w, model.ErrInternalServer("failed to reload config", err))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

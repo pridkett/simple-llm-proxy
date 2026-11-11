@@ -77,6 +77,11 @@ func (c *Cache) Get(ctx context.Context, token string, store storage.Storage) (*
 	}
 
 	ck := CachedKey{Key: key, AllowedModels: models, TeamName: key.TeamName, AppName: key.AppName}
+	// Issued keys can be revoked by another proxy replica. Check their current
+	// state in shared storage on every admission rather than waiting for a TTL.
+	if key.IssuerID != "" {
+		return &ck, nil
+	}
 	c.store.Store(hash, &cacheEntry{
 		value:     ck,
 		expiresAt: time.Now().Add(c.ttl),
