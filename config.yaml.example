@@ -177,6 +177,19 @@ general_settings:
   # Default: 2m. Increase for slow model loads or long streams. Requires a restart.
   # write_timeout: 5m
 
+# Optional headless app key issuance. Keep the issuer token in the framework
+# and the proxy. Use sk-issuer- followed by 64 random hex characters.
+# key_issuers:
+#   game-framework:
+#     token: os.environ/GAME_AGENT_ISSUER_TOKEN
+#     application_id: 42
+#     allowed_models: [game-sfx, game-music]
+#     max_ttl: 30m
+#     max_rpm: 10
+#     max_rpd: 40
+#     max_budget: 1.00
+#     allow_decisions: false
+
 # Optional automatic UI admin access for local development. Binds to 127.0.0.1.
 # Leave oidc_settings.issuer_url unset and restart the proxy after changes.
 # local_admin:

@@ -30,10 +30,12 @@ import (
 )
 
 type migrationFixture struct {
-	url      string
-	cookie   *http.Cookie
-	store    *sqlite.Storage
-	captured chan map[string]any
+	url        string
+	cookie     *http.Cookie
+	store      *sqlite.Storage
+	captured   chan map[string]any
+	configPath string
+	reloader   *config.Reloader
 }
 
 func newMigrationFixture(t *testing.T) *migrationFixture {
@@ -129,6 +131,7 @@ func newConfiguredMigrationFixture(t *testing.T, cm *costmap.Manager, configure 
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.configPath, f.reloader = configPath, reloader
 	store, err := sqlite.New(filepath.Join(t.TempDir(), "proxy.db"))
 	if err != nil {
 		t.Fatal(err)

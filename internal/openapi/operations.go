@@ -32,6 +32,7 @@ func buildPaths() *openapi3.Paths {
 
 	addMediaPaths(paths)
 	addAccountingContract(paths)
+	addKeyIssuancePaths(paths)
 	return paths
 }
 
@@ -574,6 +575,7 @@ const bearerAuthName = "bearerAuth"
 func buildSecuritySchemes() openapi3.SecuritySchemes {
 	return openapi3.SecuritySchemes{
 		"anthropicApiKey": {Value: &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "x-api-key", Description: "Proxy master or application key for the Anthropic Messages endpoint."}},
+		keyIssuerAuthName: {Value: &openapi3.SecurityScheme{Type: "http", Scheme: "bearer", Description: "Dedicated key issuer credential configured for one application."}},
 		bearerAuthName: &openapi3.SecuritySchemeRef{
 			Value: &openapi3.SecurityScheme{
 				Type:        "http",

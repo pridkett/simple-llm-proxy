@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/keystore"
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
@@ -48,6 +49,10 @@ func keyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 				writeError(w, model.ErrUnauthorized("missing API key"))
 				return
 			}
+			if strings.HasPrefix(token, config.KeyIssuerTokenPrefix) {
+				writeError(w, model.ErrUnauthorized("invalid API key"))
+				return
+			}
 
 			// Master key: bypass all enforcement (admin/testing credential)
 			if masterKey != "" && token == masterKey {
@@ -68,6 +73,10 @@ func keyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 			}
 			if !ck.Key.IsUsableAt(time.Now()) {
 				writeError(w, model.ErrUnauthorized("API key has been revoked"))
+				return
+			}
+			if ck.Key.IssuerID != "" && len(ck.AllowedModels) == 0 {
+				writeError(w, model.ErrForbidden("issued app keys require a model allowlist"))
 				return
 			}
 
@@ -103,4 +112,15 @@ func keyAuth(masterKey string, store storage.Storage, cache *keystore.Cache, rl 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// RejectIssuedKeys protects configuration mutations from delegated model credentials.
+func RejectIssuedKeys(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key := APIKeyFromContext(r.Context()); key != nil && key.Key.IssuerID != "" {
+			model.WriteError(w, model.ErrForbidden("issued app keys cannot change model configuration"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

@@ -170,6 +170,11 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 
+	if value, ok := raw["key_issuers"]; ok {
+		if err := parseKeyIssuers(value, cfg); err != nil {
+			return nil, err
+		}
+	}
 	if value, ok := raw["mcp"]; ok {
 		if err := parseMCPSettings(value, cfg); err != nil {
 			return nil, err

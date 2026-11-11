@@ -52,6 +52,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 	// Public routes — no auth required
 	mux.Get("/health", handler.Health())
 	mux.Get("/openapi.json", handler.OpenAPI(spec))
+	handler.RegisterKeyIssuanceRoutes(mux, store, reloader.Config)
 
 	// OIDC auth routes — public (no session required; login initiates the flow)
 	// These are wrapped in sm.LoadAndSave so session cookies are processed on callback.
@@ -104,9 +105,9 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		mux.Delete("/v1/responses/{id}", handler.CancelResponseJob(r, store, sa))
 		mux.Get("/v1/models", handler.Models(r))
 		mux.Get("/v1/models/{model}", handler.ModelDetail(r, cm))
-		mux.Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
-		mux.Patch("/v1/models/{model}/costs", handler.PatchModelCosts(cm, store))
-		mux.Delete("/v1/models/{model}/costs", handler.DeleteModelCosts(cm, store))
+		mux.With(middleware.RejectIssuedKeys).Patch("/v1/models/{model}/cost_map_key", handler.PatchModelMapping(cm, store))
+		mux.With(middleware.RejectIssuedKeys).Patch("/v1/models/{model}/costs", handler.PatchModelCosts(cm, store))
+		mux.With(middleware.RejectIssuedKeys).Delete("/v1/models/{model}/costs", handler.DeleteModelCosts(cm, store))
 	})
 
 	// Accounting reads remain accessible after generation limits have been exhausted.
