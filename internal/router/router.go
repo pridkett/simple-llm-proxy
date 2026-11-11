@@ -516,6 +516,8 @@ func buildProviderOptions(mc config.ModelConfig) provider.ProviderOptions {
 		opts.XMLToolCalls = &v
 	}
 
+	opts.AnthropicPromptCaching, _ = ep["anthropic_prompt_caching"].(bool)
+
 	return opts
 }
 

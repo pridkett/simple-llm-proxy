@@ -108,6 +108,8 @@ model_list:
     litellm_params:
       model: anthropic/claude-3-5-sonnet-20240620
       api_key: os.environ/ANTHROPIC_API_KEY
+      # extra_params:
+      #   anthropic_prompt_caching: true  # Opt in on upstreams that support automatic caching.
     rpm: 50
 
   - model_name: claude-3-opus

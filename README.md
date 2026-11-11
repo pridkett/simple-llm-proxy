@@ -543,6 +543,34 @@ The proxy automatically:
 
 OpenRouter and Ollama use their OpenAI-compatible endpoints. Ollama `api_base` must include `/v1`. Anthropic requests are translated: common chat and tools are supported, but arbitrary provider-specific options are not passed through.
 
+#### Automatic prompt caching
+
+Opt in for each `anthropic/` deployment that supports top-level `cache_control`.
+Use your actual Claude model ID in `litellm_params.model`.
+
+```yaml
+model_list:
+  - model_name: claude-chat
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      extra_params:
+        anthropic_prompt_caching: true
+```
+
+The setting defaults to `false`. When enabled, the proxy sends
+`"cache_control": {"type": "ephemeral"}` to Anthropic for streaming and
+non-streaming chat, including OpenAI-compatible requests from Open WebUI.
+Anthropic places the breakpoint and uses its default five-minute lifetime.
+Cache writes are billed, and the minimum cacheable prefix length depends on
+the model. See [Anthropic's prompt caching documentation](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+To verify, start a chat with a prompt above the model's minimum length and
+send a follow-up within five minutes. Keep the system prompt, tool definitions,
+and earlier turns stable. In the proxy's Logs, expand the requests and check
+**Tokens & Cost** for **Cache Write** on the first request and **Cache Read**
+on the follow-up.
+
 ## Load Balancing
 
 ### Routing Strategies
