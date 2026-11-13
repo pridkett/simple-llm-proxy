@@ -4,11 +4,17 @@
 // blocks embedded in the content string rather than in the tool_calls
 // array. The provider includes a TransformResponse hook that parses
 // these XML blocks and promotes them to proper tool_calls entries.
+//
+// MiniMax also serves a stateless OpenAI Responses API at POST /v1/responses
+// (sync and streaming), so the provider implements provider.ResponsesProvider.
+// It has no background jobs: there is no GET or cancel endpoint.
 package minimax
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -143,6 +149,35 @@ func newTransformResponse(xmlEnabled bool) openaicompat.TransformResponseFunc {
 	}
 }
 
+// errNoBackgroundResponses is returned for the Responses job endpoints that
+// MiniMax does not offer.
+var errNoBackgroundResponses = errors.New("minimax does not support background Responses jobs")
+
+// Provider is the MiniMax provider: chat completions with optional XML
+// tool-call repair, plus the stateless Responses API.
+type Provider struct {
+	*openaicompat.ResponsesProvider
+}
+
+// CreateResponse rejects background requests, which would leave the proxy
+// polling a job MiniMax cannot report on.
+func (p *Provider) CreateResponse(ctx context.Context, req *model.ResponsesRequest) (*model.ResponsesResponse, error) {
+	if req.Background {
+		return nil, errNoBackgroundResponses
+	}
+	return p.ResponsesProvider.CreateResponse(ctx, req)
+}
+
+// GetResponse reports that MiniMax has no stored Responses jobs to poll.
+func (p *Provider) GetResponse(context.Context, string) (*model.ResponsesResponse, error) {
+	return nil, errNoBackgroundResponses
+}
+
+// CancelResponse reports that MiniMax has no stored Responses jobs to cancel.
+func (p *Provider) CancelResponse(context.Context, string) (*model.ResponsesResponse, error) {
+	return nil, errNoBackgroundResponses
+}
+
 // New creates a new MiniMax provider.
 // XML tool-call parsing is enabled by default (D-17). Set opts.XMLToolCalls
 // to false to disable it.
@@ -158,7 +193,7 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		xmlEnabled = *opts.XMLToolCalls
 	}
 
-	return &openaicompat.BaseProvider{
+	return &Provider{ResponsesProvider: &openaicompat.ResponsesProvider{BaseProvider: &openaicompat.BaseProvider{
 		ProviderName:      "minimax",
 		BaseURL:           baseURL,
 		Client:            &http.Client{},
@@ -167,7 +202,7 @@ func New(opts provider.ProviderOptions) provider.Provider {
 		DoneSentinel:      "[DONE]",
 		AllowEOFOnFinish:  true, // Hosted MiniMax ends after its terminal chunk without [DONE].
 		TransformResponse: newTransformResponse(xmlEnabled),
-	}
+	}}}
 }
 
 func init() {

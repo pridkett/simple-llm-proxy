@@ -12,13 +12,11 @@ const (
 	defaultBaseURL = "https://api.openai.com/v1"
 )
 
-// Provider is the OpenAI provider. It embeds openaicompat.BaseProvider for all
-// chat-completions/embeddings HTTP, streaming, and error-handling logic, and adds
-// Responses API support directly (provider.ResponsesProvider) since the Responses
-// API is OpenAI-specific — no other provider in this repo shares its schema, so
-// it is not part of the shared openaicompat base (see ADR 010 D-01).
+// Provider is the OpenAI provider. openaicompat.ResponsesProvider supplies the
+// chat-completions/embeddings logic from BaseProvider plus the Responses API
+// (provider.ResponsesProvider, ADR 010 D-01).
 type Provider struct {
-	*openaicompat.BaseProvider
+	*openaicompat.ResponsesProvider
 }
 
 // New creates a new OpenAI provider.
@@ -33,7 +31,7 @@ func newProvider(opts provider.ProviderOptions) *Provider {
 	}
 
 	apiKey := opts.APIKey
-	return &Provider{
+	return &Provider{ResponsesProvider: &openaicompat.ResponsesProvider{
 		BaseProvider: &openaicompat.BaseProvider{
 			ProviderName: "openai",
 			BaseURL:      baseURL,
@@ -44,7 +42,7 @@ func newProvider(opts provider.ProviderOptions) *Provider {
 			ExtraHeaders: opts.ExtraHeaders,
 			DoneSentinel: "[DONE]",
 		},
-	}
+	}}
 }
 
 func init() {

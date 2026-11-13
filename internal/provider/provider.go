@@ -38,7 +38,7 @@ type DecisionsProvider interface {
 
 // ResponsesProvider is implemented by providers that support the OpenAI
 // Responses API (POST /responses, GET /responses/{id}). Unlike Provider,
-// this is not required of every provider — only OpenAI implements it today.
+// this is not required of every provider — OpenAI and MiniMax implement it.
 // Callers type-assert a Deployment's Provider against this interface.
 type ResponsesProvider interface {
 	// CreateResponse performs a non-streaming Responses API call. When req.Background

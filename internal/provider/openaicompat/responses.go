@@ -1,4 +1,4 @@
-package openai
+package openaicompat
 
 import (
 	"bytes"
@@ -13,10 +13,19 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
 
+// ResponsesProvider adds the OpenAI Responses API (POST /responses, plus
+// GET/cancel for background jobs) on top of BaseProvider. It is a separate
+// wrapper rather than BaseProvider methods so that only providers whose
+// upstream really speaks the Responses schema satisfy
+// provider.ResponsesProvider; the handler type-asserts on that interface.
+type ResponsesProvider struct {
+	*BaseProvider
+}
+
 // doJSON executes a JSON request against the Responses API and unmarshals a
 // successful response into out. Mirrors the error-handling conventions of
 // openaicompat.BaseProvider (429 -> RateLimitError, non-200 -> parsed APIError).
-func (p *Provider) doJSON(ctx context.Context, method, path string, reqBody any, out any) error {
+func (p *ResponsesProvider) doJSON(ctx context.Context, method, path string, reqBody any, out any) error {
 	var bodyReader io.Reader
 	if reqBody != nil {
 		body, err := json.Marshal(reqBody)
@@ -76,7 +85,7 @@ func (p *Provider) doJSON(ctx context.Context, method, path string, reqBody any,
 }
 
 // CreateResponse implements provider.ResponsesProvider.
-func (p *Provider) CreateResponse(ctx context.Context, req *model.ResponsesRequest) (*model.ResponsesResponse, error) {
+func (p *ResponsesProvider) CreateResponse(ctx context.Context, req *model.ResponsesRequest) (*model.ResponsesResponse, error) {
 	reqCopy := *req
 	reqCopy.Stream = false
 
@@ -88,7 +97,7 @@ func (p *Provider) CreateResponse(ctx context.Context, req *model.ResponsesReque
 }
 
 // GetResponse implements provider.ResponsesProvider.
-func (p *Provider) GetResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error) {
+func (p *ResponsesProvider) GetResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error) {
 	var result model.ResponsesResponse
 	if err := p.doJSON(ctx, http.MethodGet, "/responses/"+responseID, nil, &result); err != nil {
 		return nil, err
@@ -97,7 +106,7 @@ func (p *Provider) GetResponse(ctx context.Context, responseID string) (*model.R
 }
 
 // CancelResponse implements provider.ResponsesProvider.
-func (p *Provider) CancelResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error) {
+func (p *ResponsesProvider) CancelResponse(ctx context.Context, responseID string) (*model.ResponsesResponse, error) {
 	var result model.ResponsesResponse
 	if err := p.doJSON(ctx, http.MethodPost, "/responses/"+responseID+"/cancel", nil, &result); err != nil {
 		return nil, err
@@ -106,7 +115,7 @@ func (p *Provider) CancelResponse(ctx context.Context, responseID string) (*mode
 }
 
 // CreateResponseStream implements provider.ResponsesProvider.
-func (p *Provider) CreateResponseStream(ctx context.Context, req *model.ResponsesRequest) (provider.ResponsesStream, error) {
+func (p *ResponsesProvider) CreateResponseStream(ctx context.Context, req *model.ResponsesRequest) (provider.ResponsesStream, error) {
 	reqCopy := *req
 	reqCopy.Stream = true
 
