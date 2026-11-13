@@ -27,7 +27,7 @@ import (
 )
 
 // errNotResponsesProvider signals that the routed deployment does not implement
-// provider.ResponsesProvider (ADR 010 D-01) — only OpenAI does today.
+// provider.ResponsesProvider (ADR 010 D-01) — OpenAI and MiniMax do today.
 var errNotResponsesProvider = errors.New("model does not support the Responses API")
 
 // Responses handles POST /v1/responses requests: synchronous, streaming, and
