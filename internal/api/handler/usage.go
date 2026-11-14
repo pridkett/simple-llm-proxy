@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,8 +29,12 @@ type usageGroup struct {
 	storage.UsageMetrics
 }
 type usageResponse struct {
-	BudgetRows    []storage.SpendRow       `json:"budget_rows"`
-	Alerts        []spendAlert             `json:"alerts"`
+	BudgetRows []storage.SpendRow `json:"budget_rows"`
+	Alerts     []spendAlert       `json:"alerts"`
+	usageReport
+}
+
+type usageReport struct {
 	From          string                   `json:"from"`
 	To            string                   `json:"to"`
 	FromTime      time.Time                `json:"from_time"`
@@ -43,6 +48,8 @@ type usageResponse struct {
 	Groups        []usageGroup             `json:"groups"`
 	Series        []storage.UsageAggregate `json:"series"`
 }
+
+var errUsageTooManyRows = errors.New("too many usage groups across all buckets, narrow the filters or choose a coarser interval")
 
 // AdminUsage returns one consistent population for all reporting components.
 // Date-only bounds are inclusive in the requested timezone; since/until are an
@@ -59,7 +66,7 @@ func AdminUsage(store usageStore, getCfg func() *config.Config) http.HandlerFunc
 			model.WriteError(w, model.ErrBadRequest(err.Error()))
 			return
 		}
-		rows, err := store.GetUsage(req.Context(), query)
+		report, err := loadUsageReport(req.Context(), store, query, tz, interval, getCfg)
 		if err != nil {
 			model.WriteError(w, model.ErrInternal("failed to load usage report"))
 			return
@@ -76,39 +83,55 @@ func AdminUsage(store usageStore, getCfg func() *config.Config) http.HandlerFunc
 		if budgetRows == nil {
 			budgetRows = []storage.SpendRow{}
 		}
-		loc, _ := time.LoadLocation(tz)
-		resp := usageResponse{BudgetRows: budgetRows, Alerts: computeAlerts(budgetRows), From: query.From.In(loc).Format("2006-01-02"), To: query.To.Add(-time.Nanosecond).In(loc).Format("2006-01-02"), FromTime: query.From.UTC(), ToTime: query.To.UTC(), Timezone: tz, Interval: interval, GroupBy: query.GroupBy, Buckets: query.Buckets, Groups: []usageGroup{}, Series: rows}
-		if resp.Series == nil {
-			resp.Series = []storage.UsageAggregate{}
-		}
-		if getCfg != nil {
-			if cfg := getCfg(); cfg != nil {
-				resp.RetentionDays = cfg.GeneralSettings.LogRetentionDays
-			}
-		}
-		groups := map[string]*usageGroup{}
-		for _, row := range rows {
-			resp.Summary.Add(row.UsageMetrics)
-			g := groups[row.GroupID]
-			if g == nil {
-				g = &usageGroup{GroupID: row.GroupID, Name: row.Name}
-				groups[row.GroupID] = g
-			}
-			g.Add(row.UsageMetrics)
-		}
-		for _, g := range groups {
-			resp.Groups = append(resp.Groups, *g)
-		}
-		sort.Slice(resp.Groups, func(i, j int) bool {
-			if resp.Groups[i].Calls != resp.Groups[j].Calls {
-				return resp.Groups[i].Calls > resp.Groups[j].Calls
-			}
-			return resp.Groups[i].GroupID < resp.Groups[j].GroupID
-		})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(usageResponse{BudgetRows: budgetRows, Alerts: computeAlerts(budgetRows), usageReport: report})
 	}
+}
+
+func loadUsageReport(ctx context.Context, store storage.UsageStorage, query storage.UsageQuery, tz, interval string, getCfg func() *config.Config) (usageReport, error) {
+	rows, err := store.GetUsage(ctx, query)
+	if err != nil {
+		return usageReport{}, err
+	}
+	// Ask for one extra row so callers receive a complete report or an error.
+	if query.MaxRows > 0 && len(rows) >= query.MaxRows {
+		return usageReport{}, errUsageTooManyRows
+	}
+	loc, _ := time.LoadLocation(tz)
+	resp := usageReport{
+		From: query.From.In(loc).Format("2006-01-02"), To: query.To.Add(-time.Nanosecond).In(loc).Format("2006-01-02"),
+		FromTime: query.From.UTC(), ToTime: query.To.UTC(), Timezone: tz, Interval: interval,
+		GroupBy: query.GroupBy, Buckets: query.Buckets, Groups: []usageGroup{}, Series: rows,
+	}
+	if resp.Series == nil {
+		resp.Series = []storage.UsageAggregate{}
+	}
+	if getCfg != nil {
+		if cfg := getCfg(); cfg != nil {
+			resp.RetentionDays = cfg.GeneralSettings.LogRetentionDays
+		}
+	}
+	groups := map[string]*usageGroup{}
+	for _, row := range rows {
+		resp.Summary.Add(row.UsageMetrics)
+		g := groups[row.GroupID]
+		if g == nil {
+			g = &usageGroup{GroupID: row.GroupID, Name: row.Name}
+			groups[row.GroupID] = g
+		}
+		g.Add(row.UsageMetrics)
+	}
+	for _, g := range groups {
+		resp.Groups = append(resp.Groups, *g)
+	}
+	sort.Slice(resp.Groups, func(i, j int) bool {
+		if resp.Groups[i].Calls != resp.Groups[j].Calls {
+			return resp.Groups[i].Calls > resp.Groups[j].Calls
+		}
+		return resp.Groups[i].GroupID < resp.Groups[j].GroupID
+	})
+	return resp, nil
 }
 
 func parseUsageQuery(v url.Values, now time.Time) (storage.UsageQuery, string, string, error) {
@@ -157,9 +180,16 @@ func parseUsageQuery(v url.Values, now time.Time) (storage.UsageQuery, string, s
 		q.GroupBy = "model"
 	}
 	switch q.GroupBy {
-	case "model", "app", "key", "team":
+	case "model", "app", "key", "team", "status":
 	default:
-		return fail("group_by must be model, app, key or team")
+		return fail("group_by must be model, app, key, team or status")
+	}
+	if raw := v.Get("status_code"); raw != "" {
+		code, err := strconv.Atoi(raw)
+		if err != nil || code < 100 || code > 599 {
+			return fail("status_code must be an HTTP status between 100 and 599")
+		}
+		q.StatusCode = &code
 	}
 	for _, f := range []struct {
 		param  string

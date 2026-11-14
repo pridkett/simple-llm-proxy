@@ -21,6 +21,7 @@ client examples are documented in [Request accounting](docs/accounting.md).
 - **App keys** - Per-app keys with model restrictions, revocation, and usage attribution; OIDC protects administration
 - **Decision models** - Decisions and System One APIs for Jev, OpenAI, Granite, Clef, and compatible Laya/Ollaya servers, with multimodal input, explicit key permissions, cost tracking, and log filters. See [the decision model guide](docs/decision-models.md).
 - **MCP gateway** - Proxy registered HTTPS MCP servers with shared or personal API keys and OAuth connections. See the [MCP gateway guide](docs/mcp.md).
+- **Management MCP server** - Query usage and cost, look up teams and applications, and create app keys from an MCP client. See the [management MCP guide](docs/management-mcp.md).
 - **OpenAPI specification** - Dynamic OpenAPI 3.0 spec available at `/openapi.json`
 
 ## Installation
@@ -102,9 +103,10 @@ is supplied by the server for local requests and has no database account.
 The setting defaults to off. To disable it, remove the block or set
 `enabled: false` and restart the proxy. While enabled, the proxy listens only
 on `127.0.0.1`. Anyone who can access that local listener can administer the
-proxy. Keep both servers on your machine and avoid exposing them through a
-reverse proxy or tunnel. Calls to `/v1/*` still require the master key or an app
-key. Personal MCP access and MCP OAuth require OIDC.
+proxy, including through the management MCP endpoint at
+`http://127.0.0.1:8080/api/v1/mcp`. Keep both servers on your machine and avoid
+exposing them through a reverse proxy or tunnel. Calls to `/v1/*` still require
+the master key or an app key. Personal upstream MCP access requires OIDC.
 
 ## Configuration
 

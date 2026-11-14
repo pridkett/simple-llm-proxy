@@ -1,5 +1,8 @@
 # HTTPS MCP gateway
 
+For the proxy's own usage and app-key tools, see the
+[management MCP server](management-mcp.md).
+
 Each operator-registered server gets a native Streamable HTTP endpoint at
 `/mcp/{name}`. Configure this URL separately in your MCP client. For Open WebUI,
 add an external tool server of type MCP (Streamable HTTP) with Bearer auth. The

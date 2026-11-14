@@ -16,6 +16,8 @@ type UsageQuery struct {
 	Filters      LogsFilter
 	Unattributed string
 	Buckets      []UsageBucket
+	StatusCode   *int
+	MaxRows      int // zero returns every aggregate
 }
 
 type UsageBucket struct {

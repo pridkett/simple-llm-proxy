@@ -71,6 +71,12 @@ func (r *Reloader) ReloadWithApply(apply func(*Config) error) (*Config, error) {
 	if cfg.LocalAdmin != r.Config().LocalAdmin {
 		return nil, fmt.Errorf("changes to local_admin require a server restart")
 	}
+	if cfg.MCP.Management != r.Config().MCP.Management {
+		return nil, fmt.Errorf("changes to mcp.management require a server restart")
+	}
+	if cfg.MCP.Management.OAuth && cfg.OIDCSettings != r.Config().OIDCSettings {
+		return nil, fmt.Errorf("changes to MCP OAuth issuer or OIDC settings require a server restart")
+	}
 
 	// Expand wildcards if any discovery providers are registered.
 	if len(r.discoveryProviders) > 0 {

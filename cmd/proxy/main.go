@@ -142,6 +142,13 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to initialize OIDC provider")
 	}
+	if cfg.MCP.Management.OAuth {
+		oidcProvider.MCP, err = auth.NewMCPOAuth(context.Background(), oidcProvider.Provider,
+			cfg.OIDCSettings.IssuerURL, cfg.OIDCSettings.RedirectURL)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to initialize MCP OAuth")
+		}
+	}
 	if oidcProvider != nil {
 		log.Info().Str("issuer", cfg.OIDCSettings.IssuerURL).Msg("OIDC provider initialized")
 	} else if cfg.LocalAdmin.Enabled {

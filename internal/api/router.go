@@ -149,6 +149,7 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 		handler.RegisterAdminRoutes(mux, store, cache, reloader.Config)
 	})
 
+	handler.RegisterManagementMCP(mux, store, reloader.Config, oidcProvider)
 	mcp.Register(mux, reloader.Config(), store, sm, rl)
 
 	// SPA static serving (production / Docker): serve the built frontend at "/"
