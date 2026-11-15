@@ -8,7 +8,7 @@ import (
 
 func decisionsPath(systemOne bool, operationID string) *openapi3.PathItem {
 	input, questions, answers := "input", openapi3.NewArraySchema().WithItems(openapi3.NewObjectSchema()), openapi3.NewArraySchema().WithItems(openapi3.NewObjectSchema())
-	description := "Answer typed predicate, choice, score, or box questions using a declared decision deployment. Text or multimodal input is preserved. Requires allow_decisions=true on app keys AND the existing model allowlist. Model-specific capabilities and USD prices appear in decision_deployments on model discovery. Streaming and background calls are unsupported. Translations reject extensions that cannot be preserved. X-Request-Cost reports the USD request cost when known."
+	description := "Answer typed predicate, choice, score, or box questions using a declared decision deployment. Text or multimodal input is preserved. Requires allow_decisions=true on app keys AND the existing model allowlist. Model-specific capabilities and USD prices appear in decision_deployments on model discovery. Streaming and background calls are unsupported. The same request reaches OpenAI, Gemini, Ollama, System One, and Cloudflare deployments. Translations reject extensions that cannot be preserved. X-Request-Cost reports the USD request cost when known."
 	if systemOne {
 		input = "state"
 		questions = openapi3.NewObjectSchema()

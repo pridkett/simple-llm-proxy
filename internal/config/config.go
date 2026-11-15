@@ -84,11 +84,14 @@ type ModelConfig struct {
 // DecisionConfig explicitly opts a deployment into the decision-only API.
 // Protocol describes the upstream wire format, independently of the provider name.
 type DecisionConfig struct {
-	Protocol      string           `yaml:"protocol" json:"protocol"`             // decisions, systemone, cloudflare
+	Protocol      string           `yaml:"protocol" json:"protocol"`             // decisions, systemone, cloudflare, gemini, ollama
 	Path          string           `yaml:"path,omitempty" json:"path,omitempty"` // relative to api_base
 	Modalities    []string         `yaml:"modalities,omitempty" json:"modalities"`
 	QuestionTypes []string         `yaml:"question_types,omitempty" json:"question_types"`
 	Pricing       *DecisionPricing `yaml:"pricing" json:"pricing"`
+	// ExtraBody is merged into every upstream request (e.g. Granite cache_salt,
+	// Ollama keep_alive). It is operator-owned and hidden from discovery.
+	ExtraBody map[string]any `yaml:"extra_body,omitempty" json:"-"`
 }
 
 // DecisionPricing is endpoint-specific USD pricing. An explicit empty block

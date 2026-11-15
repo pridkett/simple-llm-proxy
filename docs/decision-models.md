@@ -2,8 +2,20 @@
 
 The proxy supports typed decisions through `POST /v1/decisions` and
 `POST /v1/systemone`, with `/decisions` and `/systemone` aliases. Both use normal
-Bearer key authentication. See [ADR 016](../adr/016-decision-models.md) for the
-design and source references.
+Bearer key authentication. See [ADR 016](../adr/016-decision-models.md) and
+[ADR 019](../adr/019-decision-provider-dialects.md) for the design and source
+references.
+
+| Upstream | `decision.protocol` | Default `api_base` (by provider prefix) |
+| --- | --- | --- |
+| OpenAI Decisions (`gpt-6-luna`) | `decisions` | `openai/` → `https://api.openai.com/v1` |
+| Gemini Decisions (`gemini-decision-1`) | `gemini` | `gemini/` → `https://generativelanguage.googleapis.com/v1beta` |
+| Ollama (Nimble, Tev, Clef) | `ollama` | `ollama/` → `http://localhost:11434/v1` |
+| TypeSafe Jev, Laya, other System One servers | `systemone` | `typesafe/` → `https://api.typesafe.ai/v1` |
+| Granite Switch on vLLM | `systemone` or `decisions` | none; set `api_base` |
+| Cloudflare Workers AI (Clef) | `cloudflare` | none; set `api_base` and `path` |
+
+Every row is reachable from both public routes.
 
 ## Declare deployments
 
@@ -41,12 +53,45 @@ model_list:
       pricing:
         input_cost_per_token: 0.0000001 # example: set your contracted USD rate
 
+  - model_name: gemini-decisions
+    litellm_params:
+      model: gemini/gemini-decision-1
+      api_key: os.environ/GEMINI_API_KEY
+    decision:
+      protocol: gemini
+      modalities: [text, image, audio, video]
+      pricing:
+        input_cost_per_token: 0.0000001 # output tokens are not charged
+
+  - model_name: nimble-local
+    litellm_params:
+      model: ollama/nimble # no api_key: local Ollama needs none
+    decision:
+      protocol: ollama
+      extra_body:
+        keep_alive: 30m
+      pricing: {}
+
+  - model_name: clef-cloud
+    litellm_params:
+      model: ollama/clef
+      api_base: https://ollama.com/v1
+      api_key: os.environ/OLLAMA_API_KEY
+    decision:
+      protocol: ollama
+      modalities: [text, image]
+      pricing:
+        input_cost_per_token: 0.0000001 # example: set your plan's USD rate
+
   - model_name: granite-decisions
     litellm_params:
-      model: vllm/your-granite-decision-adapter
+      model: vllm/granite-switch # the server's SERVED_MODEL_NAME
       api_base: http://localhost:8000/v1
+      # api_key: os.environ/VLLM_API_KEY # when vLLM runs with --api-key
     decision:
       protocol: systemone
+      extra_body:
+        cache_salt: os.environ/GRANITE_CACHE_SALT
       pricing: {} # explicitly free/self-hosted; does not estimate GPU rental costs
 
   - model_name: laya-local
@@ -71,9 +116,11 @@ model_list:
         input_cost_per_token: 0.00000015
 ```
 
-OpenAI and TypeSafe have default `/v1` base URLs; other prefixes require
-`api_base`. The default path is `/decisions` or `/systemone`, appended to that
-base. An optional `path` overrides it. Cloudflare requires an explicit model path
+The `openai`, `typesafe`, `gemini`, and `ollama` prefixes have the default base
+URLs in the table above; other prefixes require `api_base`. The default path is
+`/decisions` (`decisions`, `gemini`) or `/systemone` (`systemone`, `ollama`),
+appended to that base. An optional `path` overrides it. The prefix only picks a
+default origin: the protocol, not the prefix, decides the wire format. Cloudflare requires an explicit model path
 and unwraps the Workers AI `success`/`result` envelope. It does not auto-select a
 model from the prefix.
 
@@ -88,6 +135,57 @@ Prices above reflect the basic OpenAI and Cloudflare rates checked on
 illustrative. Set actual contracted rates for every deployment. See
 [OpenAI pricing for Decisions](https://developers.openai.com/api/docs/guides/decisions)
 and [Clef-omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/).
+
+`extra_body` adds operator-owned JSON fields to every upstream request for that
+deployment, on either public route, after translation. Use it for settings the
+upstream reads from the body, such as Granite Switch's `cache_salt` or Ollama's
+`keep_alive`. A deployment value replaces a client field of the same name.
+Top-level string values support `os.environ/VAR`. Fields the proxy builds
+(`model`, `input`, `state`, `questions`, media, `stream`, `background`) are
+rejected at load, and the block is never returned by model discovery or
+`/admin/config`.
+
+### Gemini
+
+`protocol: gemini` sends Google's native request and authenticates with
+`x-goog-api-key`. From `/v1/systemone`, `state` becomes text (structured state as
+compact JSON), followed by `images`, `audio`, and `videos` as typed blocks; noul
+`{"true": ..., "false": ...}` criteria become `true_description` /
+`false_description`. From `/v1/decisions`, user messages become ordered text and
+image blocks and `input_json` parts become JSON text. A transcript with other
+roles is sent as one JSON text block, and is rejected if it also carries images,
+because Gemini input has no roles.
+
+Embedded media needs a real type: use a data URL, or bare base64 that the proxy
+can recognise from its leading bytes. An `https://` URL is forwarded as a `uri`
+without being fetched when its extension identifies the type. Question names
+must match `[A-Za-z0-9_-]{1,64}`. Responses gain `model` and `usage.input_tokens`
+/ `usage.output_tokens`; Google's `total_*` and per-modality counts stay beside
+them. PDFs and per-block `resolution` are not reachable through either public
+format.
+
+### Ollama
+
+`protocol: ollama` is System One with Ollama's rules: `images` are sent as bare
+base64 (data URLs are unwrapped, URLs return 400), `audio`, `videos`, and
+`assets` are rejected, and no credentials are sent unless `api_key` is set. Use
+`api_base: https://ollama.com/v1` with a key for cloud models, or a `:cloud`
+model name on a signed-in local server. Ollama's `{"error": "..."}` failures
+are returned in the proxy's usual error object.
+
+### Granite Switch
+
+Granite Switch 4.1 serves chat and its decision adapter from one vLLM server.
+Run it with the
+[granite-switch-decision](https://github.com/generative-computing/granite-switch-decision)
+plugin, or vLLM 0.32+ which has the routes built in, and declare two aliases
+against the same `api_base`: a normal `vllm/` chat entry and the
+`granite-decisions` entry above. `protocol: systemone` returns the plugin's
+per-question `diagnostics` (`label_mass`, `argmax_is_label`) unchanged;
+`protocol: decisions` uses its OpenAI-shaped route instead. The decision routes
+are text-only, so leave `modalities` at its default. The adapter (for example
+Decision or Guardian) is chosen by the server's `DECISION_ADAPTER_NAME`, not per
+request; run one server per adapter and give each its own alias.
 
 ## Grant key access
 
@@ -158,7 +256,9 @@ Native calls retain request extensions, structured System One state,
 instructions/criteria, and provider-specific fields. Cross-protocol translation
 rejects unsupported extensions rather than dropping them. Structured System One
 state/instructions, noul criteria, and rich score descriptions need the matching
-native protocol. No text-generating chat emulation is used.
+native protocol. The proxy accepts up to 1,000 questions, and 255 score levels
+on `/v1/systemone` (10 on `/v1/decisions`); each upstream applies its own lower
+limits (OpenAI 400 questions, Ollama cloud 64). No text-generating chat emulation is used.
 
 ## Multimodal calls
 

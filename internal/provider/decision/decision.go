@@ -41,6 +41,10 @@ func New(name string, opts provider.ProviderOptions, cfg *config.DecisionConfig)
 			base = "https://api.openai.com/v1"
 		case "typesafe":
 			base = "https://api.typesafe.ai/v1"
+		case "gemini":
+			base = "https://generativelanguage.googleapis.com/v1beta"
+		case "ollama":
+			base = "http://localhost:11434/v1"
 		default:
 			return nil, fmt.Errorf("api_base is required for decision provider %q", name)
 		}
@@ -54,7 +58,7 @@ func New(name string, opts provider.ProviderOptions, cfg *config.DecisionConfig)
 		if d.Protocol == "cloudflare" {
 			return nil, fmt.Errorf("cloudflare decision.path must identify the Workers AI model, e.g. /@cf/cloudflare/clef")
 		}
-		path = "/" + d.Protocol
+		path = "/" + wireFormat(d.Protocol)
 	}
 	// Do not follow redirects with deployment credentials to another origin.
 	client := &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -76,6 +80,15 @@ func unsupported() error {
 	return provider.NewHTTPError("decision", 400, nil, nil, fmt.Errorf("decision-only model: use /v1/decisions or /v1/systemone"))
 }
 
+// wireFormat is the public format whose default path a protocol uses. Gemini
+// posts to /decisions even though its questions and answers are System One-shaped.
+func wireFormat(protocol string) string {
+	if protocol == "decisions" || protocol == "gemini" {
+		return model.DecisionsFormat
+	}
+	return model.SystemOneFormat
+}
+
 // Prepare checks capabilities and translation before routing consumes quota.
 func Prepare(req *model.DecisionRequest, cfg *config.DecisionConfig, actualModel string) (map[string]json.RawMessage, error) {
 	for _, modality := range req.Modalities {
@@ -88,17 +101,47 @@ func Prepare(req *model.DecisionRequest, cfg *config.DecisionConfig, actualModel
 			return nil, fmt.Errorf("model does not support %s questions", q.Type)
 		}
 	}
-	format := cfg.Protocol
-	if format == "cloudflare" {
-		format = model.SystemOneFormat
+	var wire map[string]json.RawMessage
+	var err error
+	if cfg.Protocol == "gemini" {
+		wire, err = req.GeminiWire(actualModel)
+	} else {
+		// TypeSafe places images as named assets; Cloudflare and Ollama take a list.
+		style := "assets"
+		if cfg.Protocol == "cloudflare" || cfg.Protocol == "ollama" {
+			style = "images"
+		}
+		wire, err = req.Wire(wireFormat(cfg.Protocol), actualModel, style)
 	}
-	style := "assets"
-	if cfg.Protocol == "cloudflare" {
-		style = "images"
-	}
-	wire, err := req.Wire(format, actualModel, style)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Protocol == "ollama" {
+		for _, field := range []string{"assets", "audio", "videos"} {
+			if wire[field] != nil {
+				return nil, fmt.Errorf("Ollama does not support %s; send base64 media in images", field)
+			}
+		}
+		if raw := wire["images"]; raw != nil {
+			var refs []string
+			if json.Unmarshal(raw, &refs) != nil {
+				return nil, fmt.Errorf("images must be an array")
+			}
+			// Ollama takes bare base64 and refuses data URLs and URLs.
+			for i, ref := range refs {
+				if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+					return nil, fmt.Errorf("Ollama images must be embedded; remote media URLs are never fetched")
+				}
+				if rest, ok := strings.CutPrefix(ref, "data:"); ok {
+					_, encoded, ok := strings.Cut(rest, ";base64,")
+					if !ok {
+						return nil, fmt.Errorf("Ollama image data URLs must be base64-encoded")
+					}
+					refs[i] = encoded
+				}
+			}
+			wire["images"], _ = json.Marshal(refs)
+		}
 	}
 	if cfg.Protocol == "cloudflare" {
 		// Workers AI accepts embedded media only. Never fetch user URLs in the proxy.
@@ -117,6 +160,12 @@ func Prepare(req *model.DecisionRequest, cfg *config.DecisionConfig, actualModel
 		}
 		if wire["assets"] != nil {
 			return nil, fmt.Errorf("Cloudflare does not support TypeSafe assets; use images, audio, or videos")
+		}
+	}
+	// Operator-owned fields are applied last so a client cannot override them.
+	for key, value := range cfg.ExtraBody {
+		if wire[key], err = json.Marshal(value); err != nil {
+			return nil, fmt.Errorf("decision.extra_body %q: %w", key, err)
 		}
 	}
 	return wire, nil
@@ -140,7 +189,11 @@ func (p *Provider) Decide(ctx context.Context, req *model.DecisionRequest) (*mod
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if p.opts.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.opts.APIKey)
+		if p.config.Protocol == "gemini" {
+			httpReq.Header.Set("x-goog-api-key", p.opts.APIKey)
+		} else {
+			httpReq.Header.Set("Authorization", "Bearer "+p.opts.APIKey)
+		}
 	}
 	for key, value := range p.opts.ExtraHeaders {
 		httpReq.Header.Set(key, value)
@@ -158,14 +211,22 @@ func (p *Provider) Decide(ctx context.Context, req *model.DecisionRequest) (*mod
 		return nil, fmt.Errorf("decision response exceeds size limit")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, provider.NewHTTPError(p.name, resp.StatusCode, resp.Header, data)
+		return nil, provider.NewHTTPError(p.name, resp.StatusCode, resp.Header, errorObject(data))
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil || fields == nil {
 		return nil, fmt.Errorf("invalid decision response object")
 	}
-	format := p.config.Protocol
-	if format == "cloudflare" {
+	format := model.SystemOneFormat
+	if p.config.Protocol == "decisions" {
+		format = model.DecisionsFormat
+	}
+	if p.config.Protocol == "gemini" {
+		if fields, err = model.GeminiDecisionFields(fields, req.Model); err != nil {
+			return nil, err
+		}
+	}
+	if p.config.Protocol == "cloudflare" {
 		var envelope struct {
 			Success *bool                      `json:"success"`
 			Result  map[string]json.RawMessage `json:"result"`
@@ -174,7 +235,19 @@ func (p *Provider) Decide(ctx context.Context, req *model.DecisionRequest) (*mod
 			return nil, fmt.Errorf("Cloudflare returned an unsuccessful or invalid decision envelope")
 		}
 		fields = envelope.Result
-		format = model.SystemOneFormat
 	}
 	return req.ResponseFromWire(fields, format)
+}
+
+// errorObject wraps Ollama's {"error": "<text>"} so every decision upstream
+// reports failures in the {"error": {"message": ...}} shape clients parse.
+func errorObject(body []byte) []byte {
+	var plain struct {
+		Error *string `json:"error"`
+	}
+	if json.Unmarshal(body, &plain) != nil || plain.Error == nil {
+		return body
+	}
+	wrapped, _ := json.Marshal(map[string]any{"error": map[string]string{"message": *plain.Error}})
+	return wrapped
 }

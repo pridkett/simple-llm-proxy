@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -30,6 +31,25 @@ func TestDecisionConfig(t *testing.T) {
 	} {
 		if _, err := Parse([]byte(base + body)); err == nil {
 			t.Errorf("accepted invalid config %s", body)
+		}
+	}
+	for _, protocol := range []string{"gemini", "ollama"} {
+		if _, err := Parse([]byte(base + "     protocol: " + protocol + "\n     pricing: {}\n")); err != nil {
+			t.Errorf("rejected %s: %v", protocol, err)
+		}
+	}
+	t.Setenv("DECISION_TEST_SALT", "tenant-a")
+	cfg, err = Parse([]byte(base + "     protocol: systemone\n     extra_body: {cache_salt: os.environ/DECISION_TEST_SALT, nested: {keep: [1, 2]}}\n     pricing: {}\n"))
+	if err != nil || cfg.ModelList[0].Decision.ExtraBody["cache_salt"] != "tenant-a" {
+		t.Fatalf("extra_body: %+v %v", cfg, err)
+	}
+	// A cache salt separates tenants, so it must not leak through discovery.
+	if data, _ := json.Marshal(cfg.ModelList[0].Decision); strings.Contains(string(data), "tenant-a") {
+		t.Fatalf("extra_body exposed in JSON: %s", data)
+	}
+	for _, reserved := range []string{"model", "questions", "state", "images", "stream"} {
+		if _, err := Parse([]byte(base + "     protocol: systemone\n     extra_body: {" + reserved + ": x}\n     pricing: {}\n")); err == nil {
+			t.Errorf("extra_body accepted proxy-owned field %s", reserved)
 		}
 	}
 	for _, rate := range []float64{math.Inf(1), math.NaN(), -1} {
