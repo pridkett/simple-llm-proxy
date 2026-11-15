@@ -349,7 +349,7 @@ model_list:
 | POST | `/v1/chat/completions` | Chat completions (streaming supported) |
 | POST | `/v1/messages` | Anthropic-compatible Messages to any configured chat model (streaming supported) |
 | POST | `/v1/embeddings` | Generate embeddings (compatible providers) |
-| POST | `/v1/responses` | OpenAI Responses, including the image generation tool |
+| POST | `/v1/responses` | OpenAI Responses to any configured chat model (streaming supported); background jobs and built-in tools on OpenAI deployments |
 | POST | `/v1/images/generations`, `/v1/images/edits` | OpenAI image generation and editing |
 | POST | `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech, file transcription, and file translation |
 | POST | `/v1/sound-generation`, `/v1/music` | ElevenLabs sound effect and music file generation |
@@ -508,6 +508,35 @@ returned only when the upstream reports it. Other providers may report
 may be zero until final counts arrive. If the upstream omits usage, response
 counts are zero and stored usage remains unknown. See
 [ADR 014](adr/014-anthropic-messages-api.md) for the design and plan.
+
+### OpenAI Responses API
+
+Use `POST /v1/responses` with any configured `model_name`. OpenAI and MiniMax
+deployments receive the request unchanged. Every other chat provider (Anthropic,
+Gemini, Ollama, vLLM, OpenRouter) is reached by translating the request to a
+chat completion and the reply, including the event stream, back to Responses
+shape ([ADR 020](adr/020-responses-chat-translation.md)). A Responses-only
+client such as the Codex CLI can therefore use a Claude or local model.
+
+```bash
+curl -N http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer your-app-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet",
+    "instructions": "Be concise.",
+    "input": "Count to 10",
+    "stream": true
+  }'
+```
+
+Translated routes carry text, images by URL or data URL, function tools,
+`tool_choice`, `text.format`, `reasoning.effort`, `max_output_tokens`,
+`temperature`, and `top_p`. They are stateless, so these return HTTP 400:
+`background`, `previous_response_id`, `conversation`, built-in tools such as
+`web_search` or `image_generation`, file inputs, and `item_reference` items.
+Send the full conversation in `input` instead. Reasoning items in `input` are
+dropped, and translated responses cannot be fetched by id afterwards.
 
 ### OpenAPI Specification
 

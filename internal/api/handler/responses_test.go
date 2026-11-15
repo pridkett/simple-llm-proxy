@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -190,28 +191,117 @@ func TestResponses_MissingInput(t *testing.T) {
 	}
 }
 
-func TestResponses_ProviderWithoutResponsesSupport(t *testing.T) {
-	// admin_test.go's package init() registers a no-op fake provider under "openai"
-	// that does not implement provider.ResponsesProvider.
+// chatOnlyProvider speaks only chat completions, like Anthropic or Ollama.
+type chatOnlyProvider struct{}
+
+func (chatOnlyProvider) Name() string { return "chatonlytest" }
+func (chatOnlyProvider) ChatCompletion(_ context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
+	return &model.ChatCompletionResponse{
+		Model:   req.Model,
+		Choices: []model.Choice{{Message: &model.Message{Role: "assistant", Content: "echo: " + req.Messages[len(req.Messages)-1].Content.(string)}, FinishReason: "stop"}},
+		Usage:   &model.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6},
+	}, nil
+}
+func (chatOnlyProvider) ChatCompletionStream(context.Context, *model.ChatCompletionRequest) (provider.Stream, error) {
+	chunks := make(chan *model.StreamChunk, 3)
+	chunks <- &model.StreamChunk{Choices: []model.Choice{{Delta: &model.Delta{Content: "hi "}}}}
+	chunks <- &model.StreamChunk{Choices: []model.Choice{{Delta: &model.Delta{Content: "there"}, FinishReason: "stop"}}}
+	chunks <- &model.StreamChunk{Usage: &model.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}}
+	close(chunks)
+	return provider.NewStream(chunks, make(chan error), nil), nil
+}
+func (chatOnlyProvider) Embeddings(context.Context, *model.EmbeddingsRequest) (*model.EmbeddingsResponse, error) {
+	return nil, fmt.Errorf("unsupported")
+}
+func (chatOnlyProvider) SupportsEmbeddings() bool { return false }
+
+func init() {
+	provider.Register("chatonlytest", func(provider.ProviderOptions) provider.Provider { return chatOnlyProvider{} })
+}
+
+func chatOnlyResponses(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	cfg := &config.Config{
-		ModelList: []config.ModelConfig{
-			{ModelName: "no-responses-model", LiteLLMParams: config.LiteLLMParams{Model: "openai/gpt-4"}},
-		},
-		RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", CooldownTime: 30 * time.Second, AllowedFails: 3},
+		ModelList:      []config.ModelConfig{{ModelName: "chat-only", LiteLLMParams: config.LiteLLMParams{Model: "chatonlytest/real-model"}}},
+		RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", CooldownTime: 30 * time.Second, AllowedFails: 1},
 	}
 	r, err := router.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("router.New: %v", err)
 	}
-
 	h := Responses(r, nil, nil, nil, nil, config.GeneralSettings{})
-	body, _ := json.Marshal(map[string]any{"model": "no-responses-model", "input": "hi"})
-	req := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	h(w, req)
+	// Two calls: a rejected request must leave the deployment available.
+	var w *httptest.ResponseRecorder
+	for range 2 {
+		w = httptest.NewRecorder()
+		h(w, httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(body)))
+	}
+	return w
+}
 
+// ADR 020: a provider without the Responses API answers through translation.
+func TestResponses_ChatOnlyProviderIsTranslated(t *testing.T) {
+	w := chatOnlyResponses(t, `{"model":"chat-only","instructions":"be kind","input":"ping"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Object string `json:"object"`
+		Status string `json:"status"`
+		Model  string `json:"model"`
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+		Usage map[string]any `json:"usage"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Object != "response" || got.Status != "completed" || got.Model != "real-model" {
+		t.Fatalf("unexpected envelope: %s", w.Body.String())
+	}
+	if len(got.Output) != 1 || got.Output[0].Type != "message" || got.Output[0].Content[0].Text != "echo: ping" {
+		t.Fatalf("unexpected output: %s", w.Body.String())
+	}
+	if got.Usage["input_tokens"] != 4.0 || got.Usage["output_tokens"] != 2.0 {
+		t.Fatalf("unexpected usage: %s", w.Body.String())
+	}
+}
+
+func TestResponses_ChatOnlyProviderStreamsResponsesEvents(t *testing.T) {
+	w := chatOnlyResponses(t, `{"model":"chat-only","input":"ping","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"event: response.created\n",
+		`"sequence_number":0`,
+		"event: response.output_text.delta\n",
+		`"delta":"hi "`,
+		"event: response.completed\n",
+		`"text":"hi there"`,
+		`"input_tokens":4`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stream is missing %q\n%s", want, body)
+		}
+	}
+}
+
+func TestResponses_ChatOnlyProviderRejectsStatefulRequests(t *testing.T) {
+	// chatOnlyResponses sends the request twice with allowed_fails=1: the second
+	// 400 proves the first did not put the deployment in cooldown.
+	w := chatOnlyResponses(t, `{"model":"chat-only","input":"ping","background":true}`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "background responses are not available") {
+		t.Fatalf("unexpected error body: %s", w.Body.String())
 	}
 }
 

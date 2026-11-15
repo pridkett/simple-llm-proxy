@@ -117,7 +117,7 @@ func responsesPath() *openapi3.PathItem {
 		Post: &openapi3.Operation{
 			Tags:        []string{"Responses"},
 			Summary:     "Create a response",
-			Description: "Creates a model response via the OpenAI Responses API. Supports streaming (stream=true) and background/long-running requests (background=true, poll GET /v1/responses/{id} for the result). Only model_name entries backed by an OpenAI deployment support this endpoint.",
+			Description: "Creates a model response via the OpenAI Responses API. Supports streaming (stream=true) and background/long-running requests (background=true, poll GET /v1/responses/{id} for the result). OpenAI and MiniMax deployments are passed through; other chat providers are reached by translating to chat completions, which is stateless: background, previous_response_id and built-in tools return 400 there.",
 			OperationID: "createResponse",
 			Parameters:  openapi3.Parameters{sessionHeaderParameter(), clientUserHeaderParameter()},
 			Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
@@ -142,7 +142,7 @@ func responsesPath() *openapi3.PathItem {
 						},
 					},
 				}),
-				openapi3.WithStatus(http.StatusBadRequest, errorResponseRef("Invalid request, or model does not support the Responses API")),
+				openapi3.WithStatus(http.StatusBadRequest, errorResponseRef("Invalid request, or a feature the routed model cannot serve through translation")),
 				openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication failed")),
 				openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Model not found")),
 				openapi3.WithStatus(http.StatusBadGateway, errorResponseRef("Provider error")),
