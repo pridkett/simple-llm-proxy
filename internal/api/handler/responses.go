@@ -20,14 +20,15 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	backgroundresponses "github.com/pwagstro/simple_llm_proxy/internal/responses"
+	"github.com/pwagstro/simple_llm_proxy/internal/responsesbridge"
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// errNotResponsesProvider signals that the routed deployment does not implement
-// provider.ResponsesProvider (ADR 010 D-01) — OpenAI and MiniMax do today.
+// errNotResponsesProvider signals that a stored background job's deployment
+// does not implement provider.ResponsesProvider (ADR 010 D-01).
 var errNotResponsesProvider = errors.New("model does not support the Responses API")
 
 // Responses handles POST /v1/responses requests: synchronous, streaming, and
@@ -105,8 +106,8 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			}
 			rp, ok := d.Provider.(provider.ResponsesProvider)
 			if !ok {
-				operation.failedAttempt(d, errNotResponsesProvider)
-				return nil, nil, errNotResponsesProvider
+				// Chat-only providers answer through translation (ADR 020).
+				rp = responsesbridge.FromChat(d.Provider)
 			}
 			providerReq := respReq
 			providerReq.Model = d.ActualModel
@@ -139,10 +140,6 @@ func Responses(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 			acc.complete()
 			operation.finish(result, nil, acc.cost(nil), acc.hasCost())
 			operation.fail(result.Error)
-			if errors.Is(result.Error, errNotResponsesProvider) {
-				model.WriteError(w, model.ErrBadRequest(errNotResponsesProvider.Error()+": "+respReq.Model))
-				return
-			}
 			for _, reason := range result.FailoverReasons {
 				if reason == router.FailoverBudgetExhausted {
 					model.WriteError(w, model.ErrBudgetExceeded("budget exhausted for all available pools"))
