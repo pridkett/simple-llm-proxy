@@ -71,8 +71,9 @@ Extending the date range cannot recover already deleted history.
 | `from`, `to` | Inclusive `YYYY-MM-DD` dates in the selected timezone |
 | `timezone` | IANA name; defaults to `UTC` |
 | `interval` | `hour`, `day` (default), or `week` (Monday start) |
-| `group_by` | `model` (default), `app`, `key`, or `team` |
+| `group_by` | `model` (default), `app`, `key`, `team`, or `status` |
 | `model` | Exact proxy-model alias |
+| `status_code` | Exact HTTP status code from 100 through 599 |
 | `team_id`, `app_id`, `key_id` | Positive integer attribution filters |
 | `unattributed` | `team`, `app`, or `key` whose joined attribution is missing |
 | `since`, `until` | Optional paired RFC3339 timestamps overriding date bounds; `until` is exclusive |

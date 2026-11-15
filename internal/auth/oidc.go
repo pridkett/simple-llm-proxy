@@ -13,6 +13,7 @@ type OIDCProvider struct {
 	Verifier     *oidc.IDTokenVerifier
 	OAuth2Config *oauth2.Config
 	AdminGroup   string
+	MCP          *MCPOAuth
 }
 
 // NewOIDCProvider initializes the OIDC provider from the issuer URL.

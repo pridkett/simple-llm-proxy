@@ -24,6 +24,9 @@ func (s *Storage) GetUsage(ctx context.Context, q storage.UsageQuery) ([]storage
 		groupID, groupName = "CAST(a.id AS TEXT)", "a.name"
 	case "key":
 		groupID, groupName = "CAST(k.id AS TEXT)", "k.name"
+	case "status":
+		groupID = "CAST(ul.status_code AS TEXT)"
+		groupName = groupID
 	default:
 		return nil, fmt.Errorf("invalid usage grouping")
 	}
@@ -73,6 +76,10 @@ func (s *Storage) GetUsage(ctx context.Context, q storage.UsageQuery) ([]storage
 		where = append(where, "ul.model = ?")
 		args = append(args, q.Filters.Model)
 	}
+	if q.StatusCode != nil {
+		where = append(where, "ul.status_code = ?")
+		args = append(args, *q.StatusCode)
+	}
 	switch q.Unattributed {
 	case "":
 	case "team":
@@ -108,6 +115,10 @@ func (s *Storage) GetUsage(ctx context.Context, q storage.UsageQuery) ([]storage
  SUM(CASE WHEN cost IS NOT NULL AND cost_source = 'mixed' THEN 1 ELSE 0 END),
  SUM(CASE WHEN accounting_id = '' THEN 1 ELSE 0 END)
  FROM measured GROUP BY bucket, group_id, name ORDER BY bucket, group_id`
+	if q.MaxRows > 0 {
+		query += " LIMIT ?"
+		args = append(args, q.MaxRows)
+	}
 	rows, err := s.db.QueryContext(ctx, s.bind(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query usage: %w", err)

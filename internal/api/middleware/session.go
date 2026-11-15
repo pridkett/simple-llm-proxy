@@ -37,18 +37,7 @@ func localAdminAuth(name string) func(http.Handler) http.Handler {
 	user := &storage.User{ID: "local-admin", Name: name, IsAdmin: true}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			peer, err := netip.ParseAddrPort(r.RemoteAddr)
-			host, _, splitErr := net.SplitHostPort(r.Host)
-			if splitErr != nil {
-				host = r.Host
-			}
-			localHost := strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1" || host == "[::1]"
-			// Check the actual peer and Host to prevent remote access and DNS
-			// rebinding. Browser requests with an Origin must be same-origin.
-			origin := r.Header.Get("Origin")
-			if err != nil || !peer.Addr().Unmap().IsLoopback() || !localHost ||
-				r.Header.Get("Sec-Fetch-Site") == "cross-site" ||
-				(origin != "" && !strings.EqualFold(origin, "http://"+r.Host)) {
+			if !IsLocalAdminRequest(r) {
 				model.WriteError(w, model.ErrForbidden("local admin requires a loopback request from the same origin"))
 				return
 			}
@@ -57,6 +46,28 @@ func localAdminAuth(name string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// IsLocalAdminRequest checks the peer and Host to prevent DNS rebinding and
+// requires browser requests to be same-origin. Only use it on a loopback bind.
+func IsLocalAdminRequest(r *http.Request) bool {
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	host := r.Host
+	if value, _, err := net.SplitHostPort(host); err == nil {
+		host = value
+	}
+	ip, _ := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil || !peer.Addr().Unmap().IsLoopback() ||
+		(!ip.Unmap().IsLoopback() && !strings.EqualFold(host, "localhost")) ||
+		r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+		return false
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	origins := r.Header.Values("Origin")
+	return len(origins) == 0 || len(origins) == 1 && strings.EqualFold(origins[0], scheme+"://"+r.Host)
 }
 
 // RequireSession validates the SCS session and injects the user into context.

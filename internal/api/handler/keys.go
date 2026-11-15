@@ -24,6 +24,13 @@ type keyListItem struct {
 	AllowedModels []string `json:"allowed_models"`
 }
 
+type createdAppKey struct {
+	*storage.APIKey
+	Token         string   `json:"key"`
+	Prefix        string   `json:"key_prefix"`
+	AllowedModels []string `json:"allowed_models,omitempty"`
+}
+
 type keySettings struct {
 	Name           string          `json:"name"`
 	AllowDecisions *bool           `json:"allow_decisions"`
@@ -57,23 +64,30 @@ func AdminListKeys(store storage.Storage) http.HandlerFunc {
 			model.WriteError(w, model.ErrBadRequest("invalid application id"))
 			return
 		}
-		keys, err := store.ListAPIKeys(r.Context(), appID)
-		if err != nil {
-			model.WriteError(w, model.ErrInternal("failed to list keys"))
+		items, listErr := listAppKeys(r.Context(), store, appID)
+		if listErr != nil {
+			model.WriteError(w, listErr)
 			return
-		}
-		items := make([]keyListItem, 0, len(keys))
-		for _, k := range keys {
-			models, err := store.GetKeyAllowedModels(r.Context(), k.ID)
-			if err != nil {
-				model.WriteError(w, model.ErrInternal("failed to get key models"))
-				return
-			}
-			items = append(items, keyListItem{APIKey: k, AllowedModels: models})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(items)
 	}
+}
+
+func listAppKeys(ctx context.Context, store storage.Storage, appID int64) ([]keyListItem, *model.ProxyError) {
+	keys, err := store.ListAPIKeys(ctx, appID)
+	if err != nil {
+		return nil, model.ErrInternal("failed to list keys")
+	}
+	items := make([]keyListItem, 0, len(keys))
+	for _, key := range keys {
+		models, err := store.GetKeyAllowedModels(ctx, key.ID)
+		if err != nil {
+			return nil, model.ErrInternal("failed to get key models")
+		}
+		items = append(items, keyListItem{APIKey: key, AllowedModels: models})
+	}
+	return items, nil
 }
 
 // AdminCreateKey handles POST /admin/applications/{id}/keys
@@ -126,16 +140,14 @@ func createAppKey(ctx context.Context, store storage.Storage, appID int64, body 
 }
 
 func writeCreatedAppKey(w http.ResponseWriter, key *storage.APIKey, token string, allowedModels []string) {
-	response := struct {
-		*storage.APIKey
-		Token         string   `json:"key"`
-		Prefix        string   `json:"key_prefix"`
-		AllowedModels []string `json:"allowed_models,omitempty"`
-	}{key, token, "sk-app-" + key.KeyPrefix + "...", allowedModels}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(createdAppKeyResponse(key, token, allowedModels))
+}
+
+func createdAppKeyResponse(key *storage.APIKey, token string, allowedModels []string) createdAppKey {
+	return createdAppKey{key, token, "sk-app-" + key.KeyPrefix + "...", allowedModels}
 }
 
 // AdminUpdateKey handles PATCH /admin/api-keys/{id}

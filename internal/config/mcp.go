@@ -2,7 +2,9 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,7 +17,16 @@ import (
 type MCPSettings struct {
 	CredentialKey [32]byte             `yaml:"-" json:"-"`
 	Servers       map[string]MCPServer `yaml:"servers" json:"-"`
+	Management    MCPManagement        `yaml:"-" json:"-"`
 }
+
+type MCPManagement struct {
+	ReadTokenHash  [sha256.Size]byte
+	WriteTokenHash [sha256.Size]byte
+	OAuth          bool
+}
+
+func (c MCPManagement) Enabled() bool { return c != (MCPManagement{}) }
 
 type MCPServer struct {
 	URL              string    `yaml:"url"`
@@ -47,6 +58,11 @@ func parseMCPSettings(value any, cfg *Config) error {
 	var input struct {
 		CredentialKey string               `yaml:"credential_key"`
 		Servers       map[string]MCPServer `yaml:"servers"`
+		Management    struct {
+			ReadToken  string `yaml:"read_token"`
+			WriteToken string `yaml:"write_token"`
+			OAuth      bool   `yaml:"oauth"`
+		} `yaml:"management"`
 	}
 	encoded, err := yaml.Marshal(value)
 	if err != nil {
@@ -58,6 +74,37 @@ func parseMCPSettings(value any, cfg *Config) error {
 		// YAML type errors can echo values, including accidental inline credentials.
 		return fmt.Errorf("invalid mcp settings: check field names and types")
 	}
+
+	management := MCPManagement{OAuth: input.Management.OAuth}
+	if management.OAuth && (mcpHTTPSURL(cfg.OIDCSettings.IssuerURL) == nil ||
+		mcpHTTPSURL(cfg.OIDCSettings.RedirectURL) == nil || cfg.OIDCSettings.ClientID == "") {
+		return fmt.Errorf("mcp.management.oauth requires an HTTPS OIDC issuer and callback and an OIDC client ID")
+	}
+	for _, credential := range []struct {
+		name, value string
+		hash        *[sha256.Size]byte
+	}{
+		{"read_token", input.Management.ReadToken, &management.ReadTokenHash},
+		{"write_token", input.Management.WriteToken, &management.WriteTokenHash},
+	} {
+		if credential.value == "" {
+			continue
+		}
+		token := expandEnvVar(credential.value)
+		const prefix = "sk-proxy-mcp-"
+		suffix, prefixed := strings.CutPrefix(token, prefix)
+		if _, err := hex.DecodeString(suffix); !envVarPattern.MatchString(credential.value) || !prefixed || len(suffix) != 64 || err != nil {
+			return fmt.Errorf("mcp.management.%s must reference an environment variable containing sk-proxy-mcp- followed by 64 hex characters", credential.name)
+		}
+		*credential.hash = sha256.Sum256([]byte(token))
+	}
+	if management.ReadTokenHash != [sha256.Size]byte{} && management.ReadTokenHash == management.WriteTokenHash {
+		return fmt.Errorf("mcp.management read and write tokens must be distinct")
+	}
+	if management.Enabled() && strings.TrimSpace(cfg.GeneralSettings.DatabaseURL) == "" {
+		return fmt.Errorf("mcp.management requires database_url")
+	}
+	cfg.MCP.Management = management
 
 	if len(input.Servers) > 0 && strings.TrimSpace(cfg.GeneralSettings.DatabaseURL) == "" {
 		return fmt.Errorf("mcp servers require database_url")

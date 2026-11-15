@@ -145,6 +145,17 @@ func UsageContract(t *testing.T, ctx context.Context, s storage.Storage) {
 			t.Fatalf("%s calls=%d", group, calls)
 		}
 	}
+	q.GroupBy = "status"
+	status := 500
+	q.StatusCode = &status
+	q.Filters.TeamID = &team2.ID
+	q.MaxRows = 2
+	rows, err = reports.GetUsage(ctx, q)
+	check(err)
+	if len(rows) != 1 || rows[0].GroupID != "500" || rows[0].Name != "500" ||
+		rows[0].Calls != 1 || rows[0].FailedCalls != 1 || rows[0].Bucket != 1 {
+		t.Fatalf("unexpected status breakdown: %+v", rows)
+	}
 	_, count, err := s.GetLogs(ctx, 50, 0, storage.LogsFilter{DateFrom: &from, DateBefore: &to})
 	check(err)
 	if count != 5 {
