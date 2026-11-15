@@ -35,7 +35,7 @@ type ResponsesResponse struct {
 	CreatedAt          int64                `json:"created_at"`
 	CompletedAt        *int64               `json:"completed_at,omitempty"`
 	Background         bool                 `json:"background,omitempty"`
-	Output             []ResponseOutputItem `json:"output,omitempty"`
+	Output             []ResponseOutputItem `json:"output"` // always an array; SDK stream helpers append to it
 	OutputText         string               `json:"output_text,omitempty"`
 	Usage              *Usage               `json:"usage,omitempty"`
 	Error              *ErrorDetail         `json:"error,omitempty"`
@@ -88,7 +88,7 @@ type ResponseContentPart struct {
 type ResponsesStreamEvent struct {
 	rawFields      map[string]json.RawMessage
 	Type           string              `json:"type"`
-	SequenceNumber int                 `json:"sequence_number,omitempty"`
+	SequenceNumber *int                `json:"sequence_number,omitempty"` // pointer: the first event is number 0
 	Response       *ResponsesResponse  `json:"response,omitempty"`
 	Delta          string              `json:"delta,omitempty"`
 	ItemID         string              `json:"item_id,omitempty"`
@@ -118,6 +118,9 @@ func (x *ResponsesResponse) UnmarshalJSON(data []byte) error {
 
 func (x ResponsesResponse) MarshalJSON() ([]byte, error) {
 	type wire ResponsesResponse
+	if x.Output == nil {
+		x.Output = []ResponseOutputItem{}
+	}
 	return writeObject(wire(x), x.rawFields)
 }
 
