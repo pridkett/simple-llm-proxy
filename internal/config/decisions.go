@@ -1,11 +1,20 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
 	"slices"
+	"strings"
 )
+
+// DecisionProtocols are the upstream wire dialects a deployment can declare.
+var DecisionProtocols = []string{"decisions", "systemone", "cloudflare", "gemini", "ollama"}
+
+// reservedDecisionFields are built by the proxy from the client request and
+// cannot be supplied through decision.extra_body.
+var reservedDecisionFields = []string{"model", "input", "state", "questions", "images", "assets", "audio", "videos", "stream", "background"}
 
 // NormalizeDecision validates both parsed YAML and programmatically built config.
 // It returns a copy so router construction/reload never mutates a live config.
@@ -14,8 +23,25 @@ func NormalizeDecision(d *DecisionConfig) (*DecisionConfig, error) {
 		return nil, nil
 	}
 	c := *d
-	if !slices.Contains([]string{"decisions", "systemone", "cloudflare"}, c.Protocol) {
-		return nil, fmt.Errorf("decision.protocol must be decisions, systemone, or cloudflare")
+	if !slices.Contains(DecisionProtocols, c.Protocol) {
+		return nil, fmt.Errorf("decision.protocol must be one of %s", strings.Join(DecisionProtocols, ", "))
+	}
+	if len(c.ExtraBody) > 0 {
+		for key := range c.ExtraBody {
+			if slices.Contains(reservedDecisionFields, key) {
+				return nil, fmt.Errorf("decision.extra_body cannot set %q; the proxy owns that field", key)
+			}
+		}
+		// Round-trip through JSON: this rejects values that cannot be sent and
+		// gives the deployment a deep copy that a reload cannot mutate.
+		data, err := json.Marshal(c.ExtraBody)
+		if err != nil {
+			return nil, fmt.Errorf("decision.extra_body must be JSON-compatible: %w", err)
+		}
+		c.ExtraBody = nil
+		if err := json.Unmarshal(data, &c.ExtraBody); err != nil {
+			return nil, fmt.Errorf("decision.extra_body must be JSON-compatible: %w", err)
+		}
 	}
 	if c.Path != "" {
 		u, err := url.Parse(c.Path)

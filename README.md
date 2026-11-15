@@ -19,7 +19,7 @@ client examples are documented in [Request accounting](docs/accounting.md).
 - **Usage & Cost** - Calls, tokens, dollar spend, time-series reporting, and request drill-down; see [the reporting guide](docs/usage-reporting.md).
 - **Usage logging** - SQLite-based request tracking
 - **App keys** - Per-app keys with model restrictions, revocation, and usage attribution; OIDC protects administration
-- **Decision models** - Decisions and System One APIs for Jev, OpenAI, Granite, Clef, and compatible Laya/Ollaya servers, with multimodal input, explicit key permissions, cost tracking, and log filters. See [the decision model guide](docs/decision-models.md).
+- **Decision models** - Decisions and System One APIs for OpenAI, Gemini, Ollama, Jev, Granite Switch, Clef, and compatible Laya/Ollaya servers, with multimodal input, explicit key permissions, cost tracking, and log filters. See [the decision model guide](docs/decision-models.md).
 - **MCP gateway** - Proxy registered HTTPS MCP servers with shared or personal API keys and OAuth connections. See the [MCP gateway guide](docs/mcp.md).
 - **OpenAPI specification** - Dynamic OpenAPI 3.0 spec available at `/openapi.json`
 

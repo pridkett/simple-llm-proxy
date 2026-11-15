@@ -47,7 +47,7 @@ func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimi
 	f := &decisionFixture{migrationFixture: &migrationFixture{captured: make(chan map[string]any, 100)}, spend: keystore.NewSpendAccumulator()}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer deployment-only" {
+		if r.Header.Get("Authorization") != "Bearer deployment-only" && r.Header.Get("x-goog-api-key") != "deployment-only" {
 			t.Error("deployment credentials were not used")
 		}
 		var body map[string]any
@@ -112,6 +112,10 @@ func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimi
 		if actual == "zero" {
 			response["usage"] = map[string]int{"input_tokens": 0, "output_tokens": 0}
 		}
+		if actual == "gemini-decision-1" {
+			// Gemini names no model and counts tokens under its own field names.
+			response = map[string]any{"answers": answers, "usage": map[string]int{"total_input_tokens": 100, "total_output_tokens": 0, "total_tokens": 100}}
+		}
 		if strings.Contains(r.URL.Path, "/@cf/") {
 			response = map[string]any{"success": true, "errors": []any{}, "result": response}
 		}
@@ -149,6 +153,9 @@ func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimi
 	add("clef", "clef-omni", "cloudflare")
 	cfg.ModelList[len(cfg.ModelList)-1].Decision.Path = "/@cf/cloudflare/clef-omni"
 	cfg.ModelList[len(cfg.ModelList)-1].Decision.Modalities = []string{"text", "image", "audio", "video"}
+	add("gemini", "gemini-decision-1", "gemini")
+	cfg.ModelList[len(cfg.ModelList)-1].Decision.Path = "/gemini"
+	cfg.ModelList[len(cfg.ModelList)-1].Decision.ExtraBody = map[string]any{"operator_field": "hidden-from-discovery"}
 	cfg.ModelList = append(cfg.ModelList, config.ModelConfig{ModelName: "chat", LiteLLMParams: config.LiteLLMParams{Model: "openai/chat", APIKey: "deployment-only", APIBase: upstream.URL + "/v1"}})
 	cfg.ProviderPools = []config.ProviderPool{{Name: "capped", BudgetCapDaily: 0.1, Members: []config.PoolMember{{ModelName: "budgeted", Weight: 1}}}, {Name: "mixed", Strategy: "round-robin", Members: []config.PoolMember{{ModelName: "text-only", Weight: 1}, {ModelName: "jev", Weight: 1}, {ModelName: "chat", Weight: 1}}}}
 	f.cfg = cfg
@@ -239,6 +246,42 @@ func TestDecisionDiscoveryAndDisabledSnippets(t *testing.T) {
 	status, _, _ = f.request(t, "GET", "/admin/logs?request_type=typo", "", "", true)
 	if status != 400 {
 		t.Fatal("invalid request_type silently broadened log query")
+	}
+}
+
+// A Gemini deployment is reachable from both public routes, and is billed from
+// Google's usage names with the deployment's declared price.
+func TestGeminiDecisionEndToEnd(t *testing.T) {
+	f := newDecisionFixture(t)
+	status, header, body := f.request(t, "POST", "/v1/decisions", decisionBody("gemini"), "master-only", false)
+	if status != 200 || !strings.Contains(string(body), `"type":"predicate"`) || !strings.Contains(string(body), `"name":"urgent"`) || !strings.Contains(string(body), `"model":"gemini-decision-1"`) {
+		t.Fatalf("decisions route: %d %s", status, body)
+	}
+	// 100 input tokens at 0.001 plus the 0.01 request charge.
+	if cost := header.Get("X-Request-Cost"); cost != "0.11" {
+		t.Fatalf("cost from Gemini usage = %q, want 0.11", cost)
+	}
+	sent := <-f.captured
+	if sent["input"] != "ticket" || sent["state"] != nil || sent["operator_field"] != "hidden-from-discovery" || sent["session_id"] != nil {
+		t.Fatalf("upstream Gemini body: %v", sent)
+	}
+	if _, isMap := sent["questions"].(map[string]any); !isMap {
+		t.Fatalf("Gemini questions must be a named object: %v", sent["questions"])
+	}
+	status, _, body = f.request(t, "POST", "/v1/systemone", `{"model":"gemini","state":"ticket","questions":{"urgent":{"type":"noul","instructions":"Urgent?"}}}`, "master-only", false)
+	if status != 200 || !strings.Contains(string(body), `"urgent":{`) || !strings.Contains(string(body), `"noul":0.9`) {
+		t.Fatalf("systemone route: %d %s", status, body)
+	}
+	logs, _, err := f.store.GetLogs(context.Background(), 10, 0, storage.LogsFilter{RequestType: "decision"})
+	if err != nil || len(logs) != 2 || logs[0].TotalCost != 0.11 {
+		t.Fatalf("logs: %+v %v", logs, err)
+	}
+	// Operator-supplied body fields stay out of discovery and admin config.
+	for _, path := range []string{"/v1/models/gemini", "/admin/config"} {
+		_, _, body = f.request(t, "GET", path, "", "master-only", path == "/admin/config")
+		if strings.Contains(string(body), "hidden-from-discovery") {
+			t.Fatalf("%s leaked extra_body: %s", path, body)
+		}
 	}
 }
 

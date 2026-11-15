@@ -302,6 +302,12 @@ func parseModelConfig(item any) (ModelConfig, error) {
 		if err := dec.Decode(&d); err != nil {
 			return mc, fmt.Errorf("decision: %w", err)
 		}
+		// Like extra_headers, top-level string values may come from the environment.
+		for key, value := range d.ExtraBody {
+			if text, ok := value.(string); ok {
+				d.ExtraBody[key] = expandEnvVar(text)
+			}
+		}
 		mc.Decision, err = NormalizeDecision(&d)
 		if err != nil {
 			return mc, err

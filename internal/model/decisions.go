@@ -10,6 +10,9 @@ import (
 const (
 	DecisionsFormat = "decisions"
 	SystemOneFormat = "systemone"
+	// MaxDecisionQuestions is the widest limit of any supported upstream
+	// (Gemini). OpenAI accepts 400 and Ollama 64, and they enforce that themselves.
+	MaxDecisionQuestions = 1000
 )
 
 // DecisionRequest retains the complete wire object. A fresh object is built for
@@ -149,8 +152,8 @@ func ParseDecisionRequest(fields map[string]json.RawMessage, format string) (*De
 			rawQuestions = append(rawQuestions, copy)
 		}
 	}
-	if len(rawQuestions) < 1 || len(rawQuestions) > 400 {
-		return nil, fmt.Errorf("questions must contain 1 to 400 entries; upstream models may have lower limits")
+	if len(rawQuestions) < 1 || len(rawQuestions) > MaxDecisionQuestions {
+		return nil, fmt.Errorf("questions must contain 1 to %d entries; upstream models may have lower limits", MaxDecisionQuestions)
 	}
 	seen := map[string]bool{}
 	for i, raw := range rawQuestions {
@@ -198,7 +201,7 @@ func (r *DecisionRequest) scanInput(messages []any) error {
 				return fmt.Errorf("input parts must be objects")
 			}
 			switch part["type"] {
-			case "input_text", "output_text", "refusal":
+			case "input_text", "output_text", "refusal", "input_json":
 			case "input_image":
 				r.addModality("image")
 			case "input_audio":
@@ -304,8 +307,13 @@ func parseDecisionQuestion(raw map[string]json.RawMessage, format string) (Decis
 				q.Levels = append(q.Levels, DecisionLevel{Label: text})
 			}
 		}
-		if len(q.Levels) < 1 || len(q.Levels) > 10 {
-			return q, fmt.Errorf("score requires 1 to 10 levels")
+		// OpenAI caps a rubric at 10 levels; System One dialects (Gemini) take 255.
+		maxLevels := 10
+		if format == SystemOneFormat {
+			maxLevels = 255
+		}
+		if len(q.Levels) < 1 || len(q.Levels) > maxLevels {
+			return q, fmt.Errorf("score requires 1 to %d levels", maxLevels)
 		}
 	}
 	return q, nil
@@ -371,6 +379,18 @@ func (r *DecisionRequest) Wire(format, actualModel string, imageStyle ...string)
 		out["input"] = out["state"]
 		delete(out, "state")
 	}
+	questions, err := r.translatedQuestions(format)
+	if err != nil {
+		return nil, err
+	}
+	out["questions"] = questions
+	return out, nil
+}
+
+// translatedQuestions renders the parsed questions in the other public format.
+// Decisions questions become a System One object keyed q_<index>, which is how
+// ResponseFromWire finds their answers again.
+func (r *DecisionRequest) translatedQuestions(format string) (json.RawMessage, error) {
 	questions := make([]map[string]any, 0, len(r.Questions))
 	named := map[string]any{}
 	for i, q := range r.Questions {
@@ -452,11 +472,9 @@ func (r *DecisionRequest) Wire(format, actualModel string, imageStyle ...string)
 		}
 	}
 	if format == SystemOneFormat {
-		out["questions"], _ = json.Marshal(named)
-	} else {
-		out["questions"], _ = json.Marshal(questions)
+		return json.Marshal(named)
 	}
-	return out, nil
+	return json.Marshal(questions)
 }
 
 func (r *DecisionRequest) EstimatedTokens() int { data, _ := json.Marshal(r.Fields); return len(data) }
