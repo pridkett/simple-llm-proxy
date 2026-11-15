@@ -10,6 +10,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	decisionprovider "github.com/pwagstro/simple_llm_proxy/internal/provider/decision"
+	"github.com/pwagstro/simple_llm_proxy/internal/responsesbridge"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 )
 
@@ -453,6 +454,15 @@ func buildDeployment(mc config.ModelConfig, existing []*provider.Deployment) (*p
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting provider for %s: %w", mc.ModelName, err)
+	}
+	if parsed.ViaResponses {
+		if decisionConfig != nil {
+			return nil, fmt.Errorf("model %s: the responses/ prefix does not apply to decision deployments", mc.ModelName)
+		}
+		// Chat and Messages clients reach this model through its Responses API (ADR 020).
+		if prov, err = responsesbridge.ToChat(prov); err != nil {
+			return nil, fmt.Errorf("model %s: %w", mc.ModelName, err)
+		}
 	}
 
 	deployment := &provider.Deployment{

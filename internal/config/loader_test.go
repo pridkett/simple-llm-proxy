@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -217,6 +218,8 @@ func TestParseModelString(t *testing.T) {
 		{"anthropic/claude-3-sonnet", "anthropic", "claude-3-sonnet"},
 		{"gpt-4", "openai", "gpt-4"}, // Default to openai
 		{"azure/gpt-4-turbo", "azure", "gpt-4-turbo"},
+		{"openai/responses/gpt-5-pro", "openai", "gpt-5-pro"},
+		{"openrouter/meta/llama-3", "openrouter", "meta/llama-3"},
 	}
 
 	for _, tt := range tests {
@@ -227,6 +230,9 @@ func TestParseModelString(t *testing.T) {
 			}
 			if parsed.ModelName != tt.model {
 				t.Errorf("Expected model '%s', got '%s'", tt.model, parsed.ModelName)
+			}
+			if want := strings.Contains(tt.input, "/responses/"); parsed.ViaResponses != want {
+				t.Errorf("ViaResponses = %v, want %v", parsed.ViaResponses, want)
 			}
 		})
 	}

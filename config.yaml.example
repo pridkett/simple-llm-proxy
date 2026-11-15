@@ -14,6 +14,13 @@ model_list:
   #       cache_read_input_token_cost: 0
   #       cache_creation_input_token_cost: 0
 
+  # A model OpenAI serves only over the Responses API. The responses/ segment
+  # sends chat-completions and Messages requests upstream as Responses calls.
+  # - model_name: gpt-5-pro
+  #   litellm_params:
+  #     model: openai/responses/gpt-5-pro
+  #     api_key: os.environ/OPENAI_API_KEY
+
   # OpenAI models (standard)
   - model_name: gpt-4
     litellm_params:

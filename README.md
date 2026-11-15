@@ -540,6 +540,28 @@ Translated routes carry text, images by URL or data URL, function tools,
 Send the full conversation in `input` instead. Reasoning items in `input` are
 dropped, and translated responses cannot be fetched by id afterwards.
 
+#### Responses-only models from chat and Messages clients
+
+Some OpenAI models are published only on the Responses API. Put `responses/`
+after the provider in the model string and `/v1/chat/completions` and
+`/v1/messages` requests for that alias are sent upstream as Responses calls:
+
+```yaml
+model_list:
+  - model_name: gpt-5-pro
+    litellm_params:
+      model: openai/responses/gpt-5-pro
+      api_key: os.environ/OPENAI_API_KEY
+```
+
+The prefix works for providers with a native Responses API (OpenAI, MiniMax);
+any other provider fails at config load. Requests are sent with `store: false`.
+`n` greater than 1, `stop`, and the legacy `functions` fields return HTTP 400
+because the Responses API cannot express them; note that Messages
+`stop_sequences` map to `stop`. Reasoning and built-in tool output items are
+dropped from the chat reply. `/v1/responses` on the same alias is still a
+passthrough.
+
 ### OpenAPI Specification
 
 The proxy serves a dynamic OpenAPI 3.0 specification at `/openapi.json`:

@@ -453,13 +453,15 @@ func expandEnvVar(s string) string {
 	return s
 }
 
-// ParseModelString parses a "provider/model" string.
+// ParseModelString parses a "provider/model" or "provider/responses/model" string.
 func ParseModelString(s string) ParsedModel {
 	parts := strings.SplitN(s, "/", 2)
 	if len(parts) == 2 {
+		name, viaResponses := strings.CutPrefix(parts[1], "responses/")
 		return ParsedModel{
-			Provider:  parts[0],
-			ModelName: parts[1],
+			Provider:     parts[0],
+			ModelName:    name,
+			ViaResponses: viaResponses && name != "",
 		}
 	}
 	// Default to openai if no provider specified
