@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -91,6 +92,30 @@ func TestNativeDecisionExtensionsAndRichSystemOne(t *testing.T) {
 	}
 	if _, err := r.Wire(DecisionsFormat, "luna"); err == nil {
 		t.Fatal("lossy native translation accepted")
+	}
+}
+
+// TypeSafe makes an asset's type optional; an untyped asset is an image.
+func TestSystemOneUntypedAssetIsImage(t *testing.T) {
+	body := `{"model":"jev","state":{"door":"ref-1"},"assets":{"ref-1":{"format":"jpg","data_base64":"eA=="}},"questions":{"who":{"type":"box","instructions":"the person in door"}}}`
+	r := decisionRequest(t, body, SystemOneFormat)
+	if !slices.Contains(r.Modalities, "image") {
+		t.Fatalf("untyped asset not counted as an image: %v", r.Modalities)
+	}
+	wire, err := r.Wire(SystemOneFormat, "jev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wire["assets"]) != `{"ref-1":{"format":"jpg","data_base64":"eA=="}}` {
+		t.Fatalf("asset not forwarded unchanged: %s", wire["assets"])
+	}
+	for _, bad := range []string{`{"type":"pdf"}`, `{"type":7}`, `"img"`} {
+		var fields map[string]json.RawMessage
+		json.Unmarshal([]byte(`{"model":"jev","state":"x","questions":{"a":{"type":"noul","instructions":"?"}}}`), &fields)
+		fields["assets"] = json.RawMessage(`{"p":` + bad + `}`)
+		if _, err := ParseDecisionRequest(fields, SystemOneFormat); err == nil {
+			t.Fatalf("invalid asset %s accepted", bad)
+		}
 	}
 }
 

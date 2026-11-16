@@ -104,6 +104,11 @@ func ParseDecisionRequest(fields map[string]json.RawMessage, format string) (*De
 					return nil, fmt.Errorf("assets must be a non-empty object")
 				}
 				for _, asset := range assets {
+					// TypeSafe makes type optional; its only asset kind is image.
+					// The asset is still forwarded exactly as sent.
+					if asset.Type == "" {
+						asset.Type = "image"
+					}
 					if !slices.Contains([]string{"image", "audio", "video"}, asset.Type) {
 						return nil, fmt.Errorf("unsupported asset type %q", asset.Type)
 					}
