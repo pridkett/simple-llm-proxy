@@ -174,7 +174,7 @@ router_settings:
 #   message_capture:
 #     application_ids: [42]
 #     decision_application_ids: [57]  # Decisions and System One only
-#     max_bytes: 32768
+#     max_bytes: 1048576
 #   trusted_traceparent_cidrs: ["127.0.0.1/32", "::1/128"]
 
 general_settings:

@@ -199,7 +199,7 @@ func Defaults() *Config {
 			ServiceName:    "simple-llm-proxy",
 			Exporter:       OTelExporter{Protocol: "http"},
 			SamplingRatio:  1,
-			MessageCapture: OTelMessageCapture{MaxBytes: 32 << 10},
+			MessageCapture: OTelMessageCapture{MaxBytes: 1 << 20},
 		},
 	}
 }

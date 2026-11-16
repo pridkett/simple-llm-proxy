@@ -283,7 +283,7 @@ otel_settings:
   message_capture:
     application_ids: [42]
     decision_application_ids: [57]
-    max_bytes: 32768
+    max_bytes: 1048576
 ```
 
 For Langfuse, use a Basic authorization header built from the project public
@@ -299,8 +299,10 @@ in for Decisions and System One only. Both lists use the same byte limit and
 decision capture omits media payloads.
 
 `max_bytes` bounds the serialized capture per direction, with a default of
-32 KiB and an allowed range of 1–64 KiB. Individual fields are capped to leave
-room for later messages. The `llmproxy.capture.*_truncated` and
+1 MiB and an allowed range of 1 KiB–4 MiB. Each field is capped at a quarter of
+that budget to leave room for later messages. Each direction is exported as both
+GenAI and Langfuse attributes, so a span can carry about four times `max_bytes`;
+size the trace backend's span and request limits to match. The `llmproxy.capture.*_truncated` and
 `llmproxy.capture.output_partial` attributes flag clipped data or interrupted
 output. Message capture removes binary and reasoning content. Capture masks
 recognized credential patterns and fields. Free text can still contain source code or

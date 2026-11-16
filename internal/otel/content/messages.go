@@ -53,7 +53,7 @@ type messageSet struct {
 }
 
 func newMessageSet(limit int) messageSet {
-	return messageSet{remaining: limit - 2, fieldLimit: min(8192, limit/4)}
+	return messageSet{remaining: limit - 2, fieldLimit: limit / 4}
 }
 
 func (s *messageSet) add(role, finish string, build func(func(part) bool)) {

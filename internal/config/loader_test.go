@@ -180,10 +180,10 @@ func TestOTelMessageCaptureConfig(t *testing.T) {
 		len(capture.DecisionApplicationIDs) != 1 || capture.DecisionApplicationIDs[0] != 12 {
 		t.Fatalf("unexpected capture settings: %+v", capture)
 	}
-	if capture := Defaults().OTelSettings.MessageCapture; len(capture.ApplicationIDs) != 0 || len(capture.DecisionApplicationIDs) != 0 || capture.MaxBytes != 32768 {
+	if capture := Defaults().OTelSettings.MessageCapture; len(capture.ApplicationIDs) != 0 || len(capture.DecisionApplicationIDs) != 0 || capture.MaxBytes != 1<<20 {
 		t.Fatalf("unexpected capture defaults: %+v", capture)
 	}
-	for _, fields := range []string{"application_ids: [0]", "application_ids: ['42']", "decision_application_ids: 12", "decision_application_ids: [-1]", "max_bytes: 100", "max_bytes: 65537", "enabled: true"} {
+	for _, fields := range []string{"application_ids: [0]", "application_ids: ['42']", "decision_application_ids: 12", "decision_application_ids: [-1]", "max_bytes: 100", "max_bytes: 4194305", "enabled: true"} {
 		if _, err := Parse([]byte("otel_settings:\n  message_capture:\n    " + fields + "\n")); err == nil {
 			t.Errorf("accepted invalid capture settings %q", fields)
 		}
