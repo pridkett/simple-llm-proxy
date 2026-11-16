@@ -19,6 +19,7 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/router"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	"github.com/pwagstro/simple_llm_proxy/internal/webhook"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -95,6 +96,9 @@ func Decisions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		}
 		ctx, operation := beginOperation(ctx, tracer, "decision", decisionReq.Model, false, sessionID)
 		defer operation.end()
+		if operation != nil {
+			operation.span.SetAttributes(attribute.String("llmproxy.decision.endpoint", "/v1/"+format))
+		}
 		var response *model.DecisionResponse
 		result := r.Route(ctx, decisionReq.Model, sticky, func(d *provider.Deployment) (*model.ChatCompletionResponse, provider.Stream, error) {
 			p, ok := d.Provider.(provider.DecisionsProvider)
@@ -151,6 +155,9 @@ func Decisions(r *router.Router, store storage.Storage, sa *keystore.SpendAccumu
 		r.ReportSuccess(d)
 		cost, known := decisionCost(d.Decision.Pricing, response.Usage)
 		operation.finish(result, response.Usage, cost)
+		if operation != nil {
+			operation.span.SetAttributes(attribute.String("llmproxy.decision.protocol", d.Decision.Protocol))
+		}
 		// Spend is credited synchronously before returning so the next call sees
 		// the new key/pool balance. LogRequest must not credit it a second time.
 		if keyID != nil && sa != nil && cost > 0 {

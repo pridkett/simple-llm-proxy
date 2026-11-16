@@ -44,6 +44,11 @@ func newDecisionFixture(t *testing.T, snippetLimit ...int) *decisionFixture {
 
 func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimit ...int) *decisionFixture {
 	t.Helper()
+	return newDecisionFixtureConfigured(t, tracer, nil, snippetLimit...)
+}
+
+func newDecisionFixtureConfigured(t *testing.T, tracer trace.Tracer, configure func(*config.Config, int64), snippetLimit ...int) *decisionFixture {
+	t.Helper()
 	f := &decisionFixture{migrationFixture: &migrationFixture{captured: make(chan map[string]any, 100)}, spend: keystore.NewSpendAccumulator()}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.calls.Add(1)
@@ -159,18 +164,7 @@ func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimi
 	cfg.ModelList = append(cfg.ModelList, config.ModelConfig{ModelName: "chat", LiteLLMParams: config.LiteLLMParams{Model: "openai/chat", APIKey: "deployment-only", APIBase: upstream.URL + "/v1"}})
 	cfg.ProviderPools = []config.ProviderPool{{Name: "capped", BudgetCapDaily: 0.1, Members: []config.PoolMember{{ModelName: "budgeted", Weight: 1}}}, {Name: "mixed", Strategy: "round-robin", Members: []config.PoolMember{{ModelName: "text-only", Weight: 1}, {ModelName: "jev", Weight: 1}, {ModelName: "chat", Weight: 1}}}}
 	f.cfg = cfg
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	reloader, err := config.NewReloader(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var err error
 	f.store, err = sqlite.New(filepath.Join(t.TempDir(), "proxy.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -192,6 +186,21 @@ func newDecisionFixtureWithTracer(t *testing.T, tracer trace.Tracer, snippetLimi
 		t.Fatal(err)
 	}
 	f.appID = app.ID
+	if configure != nil {
+		configure(cfg, f.appID)
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reloader, err := config.NewReloader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.router, err = router.New(cfg, f.store)
 	if err != nil {
 		t.Fatal(err)

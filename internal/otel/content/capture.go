@@ -1,4 +1,4 @@
-// Package content captures a bounded, sanitized copy of the LLM API exchange.
+// Package content captures a bounded, sanitized copy of the model API exchange.
 package content
 
 import (
@@ -15,6 +15,8 @@ const (
 	Chat      Protocol = "chat"
 	Messages  Protocol = "messages"
 	Responses Protocol = "responses"
+	Decisions Protocol = "decisions"
+	SystemOne Protocol = "systemone"
 )
 
 type Capture struct {
@@ -33,6 +35,7 @@ type Capture struct {
 	failedWrite  bool
 	items        map[int]*streamItem
 	streamBytes  int
+	requestJSON  string
 }
 
 func New(protocol Protocol, limit int) *Capture {
@@ -45,6 +48,14 @@ func New(protocol Protocol, limit int) *Capture {
 
 // Input receives the original decoded fields before any protocol translation.
 func (c *Capture) Input(fields map[string]json.RawMessage) {
+	if c.protocol == Decisions || c.protocol == SystemOne {
+		inputKey := "input"
+		if c.protocol == SystemOne {
+			inputKey = "state"
+		}
+		c.requestJSON = c.input.decisionPayload(fields, "questions", inputKey)
+		return
+	}
 	// Leave room for the field names in the Langfuse input envelope.
 	c.input.remaining -= 64
 	switch c.protocol {
@@ -173,6 +184,9 @@ func roleOrAssistant(role string) string {
 }
 
 func (c *Capture) Attributes() []attribute.KeyValue {
+	if c.protocol == Decisions || c.protocol == SystemOne {
+		return c.decisionAttributes()
+	}
 	if c.stream {
 		if len(c.output.messages) == 0 {
 			c.assemble()

@@ -291,13 +291,16 @@ OTLP destinations. Chat Completions, Anthropic Messages, and Responses
 creation capture structured inputs and outputs on recording model spans.
 Streams are assembled into messages with tool call IDs, arguments, and results.
 Background Responses creation captures the response available at submission.
+Decisions and System One capture questions, input or state, and returned answers
+as structured observation input and output. Decision capture omits media payloads
+and uses the same application allowlist and byte limit.
 
 `max_bytes` bounds the serialized capture per direction, with a default of
 32 KiB and an allowed range of 1–64 KiB. Individual fields are capped to leave
 room for later messages. The `llmproxy.capture.*_truncated` and
 `llmproxy.capture.output_partial` attributes flag clipped data or interrupted
-output. Capture removes binary and reasoning content and masks recognized
-credential patterns and fields. Free text can still contain source code or
+output. Message capture removes binary and reasoning content. Capture masks
+recognized credential patterns and fields. Free text can still contain source code or
 unrecognized secrets. Enable capture on dedicated test applications and send
 it only to a destination approved for that data. Reloading with an empty
 `application_ids` list stops new content capture.
