@@ -246,29 +246,40 @@ func (s *messageSet) value(raw json.RawMessage) any {
 	if !json.Valid(raw) || dec.Decode(&value) != nil {
 		return nil
 	}
-	return s.redact(value)
+	return s.redact(value, false)
 }
 
-func (s *messageSet) redact(value any) any {
+func (s *messageSet) redact(value any, omitMedia bool) any {
 	switch value := value.(type) {
 	case string:
+		if omitMedia && strings.HasPrefix(strings.ToLower(value), "data:") {
+			return "[media omitted]"
+		}
 		return s.text(value)
 	case []any:
 		for i, item := range value {
-			value[i] = s.redact(item)
+			value[i] = s.redact(item, omitMedia)
 		}
 	case map[string]any:
+		if kind, _ := value["type"].(string); omitMedia {
+			switch kind {
+			case "input_image", "input_audio", "input_video", "image", "audio", "video", "base64", "inline_data":
+				return map[string]any{"type": kind, "omitted": true}
+			}
+		}
 		clean := make(map[string]any, len(value))
 		for key, item := range value {
 			normalized := secretKeyNormalizer.Replace(strings.ToLower(key))
 			switch {
+			case omitMedia && (normalized == "database64" || normalized == "base64"):
+				continue
 			case strings.HasSuffix(normalized, "apikey"), strings.HasSuffix(normalized, "secret"),
 				strings.HasSuffix(normalized, "token"), strings.HasSuffix(normalized, "password"),
 				normalized == "authorization", normalized == "cookie", normalized == "passwd",
 				normalized == "privatekey", normalized == "credentials", normalized == "accesskey":
 				clean[s.text(key)] = "[REDACTED]"
 			default:
-				clean[s.text(key)] = s.redact(item)
+				clean[s.text(key)] = s.redact(item, omitMedia)
 			}
 		}
 		return clean

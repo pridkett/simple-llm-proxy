@@ -71,13 +71,14 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 			return reloader.Config().GeneralSettings.BodySnippetLimit
 		})) // Phase 14: capture req body snippet before json.NewDecoder; reload-aware getter
 
-		for _, format := range []string{"decisions", "systemone"} {
+		captureSettings := func() config.OTelMessageCapture { return reloader.Config().OTelSettings.MessageCapture }
+		for _, protocol := range []content.Protocol{content.Decisions, content.SystemOne} {
+			format := string(protocol)
 			h := handler.Decisions(r, store, sa, dispatcher, func() config.GeneralSettings { return reloader.Config().GeneralSettings }, format, tracer)
-			mux.With(traced).Post("/v1/"+format, h)
-			mux.With(traced).Post("/"+format, h)
+			mux.With(traced, middleware.CaptureMessages(protocol, captureSettings)).Post("/v1/"+format, h)
+			mux.With(traced, middleware.CaptureMessages(protocol, captureSettings)).Post("/"+format, h)
 		}
 
-		captureSettings := func() config.OTelMessageCapture { return reloader.Config().OTelSettings.MessageCapture }
 		mux.With(traced, middleware.CaptureMessages(content.Chat, captureSettings)).
 			Post("/v1/chat/completions", handler.ChatCompletions(r, store, sa, cm, dispatcher, reloader.Config().GeneralSettings, tracer))
 		mux.With(traced, middleware.CaptureMessages(content.Messages, captureSettings)).

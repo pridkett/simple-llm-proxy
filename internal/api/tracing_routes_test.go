@@ -9,11 +9,66 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	proxyotel "github.com/pwagstro/simple_llm_proxy/internal/otel"
 	"github.com/pwagstro/simple_llm_proxy/internal/storage"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+func TestDecisionTraceCapture(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
+	f := newDecisionFixtureConfigured(t, provider.Tracer("test"), func(cfg *config.Config, appID int64) {
+		cfg.OTelSettings.MessageCapture.ApplicationIDs = []int64{appID}
+		cfg.OTelSettings.MessageCapture.MaxBytes = 1024
+	})
+	key, _ := f.key(t, "capture", true, nil, nil, nil)
+	systemOne := `{"model":"jev","state":{"ticket":"damaged box","password":"secret-value"},` +
+		`"assets":{"photo":{"type":"image","format":"png","data_base64":"inline-payload"}},` +
+		`"questions":{"damage":{"type":"box","instructions":"Locate damage."}}}`
+	for _, tc := range []struct {
+		name, path, body, token, input, output, flag string
+		status                                       int
+	}{
+		{"decisions", "/v1/decisions", decisionBody("luna"), key, `"input":"ticket"`, `"probability":0.9`, "", 200},
+		{"systemone alias", "/systemone", systemOne, key, `"password":"[REDACTED]"`, `"confidence":0.9`, "", 200},
+		{"large input", "/v1/decisions", strings.Replace(decisionBody("luna"), "ticket", strings.Repeat("a", 4096), 1), key, `"questions":[`, `"probability":0.9`, "llmproxy.capture.input_truncated", 200},
+		{"master key", "/v1/decisions", decisionBody("luna"), "master-only", "", "", "", 200},
+		{"upstream error", "/v1/systemone", strings.Replace(systemOne, `"jev"`, `"error422"`, 1), key, `"questions":{`, "", "", 422},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(recorder.Ended())
+			if status, _, body := f.request(t, "POST", tc.path, tc.body, tc.token, false); status != tc.status {
+				t.Fatalf("HTTP %d: %s", status, body)
+			}
+			spans := recorder.Ended()[before:]
+			if len(spans) != 2 || !strings.HasPrefix(spans[0].Name(), "decision ") {
+				t.Fatalf("expected a decision span and its HTTP parent, got %d spans", len(spans))
+			}
+			for i, span := range spans {
+				attrs := make(map[string]string)
+				for _, a := range span.Attributes() {
+					attrs[string(a.Key)] = a.Value.Emit()
+				}
+				if i == 0 {
+					endpoint := "/v1/" + strings.TrimPrefix(strings.TrimPrefix(tc.path, "/"), "v1/")
+					if attrs["llmproxy.decision.endpoint"] != endpoint || (tc.flag != "" && attrs[tc.flag] != "true") {
+						t.Fatalf("unexpected metadata: %v", attrs)
+					}
+				}
+				for direction, want := range map[string]string{"input": tc.input, "output": tc.output} {
+					got := attrs["langfuse.observation."+direction]
+					if want == "" && got != "" || want != "" && !strings.Contains(got, want) || len(got) > 1024 ||
+						strings.Contains(got, "secret-value") || strings.Contains(got, "inline-payload") {
+						t.Errorf("%s %s = %q, want %q", span.Name(), direction, got, want)
+					}
+				}
+			}
+		})
+	}
+}
 
 // Only model calls reach the trace backend; housekeeping routes stay out.
 func TestOnlyModelRoutesAreTraced(t *testing.T) {
