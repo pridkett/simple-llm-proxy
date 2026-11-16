@@ -32,8 +32,9 @@ type OTelSettings struct {
 
 // OTelMessageCapture limits content export to explicitly selected applications.
 type OTelMessageCapture struct {
-	ApplicationIDs []int64 `yaml:"application_ids"`
-	MaxBytes       int     `yaml:"max_bytes"`
+	ApplicationIDs         []int64 `yaml:"application_ids"`
+	DecisionApplicationIDs []int64 `yaml:"decision_application_ids,omitempty"`
+	MaxBytes               int     `yaml:"max_bytes"`
 }
 
 type OTelExporter struct {

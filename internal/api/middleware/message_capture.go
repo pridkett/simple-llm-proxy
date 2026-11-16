@@ -20,13 +20,19 @@ func MessageCaptureFromContext(ctx context.Context) *content.Capture {
 
 // CaptureMessages runs after key authentication and only for selected model routes.
 func CaptureMessages(protocol content.Protocol, settings func() config.OTelMessageCapture) func(http.Handler) http.Handler {
+	decision := protocol == content.Decisions || protocol == content.SystemOne
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			key := APIKeyFromContext(ctx)
 			cfg := settings()
 			if key == nil || key.Key == nil || cfg.MaxBytes <= 0 ||
-				!slices.Contains(cfg.ApplicationIDs, key.Key.ApplicationID) || !trace.SpanFromContext(ctx).IsRecording() {
+				!trace.SpanFromContext(ctx).IsRecording() {
+				next.ServeHTTP(w, r)
+				return
+			}
+			appID := key.Key.ApplicationID
+			if !slices.Contains(cfg.ApplicationIDs, appID) && !(decision && slices.Contains(cfg.DecisionApplicationIDs, appID)) {
 				next.ServeHTTP(w, r)
 				return
 			}

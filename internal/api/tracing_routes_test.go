@@ -21,7 +21,7 @@ func TestDecisionTraceCapture(t *testing.T) {
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
 	f := newDecisionFixtureConfigured(t, provider.Tracer("test"), func(cfg *config.Config, appID int64) {
-		cfg.OTelSettings.MessageCapture.ApplicationIDs = []int64{appID}
+		cfg.OTelSettings.MessageCapture.DecisionApplicationIDs = []int64{appID}
 		cfg.OTelSettings.MessageCapture.MaxBytes = 1024
 	})
 	key, _ := f.key(t, "capture", true, nil, nil, nil)
@@ -33,6 +33,7 @@ func TestDecisionTraceCapture(t *testing.T) {
 		status                                       int
 	}{
 		{"decisions", "/v1/decisions", decisionBody("luna"), key, `"input":"ticket"`, `"probability":0.9`, "", 200},
+		{"systemone", "/v1/systemone", systemOne, key, `"questions":{`, `"box":{`, "", 200},
 		{"systemone alias", "/systemone", systemOne, key, `"password":"[REDACTED]"`, `"confidence":0.9`, "", 200},
 		{"large input", "/v1/decisions", strings.Replace(decisionBody("luna"), "ticket", strings.Repeat("a", 4096), 1), key, `"questions":[`, `"probability":0.9`, "llmproxy.capture.input_truncated", 200},
 		{"master key", "/v1/decisions", decisionBody("luna"), "master-only", "", "", "", 200},
@@ -67,6 +68,24 @@ func TestDecisionTraceCapture(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	before := len(recorder.Ended())
+	chat := `{"model":"chat","messages":[{"role":"user","content":"chat payload"}]}`
+	if status, _, body := f.request(t, "POST", "/v1/chat/completions", chat, key, false); status != http.StatusOK {
+		t.Fatalf("HTTP %d: %s", status, body)
+	}
+	spans := recorder.Ended()[before:]
+	if len(spans) != 2 {
+		t.Fatalf("expected a chat span and its HTTP parent, got %d spans", len(spans))
+	}
+	for _, span := range spans {
+		for _, attr := range span.Attributes() {
+			switch attr.Key {
+			case "gen_ai.input.messages", "gen_ai.output.messages", "langfuse.observation.input", "langfuse.observation.output":
+				t.Errorf("decision-only allowlist unexpectedly captured %s on %s", attr.Key, span.Name())
+			}
+		}
 	}
 }
 
