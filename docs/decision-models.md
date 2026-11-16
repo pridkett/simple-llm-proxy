@@ -280,7 +280,8 @@ Native TypeSafe assets and box questions work on `/v1/systemone`:
 }
 ```
 
-Configure TypeSafe's image opt-in header on the deployment. Clients cannot
+An asset without a `type` counts as an image, as TypeSafe allows, and is
+forwarded unchanged. Configure TypeSafe's image opt-in header on the deployment. Clients cannot
 override deployment credentials or opt-in headers. See
 [TypeSafe's asset contract](https://docs.typesafe.ai/api/system-one).
 
