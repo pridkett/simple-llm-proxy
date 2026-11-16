@@ -20,6 +20,12 @@ func TestCaptureBudgetAndSSEFrameRecovery(t *testing.T) {
 	for _, attr := range c.Attributes() {
 		attrs[string(attr.Key)] = attr.Value.AsInterface()
 	}
+	if attrs["langfuse.observation.input"] != nil || attrs["langfuse.observation.output"] != nil {
+		t.Errorf("chat capture duplicated content into Langfuse keys")
+	}
+	for _, attr := range c.LangfuseTraceAttributes() {
+		attrs[string(attr.Key)] = attr.Value.AsInterface()
+	}
 	for _, key := range []string{"gen_ai.input.messages", "gen_ai.output.messages", "langfuse.observation.input"} {
 		value, _ := attrs[key].(string)
 		if len(value) > budget || !json.Valid([]byte(value)) {

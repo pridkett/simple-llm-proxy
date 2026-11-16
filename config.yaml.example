@@ -171,6 +171,7 @@ router_settings:
 #   exporter:
 #     protocol: http
 #     endpoint: https://collector.example.com:4318
+#   langfuse_compat: false  # true adds Langfuse-only trace metadata and trace input/output
 #   message_capture:
 #     application_ids: [42]
 #     decision_application_ids: [57]  # Decisions and System One only

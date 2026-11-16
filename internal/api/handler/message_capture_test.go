@@ -19,12 +19,12 @@ import (
 )
 
 func captureExchange(t *testing.T, protocol content.Protocol, path, body, token string, app int64, handler func(trace.Tracer) http.Handler) (map[string]any, string) {
-	model, _, body := captureExchangeSpans(t, protocol, path, body, token, app, handler)
+	model, _, body := captureExchangeSpans(t, false, protocol, path, body, token, app, handler)
 	return model, body
 }
 
 // captureExchangeSpans returns the model span, the HTTP span, and the downstream body.
-func captureExchangeSpans(t *testing.T, protocol content.Protocol, path, body, token string, app int64, handler func(trace.Tracer) http.Handler) (map[string]any, map[string]any, string) {
+func captureExchangeSpans(t *testing.T, langfuse bool, protocol content.Protocol, path, body, token string, app int64, handler func(trace.Tracer) http.Handler) (map[string]any, map[string]any, string) {
 	t.Helper()
 	recorder, provider := testTracer(t)
 	tracer := provider.Tracer("capture-test")
@@ -34,7 +34,7 @@ func captureExchangeSpans(t *testing.T, protocol content.Protocol, path, body, t
 	capture := middleware.CaptureMessages(protocol, func() config.OTelMessageCapture {
 		return config.OTelMessageCapture{ApplicationIDs: []int64{42}, MaxBytes: 1024}
 	})(handler(tracer))
-	h := middleware.OTel(tracer)(middleware.KeyAuth("master", store, keystore.New(0), nil, nil)(capture))
+	h := middleware.OTel(tracer, middleware.OTelOptions{Langfuse: langfuse})(middleware.KeyAuth("master", store, keystore.New(0), nil, nil)(capture))
 	req := makeAuthRequest(http.MethodPost, path, body)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -69,30 +69,43 @@ func TestChatStructuredCaptureEligibilityAndRedaction(t *testing.T) {
 		name, token string
 		app         int64
 		want        bool
+		langfuse    bool
 	}{
-		{"test application", "sk-app-credential", 42, true},
-		{"ordinary application", "sk-app-credential", 43, false},
-		{"master key", "master", 42, false},
+		{"test application", "sk-app-credential", 42, true, false},
+		{"test application with Langfuse compatibility", "sk-app-credential", 42, true, true},
+		{"ordinary application", "sk-app-credential", 43, false, true},
+		{"master key", "master", 42, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			attrs, root, downstream := captureExchangeSpans(t, content.Chat, "/v1/chat/completions", body, tc.token, tc.app, handler)
+			attrs, root, downstream := captureExchangeSpans(t, tc.langfuse, content.Chat, "/v1/chat/completions", body, tc.token, tc.app, handler)
 			input := valString(attrs["gen_ai.input.messages"])
 			output := valString(attrs["gen_ai.output.messages"])
 			if !strings.Contains(downstream, "output-secret") {
 				t.Fatal("capture modified the live response")
 			}
+			// GenAI attributes are the only copy on the model span.
+			if attrs["langfuse.observation.input"] != nil || attrs["langfuse.observation.output"] != nil {
+				t.Fatalf("model span duplicated content into Langfuse keys: %v", attrs)
+			}
 			if !tc.want {
-				if input != "" || output != "" || attrs["langfuse.observation.input"] != nil || root["langfuse.observation.input"] != nil {
+				if input != "" || output != "" || root["langfuse.observation.input"] != nil {
 					t.Fatalf("ineligible content captured: %v %v", attrs, root)
 				}
 				return
 			}
 			if !strings.Contains(input, "run the tests [REDACTED]") || !strings.Contains(output, "[REDACTED]") ||
 				strings.Contains(input, "hidden") || strings.Contains(output, "output-secret") ||
-				attrs["gen_ai.response.id"] != "chat-id" || attrs["langfuse.observation.output"] != output {
+				attrs["gen_ai.response.id"] != "chat-id" {
 				t.Fatalf("unexpected capture: %v", attrs)
 			}
-			if root["langfuse.observation.input"] != attrs["langfuse.observation.input"] || root["langfuse.observation.output"] != output {
+			rootInput := valString(root["langfuse.observation.input"])
+			if !tc.langfuse {
+				if rootInput != "" || root["langfuse.observation.output"] != nil {
+					t.Fatalf("HTTP root span got Langfuse trace input/output without compatibility mode: %v", root)
+				}
+				return
+			}
+			if !strings.Contains(rootInput, "run the tests [REDACTED]") || root["langfuse.observation.output"] != output {
 				t.Fatalf("HTTP root span lacks the trace input/output: %v", root)
 			}
 		})
