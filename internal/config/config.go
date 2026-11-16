@@ -207,4 +207,7 @@ func Defaults() *Config {
 type ParsedModel struct {
 	Provider  string
 	ModelName string
+	// ViaResponses is set by "provider/responses/model": chat completions for
+	// this deployment are sent upstream through the Responses API (ADR 020).
+	ViaResponses bool
 }
