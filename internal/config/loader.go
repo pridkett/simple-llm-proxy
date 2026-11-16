@@ -189,6 +189,13 @@ func Parse(data []byte) (*Config, error) {
 		if v, ok := os["service_name"].(string); ok {
 			cfg.OTelSettings.ServiceName = v
 		}
+		if v, exists := os["langfuse_compat"]; exists {
+			b, ok := v.(bool)
+			if !ok {
+				return nil, fmt.Errorf("otel_settings.langfuse_compat must be a boolean")
+			}
+			cfg.OTelSettings.LangfuseCompat = b
+		}
 		if v, exists := os["sampling_ratio"]; exists {
 			switch n := v.(type) {
 			case float64:

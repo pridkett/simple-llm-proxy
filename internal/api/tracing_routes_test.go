@@ -23,6 +23,7 @@ func TestDecisionTraceCapture(t *testing.T) {
 	f := newDecisionFixtureConfigured(t, provider.Tracer("test"), func(cfg *config.Config, appID int64) {
 		cfg.OTelSettings.MessageCapture.DecisionApplicationIDs = []int64{appID}
 		cfg.OTelSettings.MessageCapture.MaxBytes = 1024
+		cfg.OTelSettings.LangfuseCompat = true
 	})
 	key, _ := f.key(t, "capture", true, nil, nil, nil)
 	systemOne := `{"model":"jev","state":{"ticket":"damaged box","password":"secret-value"},` +
@@ -89,6 +90,41 @@ func TestDecisionTraceCapture(t *testing.T) {
 	}
 }
 
+// Without Langfuse compatibility the decision payload stays on the model span
+// only; it is not copied onto the HTTP span as trace-level input/output.
+func TestDecisionTraceCaptureWithoutLangfuseCompat(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
+	f := newDecisionFixtureConfigured(t, provider.Tracer("test"), func(cfg *config.Config, appID int64) {
+		cfg.OTelSettings.MessageCapture.DecisionApplicationIDs = []int64{appID}
+		cfg.OTelSettings.MessageCapture.MaxBytes = 1024
+	})
+	key, _ := f.key(t, "capture", true, nil, nil, nil)
+	if status, _, body := f.request(t, "POST", "/v1/decisions", decisionBody("luna"), key, false); status != http.StatusOK {
+		t.Fatalf("HTTP %d: %s", status, body)
+	}
+	spans := recorder.Ended()
+	if len(spans) != 2 {
+		t.Fatalf("expected a decision span and its HTTP parent, got %d spans", len(spans))
+	}
+	model, root := map[string]string{}, map[string]string{}
+	for _, a := range spans[0].Attributes() {
+		model[string(a.Key)] = a.Value.Emit()
+	}
+	for _, a := range spans[1].Attributes() {
+		root[string(a.Key)] = a.Value.Emit()
+	}
+	if !strings.Contains(model["langfuse.observation.input"], `"questions":[`) || !strings.Contains(model["langfuse.observation.output"], `"probability":0.9`) {
+		t.Fatalf("decision span lost its payload: %v", model)
+	}
+	for key := range root {
+		if strings.HasPrefix(key, "langfuse.") {
+			t.Errorf("HTTP span got Langfuse-only attribute %s", key)
+		}
+	}
+}
+
 // Only model calls reach the trace backend; housekeeping routes stay out.
 func TestOnlyModelRoutesAreTraced(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
@@ -134,7 +170,7 @@ func TestOnlyModelRoutesAreTraced(t *testing.T) {
 		for _, a := range span.Attributes() {
 			attrs[string(a.Key)] = a.Value.AsInterface()
 		}
-		if attrs[proxyotel.UserID] != "owui-user-1" || attrs[proxyotel.LangfuseUserID] != "owui-user-1" {
+		if attrs[proxyotel.UserID] != "owui-user-1" || attrs["langfuse.user.id"] != nil {
 			t.Fatalf("span %q missing user attributes: %+v", span.Name(), attrs)
 		}
 		for name := range attrs {
@@ -146,10 +182,20 @@ func TestOnlyModelRoutesAreTraced(t *testing.T) {
 }
 
 func TestModelTracesDistinguishSameNamedApplicationsAndKeys(t *testing.T) {
+	for _, langfuse := range []bool{false, true} {
+		t.Run("langfuse_compat="+strconv.FormatBool(langfuse), func(t *testing.T) {
+			testModelTracesDistinguishSameNamedApplicationsAndKeys(t, langfuse)
+		})
+	}
+}
+
+func testModelTracesDistinguishSameNamedApplicationsAndKeys(t *testing.T, langfuse bool) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	defer provider.Shutdown(t.Context())
-	f := newDecisionFixtureWithTracer(t, provider.Tracer("test"))
+	f := newDecisionFixtureConfigured(t, provider.Tracer("test"), func(cfg *config.Config, _ int64) {
+		cfg.OTelSettings.LangfuseCompat = langfuse
+	})
 
 	createApp := func(teamName string) (teamID, appID int64) {
 		t.Helper()
@@ -210,8 +256,16 @@ func TestModelTracesDistinguishSameNamedApplicationsAndKeys(t *testing.T) {
 				"api_key_name":     "production",
 				"api_key_id":       strconv.FormatInt(key.ID, 10),
 			} {
-				if got := attrs["langfuse.trace.metadata."+name]; got != want {
-					t.Errorf("span %q metadata %s = %q, want %q", span.Name(), name, got, want)
+				proxyKey := map[string]string{"team_name": "llmproxy.team", "application_name": "llmproxy.application"}[name]
+				if proxyKey == "" {
+					proxyKey = "llmproxy." + name
+				}
+				if got := attrs[proxyKey]; got != want {
+					t.Errorf("span %q %s = %q, want %q", span.Name(), proxyKey, got, want)
+				}
+				metadata, want := attrs["langfuse.trace.metadata."+name], map[bool]string{true: want}[langfuse]
+				if metadata != want {
+					t.Errorf("span %q Langfuse metadata %s = %q, want %q", span.Name(), name, metadata, want)
 				}
 			}
 		}

@@ -11,13 +11,13 @@ ADR 011 established opt-in OTLP trace export. The proxy emits an HTTP span and a
 
 ### Session correlation
 
-Reuse the existing validated session attribution. Add the same `gen_ai.conversation.id` and `langfuse.session.id` to the HTTP span and the model span. Scope the exported identifier to the authenticated application so key rotation preserves grouping and independent applications stay separate. Use a digest of the client ID to accommodate the full UTF-8 input range within Langfuse's session ID limits. The proxy request ID remains available for joining exported spans to logs.
+Reuse the existing validated session attribution. Add the same `gen_ai.conversation.id` to the HTTP span and the model span. (ADR 021 dropped the `langfuse.session.id` copy; Langfuse reads `gen_ai.conversation.id`.) Scope the exported identifier to the authenticated application so key rotation preserves grouping and independent applications stay separate. Use a digest of the client ID to accommodate the full UTF-8 input range within Langfuse's session ID limits. The proxy request ID remains available for joining exported spans to logs.
 
 ### Structured capture
 
 Opt in by listing authenticated application IDs in `otel_settings.message_capture`. Capture runs only on recording LLM spans and covers Chat Completions, Anthropic Messages, and Responses creation. Normalize ordered messages, instructions, and tool calls and results from the client-facing protocol. Reassemble SSE deltas and mark partial and truncated output. Keep provider retries as metadata on the same model span.
 
-Use GenAI input, system instruction, and output attributes with Langfuse observation mappings for direct OTLP export. Apply byte limits and redact recognized credential patterns and secret fields before export. Omit binary data and reasoning blocks. Free text can still contain source code or unrecognized secrets, so operators should restrict capture to dedicated test applications and use a destination appropriate for the test data.
+Use GenAI input, system instruction, and output attributes for direct OTLP export. ADR 021 moves the Langfuse observation copies behind `otel_settings.langfuse_compat`. Apply byte limits and redact recognized credential patterns and secret fields before export. Omit binary data and reasoning blocks. Free text can still contain source code or unrecognized secrets, so operators should restrict capture to dedicated test applications and use a destination appropriate for the test data.
 
 The pilot exports a bounded copy of the observed exchange. Session grouping stays independent of capture. Offline analysis can join tool calls with their results, retain replayed history as context, and count new message parts separately when clustering.
 

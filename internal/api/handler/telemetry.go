@@ -20,9 +20,10 @@ import (
 )
 
 type operationSpan struct {
-	span    trace.Span
-	parent  trace.Span // the HTTP server span, which Langfuse v4 treats as the trace root
-	capture *content.Capture
+	span     trace.Span
+	parent   trace.Span // the HTTP server span, which Langfuse v4 treats as the trace root
+	capture  *content.Capture
+	langfuse bool
 }
 
 func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model string, stream bool, sessionID string) (context.Context, *operationSpan) {
@@ -46,16 +47,14 @@ func beginOperation(ctx context.Context, tracer trace.Tracer, operation, model s
 	}
 	if sessionID != "" {
 		id := traceSessionID(ctx, sessionID)
-		session := []attribute.KeyValue{
-			attribute.String(proxyotel.GenAIConversationID, id),
-			attribute.String(proxyotel.LangfuseSessionID, id),
-		}
-		trace.SpanFromContext(ctx).SetAttributes(session...)
-		attrs = append(attrs, session...)
+		// Langfuse reads gen_ai.conversation.id as the session ID.
+		session := attribute.String(proxyotel.GenAIConversationID, id)
+		trace.SpanFromContext(ctx).SetAttributes(session)
+		attrs = append(attrs, session)
 	}
 	parent := trace.SpanFromContext(ctx)
 	ctx, span := tracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(attrs...))
-	return ctx, &operationSpan{span: span, parent: parent, capture: middleware.MessageCaptureFromContext(ctx)}
+	return ctx, &operationSpan{span: span, parent: parent, capture: middleware.MessageCaptureFromContext(ctx), langfuse: middleware.LangfuseFromContext(ctx)}
 }
 
 // A digest keeps all accepted UTF-8 IDs within Langfuse's ASCII length limit.
@@ -73,16 +72,12 @@ func traceSessionID(ctx context.Context, sessionID string) string {
 func (o *operationSpan) end() {
 	if o != nil {
 		if o.capture != nil && o.span.IsRecording() {
-			attrs := o.capture.Attributes()
-			o.span.SetAttributes(attrs...)
+			o.span.SetAttributes(o.capture.Attributes()...)
 			// Langfuse v4 shows a trace's input and output from its root
-			// observation, so mirror only the Langfuse keys onto the HTTP span.
-			if o.parent != nil && o.parent.IsRecording() {
-				for _, a := range attrs {
-					if a.Key == "langfuse.observation.input" || a.Key == "langfuse.observation.output" {
-						o.parent.SetAttributes(a)
-					}
-				}
+			// observation. There is no GenAI equivalent, so only compatibility
+			// mode copies the content onto the HTTP span.
+			if o.langfuse && o.parent != nil && o.parent.IsRecording() {
+				o.parent.SetAttributes(o.capture.LangfuseTraceAttributes()...)
 			}
 		}
 		o.span.End()

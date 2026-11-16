@@ -121,7 +121,7 @@ func TestSessionOnHTTPAndOperationSpans(t *testing.T) {
 			ID: tc.key, ApplicationID: tc.app, IsActive: true,
 		}}
 		handler := ChatCompletions(rtr, nil, nil, nil, nil, config.GeneralSettings{}, tracer)
-		h := middleware.OTel(tracer)(middleware.KeyAuth("master", store, keystore.New(0), nil, nil)(handler))
+		h := middleware.OTel(tracer, middleware.OTelOptions{})(middleware.KeyAuth("master", store, keystore.New(0), nil, nil)(handler))
 		req := makeAuthRequest(http.MethodPost, "/v1/chat/completions", makeChatRequest("gpt-4", false))
 		req.Header.Set("Authorization", "Bearer sk-app-test")
 		req.Header.Set("X-Session-ID", tc.session)
@@ -145,7 +145,7 @@ func TestSessionOnHTTPAndOperationSpans(t *testing.T) {
 		}
 		for _, span := range spans {
 			attrs := spanAttrs(span)
-			if attrs[proxyotel.GenAIConversationID] != expected || attrs[proxyotel.LangfuseSessionID] != expected {
+			if attrs[proxyotel.GenAIConversationID] != expected || attrs["langfuse.session.id"] != nil {
 				t.Errorf("span %q has session attributes %v, want %v", span.Name(), attrs, expected)
 			}
 		}

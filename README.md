@@ -240,23 +240,31 @@ Only model calls are traced: `/v1/chat/completions`, `/v1/messages`,
 mirrors. Health checks, model listings, the admin UI, and other routes create
 no spans.
 The child LLM span covers retries and records failed attempts as events.
+Spans follow the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+(`gen_ai.*`), which Langfuse and other GenAI-aware backends read directly.
 The exporter sends metadata by default. For requests authenticated with an
-application key, both spans include the proxy's `team_name`, `team_id`,
-`application_name`, `application_id`, `api_key_name`, and `api_key_id` as
-filterable Langfuse trace metadata (OTLP attributes under
-`langfuse.trace.metadata.*`). Filter by `api_key_id` to distinguish keys with
+application key, both spans include `llmproxy.team`, `llmproxy.team_id`,
+`llmproxy.application`, `llmproxy.application_id`, `llmproxy.api_key_name`, and
+`llmproxy.api_key_id`. Filter by `llmproxy.api_key_id` to distinguish keys with
 the same name. It is the numeric ID in the proxy's key detail URL, exported as
 text, and is unique within the proxy database. Use `application_id` to
 distinguish same-named applications across teams. Authentication headers, key
 prefixes, and stored key hashes are excluded from attribution.
 
+Set `otel_settings.langfuse_compat: true` (restart required) when exporting to
+Langfuse to add the Langfuse-only extras that have no GenAI equivalent: the same
+key metadata as filterable `langfuse.trace.metadata.{team,application,api_key}_{name,id}`,
+and the captured input and output copied onto the HTTP span as
+`langfuse.observation.input`/`output`, which Langfuse v4 shows as trace-level
+input and output. Without it, Langfuse still shows content on each generation.
+
 When a model request includes a valid session ID, its HTTP and model spans
-share `gen_ai.conversation.id` and `langfuse.session.id`. For application keys,
+share `gen_ai.conversation.id`, which Langfuse uses as the session ID. For application keys,
 the exported value is `app:<application_id>:<sha256 of the UTF-8 session ID>`
 using lowercase hex. Keys for the same application share the namespace.
 Send `X-User-ID` to attribute a model request to the calling application's
-end user. The trimmed value is exported unchanged as `user.id` and
-`langfuse.user.id` on the HTTP and model spans. Values longer than 256 bytes or
+end user. The trimmed value is exported unchanged as `user.id` on the HTTP
+and model spans. Values longer than 256 bytes or
 containing control characters are ignored. The same value is stored with the
 request log, shown as "User ID" under Attribution on the Logs page, and
 filterable there or through `GET /admin/logs?client_user_id=<id>` (exact match,
@@ -280,6 +288,7 @@ otel_settings:
     endpoint: https://your-langfuse-host/api/public/otel/v1/traces
     headers:
       Authorization: os.environ/OTEL_AUTH_HEADER
+  langfuse_compat: true
   message_capture:
     application_ids: [42]
     decision_application_ids: [57]
@@ -287,22 +296,24 @@ otel_settings:
 ```
 
 For Langfuse, use a Basic authorization header built from the project public
-and secret keys. The proxy also emits the standard GenAI attributes for other
-OTLP destinations. Chat Completions, Anthropic Messages, and Responses
-creation capture structured inputs and outputs on recording model spans.
+and secret keys. Chat Completions, Anthropic Messages, and Responses creation
+capture structured inputs and outputs on recording model spans as
+`gen_ai.input.messages`, `gen_ai.system_instructions`, and
+`gen_ai.output.messages`.
 Streams are assembled into messages with tool call IDs, arguments, and results.
 Background Responses creation captures the response available at submission.
 Decisions and System One capture questions, input or state, and returned answers
-as structured observation input and output. `application_ids` covers all supported
+as `langfuse.observation.input` and `output`, since they are not chat messages
+and have no GenAI equivalent. `application_ids` covers all supported
 capture routes. Add IDs to `decision_application_ids` to opt those applications
 in for Decisions and System One only. Both lists use the same byte limit and
 decision capture omits media payloads.
 
 `max_bytes` bounds the serialized capture per direction, with a default of
 1 MiB and an allowed range of 1 KiB–4 MiB. Each field is capped at a quarter of
-that budget to leave room for later messages. Each direction is exported as both
-GenAI and Langfuse attributes, so a span can carry about four times `max_bytes`;
-size the trace backend's span and request limits to match. The `llmproxy.capture.*_truncated` and
+that budget to leave room for later messages. A model span carries up to about
+twice `max_bytes` (input and output). With `langfuse_compat`, the HTTP span
+carries another copy. Size the trace backend's span and request limits to match. The `llmproxy.capture.*_truncated` and
 `llmproxy.capture.output_partial` attributes flag clipped data or interrupted
 output. Message capture removes binary and reasoning content. Capture masks
 recognized credential patterns and fields. Free text can still contain source code or
@@ -324,9 +335,9 @@ otel_settings:
 Start an `agent.run` span in the harness, inject its W3C `traceparent` on
 each LLM request, and export the harness span to the same destination as the
 proxy spans. The proxy starts each HTTP span under the supplied parent and
-applies its existing parent-based sampling. For Langfuse session filtering,
-also tag the harness span with the same exported `langfuse.session.id`
-described above and send the original `X-Session-ID` on each request.
+applies its existing parent-based sampling. For session filtering, also tag
+the harness span with the same exported `gen_ai.conversation.id` described
+above and send the original `X-Session-ID` on each request.
 
 Trust applies to the immediate connection, using the socket IP. A trusted
 reverse proxy or relay should remove externally supplied trace headers and

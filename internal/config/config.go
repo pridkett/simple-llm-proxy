@@ -28,6 +28,10 @@ type OTelSettings struct {
 	SamplingRatio           float64            `yaml:"sampling_ratio"`
 	MessageCapture          OTelMessageCapture `yaml:"message_capture"`
 	TrustedTraceparentCIDRs []netip.Prefix     `yaml:"trusted_traceparent_cidrs"`
+	// LangfuseCompat adds Langfuse-only attributes (trace-level input/output on
+	// the root span and filterable langfuse.trace.metadata.*) to the GenAI
+	// semantic conventions. Read at startup with the exporter.
+	LangfuseCompat bool `yaml:"langfuse_compat"`
 }
 
 // OTelMessageCapture limits content export to explicitly selected applications.

@@ -3,6 +3,7 @@ package content
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -54,6 +55,7 @@ func (c *Capture) decisionAttributes() []attribute.KeyValue {
 	if c.requestJSON != "" {
 		attrs = append(attrs, attribute.String("langfuse.observation.input", c.requestJSON))
 	}
+	c.decisionTrace = slices.Clone(attrs)
 	if c.input.truncated {
 		attrs = append(attrs, attribute.Bool("llmproxy.capture.input_truncated", true))
 	}

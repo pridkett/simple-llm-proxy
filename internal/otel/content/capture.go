@@ -36,6 +36,8 @@ type Capture struct {
 	items        map[int]*streamItem
 	streamBytes  int
 	requestJSON  string
+	// decisionTrace holds the decision input and output for the trace root.
+	decisionTrace []attribute.KeyValue
 }
 
 func New(protocol Protocol, limit int) *Capture {
@@ -183,6 +185,9 @@ func roleOrAssistant(role string) string {
 	return role
 }
 
+// Attributes returns the captured content as GenAI semantic convention
+// attributes. Langfuse reads these directly, so chat capture is not mirrored
+// into langfuse.* keys on the model span.
 func (c *Capture) Attributes() []attribute.KeyValue {
 	if c.protocol == Decisions || c.protocol == SystemOne {
 		return c.decisionAttributes()
@@ -205,16 +210,10 @@ func (c *Capture) Attributes() []attribute.KeyValue {
 			system, _ := json.Marshal(c.instructions)
 			attrs = append(attrs, attribute.String("gen_ai.system_instructions", string(system)))
 		}
-		input, _ := json.Marshal(struct {
-			Messages     []message `json:"messages,omitempty"`
-			Instructions []part    `json:"system_instructions,omitempty"`
-		}{c.input.messages, c.instructions})
-		attrs = append(attrs, attribute.String("langfuse.observation.input", string(input)))
 	}
 	if len(c.output.messages) != 0 {
 		output, _ := json.Marshal(c.output.messages)
-		attrs = append(attrs, attribute.String("gen_ai.output.messages", string(output)),
-			attribute.String("langfuse.observation.output", string(output)))
+		attrs = append(attrs, attribute.String("gen_ai.output.messages", string(output)))
 	}
 	if c.responseID != "" {
 		attrs = append(attrs, attribute.String("gen_ai.response.id", c.responseID))
@@ -230,6 +229,29 @@ func (c *Capture) Attributes() []attribute.KeyValue {
 	}
 	if c.failedWrite || (c.stream && !c.complete) || strings.EqualFold(c.status, "incomplete") {
 		attrs = append(attrs, attribute.Bool("llmproxy.capture.output_partial", true))
+	}
+	return attrs
+}
+
+// LangfuseTraceAttributes returns langfuse.observation.input and output for
+// the trace root span, where Langfuse v4 reads trace-level input and output.
+// It has no GenAI equivalent, so callers add it only in Langfuse compatibility
+// mode. Call it after Attributes.
+func (c *Capture) LangfuseTraceAttributes() []attribute.KeyValue {
+	if c.protocol == Decisions || c.protocol == SystemOne {
+		return c.decisionTrace
+	}
+	var attrs []attribute.KeyValue
+	if len(c.input.messages) != 0 || len(c.instructions) != 0 {
+		input, _ := json.Marshal(struct {
+			Messages     []message `json:"messages,omitempty"`
+			Instructions []part    `json:"system_instructions,omitempty"`
+		}{c.input.messages, c.instructions})
+		attrs = append(attrs, attribute.String("langfuse.observation.input", string(input)))
+	}
+	if len(c.output.messages) != 0 {
+		output, _ := json.Marshal(c.output.messages)
+		attrs = append(attrs, attribute.String("langfuse.observation.output", string(output)))
 	}
 	return attrs
 }

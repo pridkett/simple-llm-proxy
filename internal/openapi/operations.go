@@ -589,7 +589,7 @@ func buildSecuritySchemes() openapi3.SecuritySchemes {
 func clientUserHeaderParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{Value: &openapi3.Parameter{
 		Name: "X-User-ID", In: "header",
-		Description: "End user of the calling application, recorded in request logs and exported as user.id/langfuse.user.id on traces. Attribution only; any key holder can set it.",
+		Description: "End user of the calling application, recorded in request logs and exported as user.id on traces. Attribution only; any key holder can set it.",
 		Schema:      clientUserIDSchema(),
 	}}
 }

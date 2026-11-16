@@ -190,6 +190,19 @@ func TestOTelMessageCaptureConfig(t *testing.T) {
 	}
 }
 
+func TestOTelLangfuseCompatConfig(t *testing.T) {
+	if Defaults().OTelSettings.LangfuseCompat {
+		t.Fatal("Langfuse compatibility is on by default")
+	}
+	cfg, err := Parse([]byte("otel_settings:\n  langfuse_compat: true\n"))
+	if err != nil || !cfg.OTelSettings.LangfuseCompat {
+		t.Fatalf("langfuse_compat not parsed: %v %+v", err, cfg)
+	}
+	if _, err := Parse([]byte("otel_settings:\n  langfuse_compat: \"yes\"\n")); err == nil {
+		t.Fatal("accepted a non-boolean langfuse_compat")
+	}
+}
+
 func TestOTelTrustedTraceparentCIDRsConfig(t *testing.T) {
 	cfg, err := Parse([]byte("otel_settings:\n  trusted_traceparent_cidrs: [127.0.0.5/24, '::1/128']\n"))
 	if err != nil {

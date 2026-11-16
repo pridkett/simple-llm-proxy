@@ -47,7 +47,11 @@ func NewRouter(r *router.Router, store storage.Storage, reloader *config.Reloade
 
 	// Only model calls are traced; health checks, model listings, the admin UI,
 	// and other housekeeping routes stay out of the trace backend.
-	traced := middleware.OTel(tracer, reloader.Config().OTelSettings.TrustedTraceparentCIDRs...)
+	otelSettings := reloader.Config().OTelSettings
+	traced := middleware.OTel(tracer, middleware.OTelOptions{
+		TrustedPeers: otelSettings.TrustedTraceparentCIDRs,
+		Langfuse:     otelSettings.LangfuseCompat,
+	})
 
 	// Public routes — no auth required
 	mux.Get("/health", handler.Health())

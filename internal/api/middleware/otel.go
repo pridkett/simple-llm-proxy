@@ -16,17 +16,37 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// OTelOptions configures the HTTP server span middleware.
+type OTelOptions struct {
+	// TrustedPeers are socket peer CIDRs whose traceparent header is honored.
+	TrustedPeers []netip.Prefix
+	// Langfuse adds Langfuse-only attributes on top of the GenAI semantic
+	// conventions: filterable trace metadata and trace-level input/output.
+	Langfuse bool
+}
+
+type langfuseKey struct{}
+
+// LangfuseFromContext reports whether this request emits Langfuse-only attributes.
+func LangfuseFromContext(ctx context.Context) bool {
+	enabled, _ := ctx.Value(langfuseKey{}).(bool)
+	return enabled
+}
+
 // OTel records one HTTP server span around the request. A nil tracer leaves
 // the middleware completely out of the request path when tracing is disabled.
 // Incoming trace context is accepted from explicitly trusted socket peers.
-func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) http.Handler {
+func OTel(tracer trace.Tracer, opts OTelOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if tracer == nil {
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			if len(r.Header.Values("traceparent")) == 1 && trustedTracePeer(r.RemoteAddr, trustedPeers) {
+			if opts.Langfuse {
+				ctx = context.WithValue(ctx, langfuseKey{}, true)
+			}
+			if len(r.Header.Values("traceparent")) == 1 && trustedTracePeer(r.RemoteAddr, opts.TrustedPeers) {
 				ctx = (propagation.TraceContext{}).Extract(ctx, propagation.HeaderCarrier(r.Header))
 			}
 			ctx, span := tracer.Start(ctx, r.Method+" "+r.URL.Path,
@@ -77,29 +97,36 @@ func OTel(tracer trace.Tracer, trustedPeers ...netip.Prefix) func(http.Handler) 
 }
 
 // KeyTraceAttributes describes the authenticated application key using database
-// IDs and display names. Langfuse maps the explicit prefix to filterable metadata.
+// IDs and display names. In Langfuse compatibility mode the same values are
+// repeated under langfuse.trace.metadata.*, which Langfuse makes filterable.
 func KeyTraceAttributes(ctx context.Context) []attribute.KeyValue {
 	ck := APIKeyFromContext(ctx)
 	if ck == nil || ck.Key == nil {
 		return nil
 	}
 	const metadata = "langfuse.trace.metadata."
-	attrs := make([]attribute.KeyValue, 0, 9)
+	langfuse := LangfuseFromContext(ctx)
+	attrs := make([]attribute.KeyValue, 0, 12)
 	for _, record := range []struct {
-		field, name, legacyAttr string
-		id                      int64
+		field, name, nameAttr, idAttr string
+		id                            int64
 	}{
-		{"team", ck.TeamName, proxyotel.Team, ck.Key.TeamID},
-		{"application", ck.AppName, proxyotel.Application, ck.Key.ApplicationID},
-		{"api_key", ck.Key.Name, proxyotel.APIKeyName, ck.Key.ID},
+		{"team", ck.TeamName, proxyotel.Team, proxyotel.TeamID, ck.Key.TeamID},
+		{"application", ck.AppName, proxyotel.Application, proxyotel.ApplicationID, ck.Key.ApplicationID},
+		{"api_key", ck.Key.Name, proxyotel.APIKeyName, proxyotel.APIKeyID, ck.Key.ID},
 	} {
 		if record.name != "" {
-			attrs = append(attrs,
-				attribute.String(record.legacyAttr, record.name),
-				attribute.String(metadata+record.field+"_name", record.name))
+			attrs = append(attrs, attribute.String(record.nameAttr, record.name))
+			if langfuse {
+				attrs = append(attrs, attribute.String(metadata+record.field+"_name", record.name))
+			}
 		}
 		if record.id > 0 {
-			attrs = append(attrs, attribute.String(metadata+record.field+"_id", strconv.FormatInt(record.id, 10)))
+			id := strconv.FormatInt(record.id, 10)
+			attrs = append(attrs, attribute.String(record.idAttr, id))
+			if langfuse {
+				attrs = append(attrs, attribute.String(metadata+record.field+"_id", id))
+			}
 		}
 	}
 	return attrs
@@ -148,12 +175,9 @@ func ClientUserIDFromContext(ctx context.Context) string {
 	return id
 }
 
-// ClientUserAttributes maps a client user ID onto the generic and Langfuse keys.
+// ClientUserAttributes maps a client user ID onto user.id, which Langfuse also reads.
 func ClientUserAttributes(userID string) []attribute.KeyValue {
-	return []attribute.KeyValue{
-		attribute.String(proxyotel.UserID, userID),
-		attribute.String(proxyotel.LangfuseUserID, userID),
-	}
+	return []attribute.KeyValue{attribute.String(proxyotel.UserID, userID)}
 }
 
 // clientUserID drops values that are empty, too long, or contain control characters.

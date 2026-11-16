@@ -22,7 +22,7 @@ func TestOTelHTTPSpan(t *testing.T) {
 	defer provider.Shutdown(t.Context())
 	r := chi.NewRouter()
 	r.Use(RequestID())
-	r.Use(OTel(provider.Tracer("test")))
+	r.Use(OTel(provider.Tracer("test"), OTelOptions{}))
 	r.Get("/items/{id}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("bad"))
@@ -54,7 +54,7 @@ func TestOTelTrustedTraceparentJoinsHarnessRun(t *testing.T) {
 	defer provider.Shutdown(t.Context())
 	tracer := provider.Tracer("test")
 	ctx, run := tracer.Start(t.Context(), "agent.run")
-	h := OTel(tracer, netip.MustParsePrefix("127.0.0.1/32"))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := OTel(tracer, OTelOptions{TrustedPeers: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, llm := tracer.Start(r.Context(), "chat test", trace.WithSpanKind(trace.SpanKindClient))
 		defer llm.End()
 		w.WriteHeader(http.StatusOK)
@@ -105,7 +105,7 @@ func TestOTelTraceparentTrustAndValidation(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 			defer provider.Shutdown(t.Context())
-			h := OTel(provider.Tracer("test"), tc.trust...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := OTel(provider.Tracer("test"), OTelOptions{TrustedPeers: tc.trust})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -125,7 +125,7 @@ func TestOTelTraceparentTrustAndValidation(t *testing.T) {
 func TestDisabledOTelIsPassThrough(t *testing.T) {
 	called := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })
-	handler := OTel(nil)(next)
+	handler := OTel(nil, OTelOptions{})(next)
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
 	if !called {
 		t.Fatal("next handler was not called")
@@ -139,7 +139,7 @@ func TestOTelSpanClosesWhenRecoveryCatchesPanic(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(Recovery())
 	r.Use(RequestID())
-	r.Use(OTel(provider.Tracer("test")))
+	r.Use(OTel(provider.Tracer("test"), OTelOptions{}))
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("unexpected") })
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/panic", nil))
@@ -174,7 +174,7 @@ func TestOTelClientUserIDValidation(t *testing.T) {
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 			defer provider.Shutdown(t.Context())
 			var fromContext string
-			h := OTel(provider.Tracer("test"))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := OTel(provider.Tracer("test"), OTelOptions{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				fromContext = ClientUserIDFromContext(r.Context())
 			}))
 			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -184,7 +184,7 @@ func TestOTelClientUserIDValidation(t *testing.T) {
 			h.ServeHTTP(httptest.NewRecorder(), req)
 			got := ""
 			for _, a := range recorder.Ended()[0].Attributes() {
-				if string(a.Key) == proxyotel.LangfuseUserID {
+				if string(a.Key) == proxyotel.UserID {
 					got = a.Value.AsString()
 				}
 			}
