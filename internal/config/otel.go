@@ -32,17 +32,23 @@ func parseOTelMessageCapture(raw any, capture *OTelMessageCapture) error {
 	}
 	for key, value := range fields {
 		switch key {
-		case "application_ids":
+		case "application_ids", "decision_application_ids":
 			ids, ok := value.([]any)
 			if !ok {
-				return fmt.Errorf("otel_settings.message_capture.application_ids must be a list")
+				return fmt.Errorf("otel_settings.message_capture.%s must be a list", key)
 			}
+			parsed := make([]int64, 0, len(ids))
 			for _, rawID := range ids {
 				id, ok := rawID.(int)
 				if !ok || id <= 0 {
-					return fmt.Errorf("otel_settings.message_capture.application_ids must contain positive integers")
+					return fmt.Errorf("otel_settings.message_capture.%s must contain positive integers", key)
 				}
-				capture.ApplicationIDs = append(capture.ApplicationIDs, int64(id))
+				parsed = append(parsed, int64(id))
+			}
+			if key == "decision_application_ids" {
+				capture.DecisionApplicationIDs = parsed
+			} else {
+				capture.ApplicationIDs = parsed
 			}
 		case "max_bytes":
 			limit, ok := value.(int)
