@@ -25,6 +25,11 @@ func parseTrustedTraceparentCIDRs(raw any) ([]netip.Prefix, error) {
 	return prefixes, nil
 }
 
+// MaxMessageCaptureBytes bounds the serialized capture per direction. The proxy
+// exports each direction twice (GenAI and Langfuse attributes), so a span can
+// carry about four times this much content.
+const MaxMessageCaptureBytes = 4 << 20
+
 func parseOTelMessageCapture(raw any, capture *OTelMessageCapture) error {
 	fields, ok := raw.(map[string]any)
 	if !ok {
@@ -52,8 +57,8 @@ func parseOTelMessageCapture(raw any, capture *OTelMessageCapture) error {
 			}
 		case "max_bytes":
 			limit, ok := value.(int)
-			if !ok || limit < 1024 || limit > 65536 {
-				return fmt.Errorf("otel_settings.message_capture.max_bytes must be between 1024 and 65536")
+			if !ok || limit < 1024 || limit > MaxMessageCaptureBytes {
+				return fmt.Errorf("otel_settings.message_capture.max_bytes must be between 1024 and %d", MaxMessageCaptureBytes)
 			}
 			capture.MaxBytes = limit
 		default:
