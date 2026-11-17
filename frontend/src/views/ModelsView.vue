@@ -34,7 +34,7 @@
                   <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Failures</th>
                   <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">RPM</th>
                   <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">TPM</th>
-                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost / MTok</th>
+                  <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost</th>
                   <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -46,9 +46,8 @@
                     </th>
                     <td class="px-4 py-3 align-top text-gray-600 dark:text-gray-300 font-mono text-xs break-words">
                       {{ dep.actual_model || '—' }}
-                      <div v-if="dep.decision" class="mt-1 text-xs text-indigo-700 dark:text-indigo-300 font-sans">
-                        Decision · {{ dep.decision.modalities.join(', ') }} · {{ dep.decision.question_types.join(', ') }}
-                        <p class="mt-1 text-gray-500 dark:text-gray-400">Input: {{ formatCostPerToken(dep.decision.pricing.input_cost_per_token) }} · Output: {{ formatCostPerToken(dep.decision.pricing.output_cost_per_token) }} · ${{ dep.decision.pricing.cost_per_request }} / call</p>
+                      <div v-if="modelFeatures(dep, model.costs)" class="mt-1 text-xs text-indigo-700 dark:text-indigo-300 font-sans">
+                        {{ modelFeatures(dep, model.costs) }}
                       </div>
                     </td>
                     <td class="px-4 py-3 align-top whitespace-nowrap">
@@ -58,8 +57,16 @@
                     <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.failure_count ?? '—' }}</td>
                     <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.rpm || '—' }}</td>
                     <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.tpm || '—' }}</td>
-                    <td v-if="i === 0" :rowspan="model.deployments.length" class="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                      <template v-if="!model.isDecision">
+                    <td v-if="model.isDecision || i === 0" :rowspan="model.isDecision ? 1 : model.deployments.length" class="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                      <template v-if="dep.decision">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">config</span>
+                        </div>
+                        <div>In: {{ formatCostPerToken(dep.decision.pricing.input_cost_per_token) }}</div>
+                        <div>Out: {{ formatCostPerToken(dep.decision.pricing.output_cost_per_token) }}</div>
+                        <div>${{ dep.decision.pricing.cost_per_request }} / call</div>
+                      </template>
+                      <template v-else-if="!model.isDecision">
                         <div class="flex items-center gap-2 mb-1">
                           <span
                             v-if="model.costs?.source"
@@ -76,7 +83,7 @@
                         <div v-if="model.costs?.output_cost_per_token != null">Out: {{ formatCostPerToken(model.costs.output_cost_per_token) }}</div>
                         <div v-if="model.costs?.max_tokens" class="text-gray-400">Max: {{ model.costs.max_tokens.toLocaleString() }} tok</div>
                       </template>
-                      <span v-else class="text-gray-400">Per deployment</span>
+                      <span v-else class="text-gray-400">not mapped</span>
                     </td>
                     <td v-if="i === 0" :rowspan="model.deployments.length" class="px-4 py-3 align-top text-right">
                       <div v-if="!model.isDecision" class="flex items-center justify-end gap-2">
@@ -359,6 +366,21 @@ onUnmounted(() => { detachScrollListener() })
 function providerLabel(provider) {
   const names = { openai: 'OpenAI', openrouter: 'OpenRouter', minimax: 'MiniMax', vllm: 'vLLM' }
   return names[provider] || provider.charAt(0).toUpperCase() + provider.slice(1)
+}
+
+function modelFeatures(deployment, costs) {
+  if (deployment.decision) {
+    return ['Decision', deployment.decision.modalities.join(', '), deployment.decision.question_types.join(', ')]
+      .filter(Boolean).join(' · ')
+  }
+  const features = []
+  if (costs?.mode && costs.mode !== 'decision') {
+    features.push(costs.mode.charAt(0).toUpperCase() + costs.mode.slice(1))
+  }
+  if (costs?.supports_vision) features.push('Vision')
+  if (costs?.supports_function_calling) features.push('Tools')
+  if (costs?.supports_parallel_function_calling) features.push('Parallel tools')
+  return features.join(' · ')
 }
 
 function togglePlayground(modelName, provider) {
