@@ -180,9 +180,72 @@ describe('ModelsView', () => {
       .mockResolvedValue(okResponse({ costs: null }))
     const wrapper = mount(ModelsView)
     await flushPromises()
-    expect(wrapper.text()).toContain('Decision · text · boolean')
-    expect(wrapper.text()).toContain('$0.01 / call')
+    const cells = wrapper.findAll('tbody tr')[0].findAll('td')
+    expect(cells[0].text()).toContain('Decision · text · boolean')
+    expect(cells[0].text()).not.toContain('$')
+    expect(cells[5].text()).toContain('config')
+    expect(cells[5].text()).toContain('In: $0.0000/MTok')
+    expect(cells[5].text()).toContain('Out: $0.0000/MTok')
+    expect(cells[5].text()).toContain('$0.01 / call')
+    expect(wrapper.text()).not.toContain('Per deployment')
     expect(wrapper.findAll('button').map(button => button.text())).toEqual(['Refresh'])
+    wrapper.unmount()
+  })
+
+  it('keeps distinct decision deployment prices aligned with their own rows and provider groups', async () => {
+    const deployment = (provider, actual_model, input, output, perCall) => ({
+      provider, actual_model, status: 'healthy', failure_count: 0,
+      decision: {
+        modalities: ['text', 'image'], question_types: ['predicate', 'choice', 'score', 'box'],
+        pricing: { input_cost_per_token: input, output_cost_per_token: output, cost_per_request: perCall },
+      },
+    })
+    fetchMock.mockResolvedValueOnce(okResponse({
+      ...mockStatusData,
+      models: [{ model_name: 'classifier', deployments: [
+        deployment('typeSafe', 'primary', 0.000000042, 0, 0),
+        deployment('typeSafe', 'backup', 0.0000001, 0.0000002, 0.01),
+        deployment('ollama', 'local', 0, 0, 0),
+      ] }],
+    })).mockResolvedValue(okResponse({ costs: { mode: 'decision', source: 'config' } }))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+
+    expect(wrapper.findAll('thead th').map(cell => cell.text())).toContain('Cost')
+    const groups = wrapper.findAll('section')
+    expect(groups[0].find('tbody tr').text()).toContain('$0 / call')
+    const rows = groups[1].findAll('tbody tr')
+    expect(rows).toHaveLength(2)
+    const firstCost = rows[0].findAll('td')[5]
+    const secondCost = rows[1].findAll('td')[5]
+    expect(firstCost.attributes('rowspan')).toBe('1')
+    expect(firstCost.text()).toContain('In: $0.0420/MTok')
+    expect(firstCost.text()).toContain('Out: $0.0000/MTok')
+    expect(firstCost.text()).toContain('$0 / call')
+    expect(secondCost.text()).toContain('In: $0.1000/MTok')
+    expect(secondCost.text()).toContain('Out: $0.2000/MTok')
+    expect(secondCost.text()).toContain('$0.01 / call')
+    expect(rows[1].findAll('td')[0].text()).toContain('Decision · text, image · predicate, choice, score, box')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['chat', true, true, true, 'Chat · Vision · Tools · Parallel tools'],
+    ['embedding', false, false, false, 'Embedding'],
+    ['', false, true, false, 'Tools'],
+    ['', false, false, false, ''],
+  ])('shows known LLM features for mode %s and vision=%s, tools=%s, parallel=%s', async (mode, vision, tools, parallel, expected) => {
+    fetchMock.mockResolvedValueOnce(okResponse(mockStatusData)).mockResolvedValueOnce(okResponse({
+      ...mockCostsData,
+      costs: { ...mockCostsData.costs, mode, supports_vision: vision, supports_function_calling: tools, supports_parallel_function_calling: parallel },
+    }))
+    const wrapper = mount(ModelsView)
+    await flushPromises()
+    const deployment = wrapper.find('tbody tr td')
+    expect(deployment.find('div').exists()).toBe(Boolean(expected))
+    if (expected) expect(deployment.find('div').text()).toBe(expected)
+    expect(deployment.text()).not.toContain('$')
+    expect(deployment.text()).not.toContain('Decision')
     wrapper.unmount()
   })
 
