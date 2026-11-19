@@ -833,8 +833,10 @@ func deploymentInfoSchema() *openapi3.SchemaRef {
 				"status":         {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Enum: []any{"healthy", "cooldown"}}},
 				"failure_count":  {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
 				"cooldown_until": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "date-time"}},
-				"rpm":            {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
-				"tpm":            {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}},
+				"rpm":            {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Description: "Configured requests per minute limit"}},
+				"tpm":            {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Description: "Configured tokens per minute limit"}},
+				"current_rpm":    {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Description: "Upstream attempts on this proxy in the last minute"}},
+				"current_tpm":    {Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}, Description: "Upstream tokens reported on this proxy in the last minute"}},
 			},
 		},
 	}

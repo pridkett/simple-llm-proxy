@@ -30,6 +30,7 @@ func makeRouterWithPool(poolName string, deployments []*provider.Deployment) *Ro
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(nil),
 		budget:      NewPoolBudgetManager(),
+		capacity:    newCapacityLimiter(),
 	}
 
 	pool := &Pool{
@@ -418,6 +419,7 @@ func TestRoute_PoolBudgetFailover(t *testing.T) {
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(nil),
 		budget:      NewPoolBudgetManager(),
+		capacity:    newCapacityLimiter(),
 	}
 
 	pool1 := &Pool{
@@ -492,6 +494,7 @@ func TestRoute_AllPoolsBudgetExhausted(t *testing.T) {
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(nil),
 		budget:      NewPoolBudgetManager(),
+		capacity:    newCapacityLimiter(),
 	}
 
 	pool1 := &Pool{Name: "pool-a", Strategy: NewRoundRobin(), Members: []*provider.Deployment{d1}}

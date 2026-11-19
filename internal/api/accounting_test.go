@@ -131,6 +131,45 @@ func TestAccountingStreamingOptIn(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminStatusReportsTrafficWithoutLimits(t *testing.T) {
+	f := newMigrationFixture(t)
+	assertRates := func(rpm, tpm int) {
+		t.Helper()
+		status, _, body := f.request(t, "GET", "/admin/status", "", "", true)
+		if status != http.StatusOK {
+			t.Fatalf("admin status: %d %s", status, body)
+		}
+		var result struct {
+			Models []struct {
+				Name  string `json:"model_name"`
+				Rates []struct {
+					RPM *int `json:"current_rpm"`
+					TPM *int `json:"current_tpm"`
+				} `json:"deployments"`
+			} `json:"models"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range result.Models {
+			if m.Name == "openai" && len(m.Rates) == 1 {
+				rate := m.Rates[0]
+				if rate.RPM != nil && rate.TPM != nil && *rate.RPM == rpm && *rate.TPM == tpm {
+					return
+				}
+			}
+		}
+		t.Fatalf("want openai current_rpm=%d and current_tpm=%d: %s", rpm, tpm, body)
+	}
+	assertRates(0, 0)
+	status, _, body := accountingRequest(t, f, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}],"stream":true}`, "master-only", false)
+	if status != http.StatusOK {
+		t.Fatalf("chat: %d %s", status, body)
+	}
+	assertRates(1, 13)
+}
+
 func TestAccountingRecordOwnership(t *testing.T) {
 	f := newMigrationFixture(t)
 	team := f.create(t, "/admin/teams", `{"name":"accounting-team"}`)

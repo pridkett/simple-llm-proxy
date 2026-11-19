@@ -98,6 +98,7 @@ func TestIntegration_PoolWeightedRouting(t *testing.T) {
 		pools:       make(map[string]*Pool),
 		modelToPool: make(map[string]*Pool),
 		sticky:      NewStickySessionManager(nil),
+		capacity:    newCapacityLimiter(),
 	}
 
 	pool := &Pool{

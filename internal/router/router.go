@@ -223,6 +223,8 @@ type DeploymentInfoItem struct {
 	CooldownUntil *time.Time             `json:"cooldown_until,omitempty"`
 	RPM           int                    `json:"rpm,omitempty"`
 	TPM           int                    `json:"tpm,omitempty"`
+	CurrentRPM    int                    `json:"current_rpm"`
+	CurrentTPM    int                    `json:"current_tpm"`
 }
 
 // PoolStatusInfo holds status information for a single provider pool.
@@ -331,6 +333,7 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	traffic := r.capacity.recentTraffic()
 	result := make([]ModelStatusInfo, 0, len(r.deployments))
 	for modelName, deployments := range r.deployments {
 		infos := make([]DeploymentInfoItem, 0, len(deployments))
@@ -338,6 +341,7 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 
 		for _, d := range deployments {
 			s := r.cooldown.GetStatus(d)
+			counts := traffic[deploymentCapacityKey(d)]
 			item := DeploymentInfoItem{
 				ProviderName: d.ProviderName,
 				Decision:     d.Decision,
@@ -346,6 +350,8 @@ func (r *Router) GetStatus() []ModelStatusInfo {
 				FailureCount: s.FailureCount,
 				RPM:          d.RPM,
 				TPM:          d.TPM,
+				CurrentRPM:   counts.requests,
+				CurrentTPM:   counts.tokens,
 			}
 			if s.InCooldown {
 				item.Status = "cooldown"
