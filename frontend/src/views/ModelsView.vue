@@ -1,14 +1,18 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Models</h1>
-      <button class="btn-secondary text-xs" :disabled="loading" @click="load">Refresh</button>
+    <div class="flex items-start justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Models</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">RPM and TPM show upstream attempts and reported tokens over the last minute on this proxy.</p>
+        <p v-if="pollError" role="status" class="mt-1 text-sm text-amber-700 dark:text-amber-300">Live rates could not refresh.</p>
+      </div>
+      <button class="btn-secondary text-xs" :disabled="refreshing" @click="load()">Refresh</button>
     </div>
 
-    <LoadingSpinner v-if="loading" />
+    <LoadingSpinner v-if="refreshing && !data" />
     <ErrorAlert v-else-if="error" title="Failed to load models" :message="error" />
 
-    <template v-else-if="data">
+    <template v-if="data">
       <div class="space-y-4">
         <section
           v-for="group in providerGroups"
@@ -55,8 +59,14 @@
                       <span v-if="dep.cooldown_until" class="block mt-1 text-xs text-gray-400">until {{ formatTime(dep.cooldown_until) }}</span>
                     </td>
                     <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.failure_count ?? '—' }}</td>
-                    <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.rpm || '—' }}</td>
-                    <td class="px-4 py-3 align-top text-right text-gray-600 dark:text-gray-300">{{ dep.tpm || '—' }}</td>
+                    <td class="px-4 py-3 align-top text-right tabular-nums text-gray-600 dark:text-gray-300">
+                      {{ dep.current_rpm?.toLocaleString() ?? '—' }}
+                      <div v-if="dep.rpm > 0" class="text-xs whitespace-nowrap">Limit {{ dep.rpm }}</div>
+                    </td>
+                    <td class="px-4 py-3 align-top text-right tabular-nums text-gray-600 dark:text-gray-300">
+                      {{ dep.current_tpm?.toLocaleString() ?? '—' }}
+                      <div v-if="dep.tpm > 0" class="text-xs whitespace-nowrap">Limit {{ dep.tpm }}</div>
+                    </td>
                     <td v-if="model.isDecision || i === 0" :rowspan="model.isDecision ? 1 : model.deployments.length" class="px-4 py-3 align-top text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
                       <template v-if="dep.decision">
                         <div class="flex items-center gap-2 mb-1">
@@ -280,8 +290,10 @@ import StatusBadge from '../components/StatusBadge.vue'
 import ModelPlayground from '../components/ModelPlayground.vue'
 
 const data = ref(null)
-const loading = ref(false)
+const refreshing = ref(false)
 const error = ref('')
+const pollError = ref(false)
+let pollTimer
 const openPlaygrounds = reactive(new Map())
 const openCostEditors = reactive(new Map())
 const costTabs = reactive({})
@@ -338,30 +350,45 @@ async function loadCostMapModels() {
   }
 }
 
-async function load() {
-  loading.value = true
+async function load(refreshCosts = true) {
+  if (refreshing.value) return
+  refreshing.value = true
   error.value = ''
   try {
     const statusData = await api.status()
-    const details = await Promise.all(
-      statusData.models.map((m) => api.modelDetail(m.model_name).catch(() => null))
-    )
+    const knownModels = new Set(data.value?.models.map((m) => m.model_name))
+    const newModels = statusData.models.filter((m) => refreshCosts || !knownModels.has(m.model_name))
+    const details = new Map(await Promise.all(newModels.map(async ({ model_name }) => {
+      const detail = await api.modelDetail(model_name).catch(() => null)
+      return [model_name, detail?.costs ?? null]
+    })))
+    const currentCosts = new Map(data.value?.models.map((m) => [m.model_name, m.costs]))
     data.value = {
       ...statusData,
-      models: statusData.models.map((m, i) => ({
+      models: statusData.models.map((m) => ({
         ...m,
-        costs: details[i]?.costs ?? null,
+        costs: (details.has(m.model_name) ? details.get(m.model_name) : currentCosts.get(m.model_name)) ?? null,
       })),
     }
+    pollError.value = false
   } catch (e) {
-    error.value = e.message
+    if (refreshCosts) error.value = e.message
+    else pollError.value = true
   } finally {
-    loading.value = false
+    refreshing.value = false
   }
 }
 
-onMounted(load)
-onUnmounted(() => { detachScrollListener() })
+onMounted(() => {
+  load()
+  pollTimer = setInterval(() => {
+    if (data.value) load(false)
+  }, 5000)
+})
+onUnmounted(() => {
+  clearInterval(pollTimer)
+  detachScrollListener()
+})
 
 function providerLabel(provider) {
   const names = { openai: 'OpenAI', openrouter: 'OpenRouter', minimax: 'MiniMax', vllm: 'vLLM' }

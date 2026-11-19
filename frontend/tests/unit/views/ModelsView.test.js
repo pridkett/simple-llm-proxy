@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { nextTick } from 'vue'
 import ModelsView from '@/views/ModelsView.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
 import ErrorAlert from '@/components/ErrorAlert.vue'
+
+enableAutoUnmount(afterEach)
 
 const mockStatusData = {
   status: 'healthy',
@@ -70,7 +72,10 @@ describe('ModelsView', () => {
     global.fetch = fetchMock
   })
 
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it('shows a loading spinner while fetching', async () => {
     fetchMock.mockReturnValue(new Promise(() => {}))
@@ -89,6 +94,43 @@ describe('ModelsView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('gpt-4')
     expect(wrapper.text()).toContain('1 deployment')
+  })
+
+  it('polls measured RPM and TPM without reloading costs', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const model = mockStatusData.models[0]
+    const withRates = (current_rpm, current_tpm) => ({
+      ...mockStatusData,
+      models: [{ ...model, deployments: [{ ...model.deployments[0], current_rpm, current_tpm }] }],
+    })
+    fetchMock.mockResolvedValueOnce(okResponse(withRates(0, 0)))
+      .mockResolvedValueOnce(okResponse(mockCostsData))
+      .mockResolvedValueOnce(okResponse(withRates(3, 850)))
+      .mockResolvedValueOnce(errResponse())
+      .mockResolvedValueOnce(okResponse(withRates(0, 0)))
+    const wrapper = mount(ModelsView)
+    const rates = () => wrapper.findAll('tbody tr:first-child td').slice(3, 5).map(cell => cell.text())
+    await flushPromises()
+    expect(rates()).toEqual(['0', '0'])
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(rates()).toEqual(['3', '850'])
+    expect(wrapper.text()).toContain('auto')
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(wrapper.get('[role="status"]').text()).toBe('Live rates could not refresh.')
+    expect(rates()).toEqual(['3', '850'])
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(rates()).toEqual(['0', '0'])
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/admin/status', '/admin/models/gpt-4', '/admin/status', '/admin/status', '/admin/status',
+    ])
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fetchMock).toHaveBeenCalledTimes(5)
   })
 
   it('clusters models by deployment provider with one shared table per provider', async () => {

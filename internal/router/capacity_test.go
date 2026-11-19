@@ -2,14 +2,60 @@ package router
 
 import (
 	"context"
-	"github.com/pwagstro/simple_llm_proxy/internal/config"
-	"github.com/pwagstro/simple_llm_proxy/internal/model"
-	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/pwagstro/simple_llm_proxy/internal/config"
+	"github.com/pwagstro/simple_llm_proxy/internal/model"
+	"github.com/pwagstro/simple_llm_proxy/internal/provider"
 )
+
+func TestRecentTraffic(t *testing.T) {
+	l := newCapacityLimiter()
+	now := time.Now()
+	l.now = func() time.Time { return now }
+	d := &provider.Deployment{ProviderName: "test", ActualModel: "m", APIKey: "one"}
+	key := deploymentCapacityKey(d)
+	assertCounts := func(requests, tokens int) {
+		t.Helper()
+		if got := l.recentTraffic()[key]; got != (trafficCounts{requests, tokens}) {
+			t.Fatalf("recent traffic = %+v, want %d requests and %d tokens", got, requests, tokens)
+		}
+	}
+	assertCounts(0, 0)
+	first, err := l.reserve(d, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCounts(1, 0)
+	alias := *d
+	alias.ModelName = "different-alias"
+	alias.RPM = 1
+	now = now.Add(40 * time.Second)
+	second, err := l.reserve(&alias, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.reserve(&alias, 500); err == nil {
+		t.Fatal("configured limit did not reject request")
+	}
+	first.finish(&model.Usage{TotalTokens: 15})
+	first.finish(&model.Usage{TotalTokens: 15})
+	second.finish(&model.Usage{PromptTokens: 20, CompletionTokens: 10})
+	assertCounts(2, 45)
+	other := *d
+	other.APIKey = "two"
+	if _, err := l.reserve(&other, 500); err != nil {
+		t.Fatal(err)
+	}
+	assertCounts(2, 45)
+	now = now.Add(20 * time.Second)
+	assertCounts(1, 45)
+	now = now.Add(40 * time.Second)
+	assertCounts(0, 0)
+}
 
 func TestCapacityReservations(t *testing.T) {
 	l := newCapacityLimiter()
