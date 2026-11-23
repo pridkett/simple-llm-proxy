@@ -18,6 +18,12 @@ import (
 
 func accountingRequest(t *testing.T, f *migrationFixture, path, body, key string, inline bool) (int, http.Header, []byte) {
 	t.Helper()
+	resp, data := accountingResponse(t, f, path, body, key, inline)
+	return resp.StatusCode, resp.Header, data
+}
+
+func accountingResponse(t *testing.T, f *migrationFixture, path, body, key string, inline bool) (*http.Response, []byte) {
+	t.Helper()
 	req, err := http.NewRequest("POST", f.url+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -37,17 +43,20 @@ func accountingRequest(t *testing.T, f *migrationFixture, path, body, key string
 	if err != nil {
 		t.Fatal(err)
 	}
-	return resp.StatusCode, resp.Header, b
+	return resp, b
 }
 func getAccounting(t *testing.T, f *migrationFixture, id, key string) *accounting.Record {
 	t.Helper()
-	status, _, body := f.request(t, "GET", "/v1/accounting/"+id, "", key, false)
+	status, headers, body := f.request(t, "GET", "/v1/accounting/"+id, "", key, false)
 	if status != 200 {
 		t.Fatalf("lookup: %d %s", status, body)
 	}
 	var rec accounting.Record
 	if err := json.Unmarshal(body, &rec); err != nil {
 		t.Fatal(err)
+	}
+	if rec.State == "final" && rec.Cost.Amount != nil && headers.Get(accounting.ResponseCostHeader) != *rec.Cost.Amount {
+		t.Fatalf("accounting lookup cost header = %q, want %s", headers.Get(accounting.ResponseCostHeader), *rec.Cost.Amount)
 	}
 	return &rec
 }
@@ -61,7 +70,7 @@ func TestAccountingUpstreamHeadersAndLookup(t *testing.T) {
 		fmt.Fprint(w, accountingReply)
 	})
 	status, h, b := accountingRequest(t, f, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}]}`, "master-only", true)
-	if status != 200 || h.Get("X-LLM-Cost-USD") != "0.000415" || h.Get("X-LLM-Cost-Source") != "upstream" || h.Get("X-Litellm-Total-Tokens") != "1874" || !bytes.Contains(b, []byte(`"proxy_accounting"`)) {
+	if status != 200 || h.Get(accounting.ResponseCostHeader) != "0.000415" || h.Get("X-LLM-Cost-USD") != "0.000415" || h.Get("X-LLM-Cost-Source") != "upstream" || h.Get("X-Litellm-Total-Tokens") != "1874" || !bytes.Contains(b, []byte(`"proxy_accounting"`)) {
 		t.Fatalf("status=%d headers=%v body=%s", status, h, b)
 	}
 	id := h.Get("X-LLM-Accounting-ID")
@@ -82,13 +91,13 @@ func TestAccountingEstimateAndUnknown(t *testing.T) {
 	})
 	_, h, _ := accountingRequest(t, f, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}]}`, "master-only", false)
 	rec := getAccounting(t, f, h.Get("X-LLM-Accounting-ID"), "master-only")
-	if rec.Cost.Amount == nil || *rec.Cost.Amount != "0.00104" || rec.Cost.Source != "estimate" || *rec.Usage.TotalTokens != 1200 || *rec.Usage.OutputDetails.ReasoningTokens != 100 {
+	if h.Get(accounting.ResponseCostHeader) != "0.00104" || rec.Cost.Amount == nil || *rec.Cost.Amount != "0.00104" || rec.Cost.Source != "estimate" || *rec.Usage.TotalTokens != 1200 || *rec.Usage.OutputDetails.ReasoningTokens != 100 {
 		t.Fatalf("%+v", rec)
 	}
 	f2 := newMigrationFixture(t)
 	_, h, _ = accountingRequest(t, f2, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}]}`, "master-only", false)
 	rec = getAccounting(t, f2, h.Get("X-LLM-Accounting-ID"), "master-only")
-	if rec.Cost.Amount != nil || h.Get("X-LLM-Cost-USD") != "" || rec.Coverage != "unknown" {
+	if rec.Cost.Amount != nil || h.Get(accounting.ResponseCostHeader) != "" || h.Get("X-LLM-Cost-USD") != "" || rec.Coverage != "unknown" {
 		t.Fatalf("%+v", rec)
 	}
 }
@@ -112,14 +121,17 @@ func TestAccountingErrorStillCostsMoney(t *testing.T) {
 	}
 }
 func TestAccountingStreamingOptIn(t *testing.T) {
-	f := newMigrationFixtureWithCostMap(t, nil, func(w http.ResponseWriter, r *http.Request) {
+	cm := costmap.New()
+	cm.SetCustomSpec("openai", costmap.ModelSpec{InputCostPerToken: 0.000001, OutputCostPerToken: 0.000002})
+	f := newMigrationFixtureWithCostMap(t, cm, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("x-litellm-response-cost", "0.15")
 		fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}\n\ndata: [DONE]\n\n")
 	})
 	for _, inline := range []bool{false, true} {
-		_, h, b := accountingRequest(t, f, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}],"stream":true}`, "master-only", inline)
-		if h.Get("X-LLM-Accounting-State") != "pending" || h.Get("X-LLM-Cost-USD") != "" || bytes.Contains(b, []byte(`"proxy_accounting"`)) != inline {
+		resp, b := accountingResponse(t, f, "/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}],"stream":true}`, "master-only", inline)
+		h := resp.Header
+		if h.Get(accounting.ResponseCostHeader) != "0.15" || resp.Trailer.Get(accounting.ResponseCostHeader) != "" || h.Get("X-LLM-Accounting-State") != "pending" || h.Get("X-LLM-Cost-USD") != "" || bytes.Contains(b, []byte(`"proxy_accounting"`)) != inline {
 			t.Fatalf("%v %s", h, b)
 		}
 		rec := getAccounting(t, f, h.Get("X-LLM-Accounting-ID"), "master-only")
@@ -129,6 +141,38 @@ func TestAccountingStreamingOptIn(t *testing.T) {
 		if inline && bytes.Index(b, []byte(`"proxy_accounting"`)) > bytes.Index(b, []byte("[DONE]")) {
 			t.Fatalf("accounting after DONE: %s", b)
 		}
+	}
+}
+
+func TestAccountingStreamingCostTrailer(t *testing.T) {
+	cm := costmap.New()
+	cm.SetCustomSpec("openai", costmap.ModelSpec{InputCostPerToken: 0.000001, OutputCostPerToken: 0.000002})
+	f := newMigrationFixtureWithCostMap(t, cm, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(accounting.ResponseCostHeader, "invalid")
+		if strings.HasSuffix(r.URL.Path, "/responses") {
+			fmt.Fprint(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":3}}}\n\n")
+			return
+		}
+		fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3}}\n\ndata: [DONE]\n\n")
+	})
+	for _, tc := range []struct{ path, body string }{
+		{"/v1/chat/completions", `{"model":"openai","messages":[{"role":"user","content":"hi"}],"stream":true}`},
+		{"/v1/messages", `{"model":"openai","messages":[{"role":"user","content":"hi"}],"max_tokens":20,"stream":true}`},
+		{"/v1/responses", `{"model":"openai","input":"hi","stream":true}`},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			resp, body := accountingResponse(t, f, tc.path, tc.body, "master-only", false)
+			const want = "0.000016"
+			if resp.StatusCode != http.StatusOK || resp.Header.Get(accounting.ResponseCostHeader) != "" || resp.Trailer.Get(accounting.ResponseCostHeader) != want {
+				t.Fatalf("status=%d headers=%v trailers=%v body=%s", resp.StatusCode, resp.Header, resp.Trailer, body)
+			}
+			rec := getAccounting(t, f, resp.Header.Get("X-LLM-Accounting-ID"), "master-only")
+			if rec.Cost.Source != "estimate" || rec.Cost.Amount == nil || *rec.Cost.Amount != want {
+				t.Fatalf("cost=%+v", rec.Cost)
+			}
+		})
 	}
 }
 

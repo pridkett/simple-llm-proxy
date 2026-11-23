@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 	_ "github.com/pwagstro/simple_llm_proxy/internal/provider/elevenlabs"
 )
@@ -100,7 +101,7 @@ func TestElevenLabsAudioGeneration(t *testing.T) {
 	} {
 		resp, body := requestMedia(t, f, tc.path, tc.input, "application/json", tc.token)
 		if resp.StatusCode != 200 || string(body) != audio || resp.Header.Get("Content-Type") != "audio/mpeg" ||
-			resp.Header.Get(tc.header) != tc.headerValue || resp.Header.Get("Set-Cookie") != "" {
+			resp.Header.Get(tc.header) != tc.headerValue || resp.Header.Get("Set-Cookie") != "" || resp.Trailer.Get(accounting.ResponseCostHeader) != tc.estimate {
 			t.Fatalf("%s: status=%d headers=%v body=%q", tc.path, resp.StatusCode, resp.Header, body)
 		}
 		accountingID := resp.Header.Get("X-LLM-Accounting-ID")

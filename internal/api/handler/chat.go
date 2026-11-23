@@ -356,6 +356,7 @@ func handleStreamingResponse(
 	if !ok {
 		return nil, 0, fmt.Errorf("streaming response writer does not support flushing")
 	}
+	callAccountingFromContext(ctx).prepareResponseCost(true)
 
 	var encoder *messagesapi.StreamEncoder
 	if protocol.messages {

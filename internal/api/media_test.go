@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/pwagstro/simple_llm_proxy/internal/accounting"
 	"github.com/pwagstro/simple_llm_proxy/internal/config"
 )
 
@@ -108,6 +109,7 @@ func TestOpenAIMediaHTTP(t *testing.T) {
 				}
 				w.Header().Set("Content-Type", tc.responseType)
 				w.Header().Set("Set-Cookie", "upstream-secret=hidden")
+				w.Header().Set(accounting.ResponseCostHeader, "0.001")
 				w.WriteHeader(tc.status)
 				fmt.Fprint(w, tc.output)
 			})
@@ -117,7 +119,7 @@ func TestOpenAIMediaHTTP(t *testing.T) {
 			}
 			resp, body := requestMedia(t, f, tc.path, input, contentType, "master-only")
 			if resp.StatusCode != tc.status || string(body) != tc.output || resp.Header.Get("Content-Type") != tc.responseType ||
-				resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("X-LLM-Accounting-ID") == "" {
+				resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("X-LLM-Accounting-ID") == "" || resp.Header.Get(accounting.ResponseCostHeader) != "0.001" {
 				t.Fatalf("response status=%d headers=%v body=%q", resp.StatusCode, resp.Header, body)
 			}
 			if tc.path == "/v1/realtime/calls" && resp.Header.Get("Location") != "/v1/realtime/calls/rtc_fixture" {

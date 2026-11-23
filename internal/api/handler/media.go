@@ -83,6 +83,7 @@ func deliverMediaHTTP(ctx context.Context, w http.ResponseWriter, response *http
 	contentType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	sse := contentType == "text/event-stream"
 	audio := strings.HasPrefix(contentType, "audio/") || contentType == "application/octet-stream"
+	callAccountingFromContext(ctx).prepareResponseCost(sse || audio)
 	var output io.Writer = w
 	if sse || audio {
 		w.Header().Set("X-Accel-Buffering", "no")
