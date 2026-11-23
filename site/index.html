@@ -44,15 +44,15 @@
           <ul>
             <li>
               <code>draft</code>
-              <span><strong>OpenAI</strong><small>gpt-5.4-mini</small></span>
+              <span><strong>OpenAI</strong><small>gpt-6.2-sol</small></span>
             </li>
             <li>
               <code>review</code>
-              <span><strong>Anthropic</strong><small>claude-sonnet-4-6</small></span>
+              <span><strong>Anthropic</strong><small>claude-sonnet-5-5</small></span>
             </li>
             <li>
               <code>local-chat</code>
-              <span><strong>Ollama</strong><small>llama3.2</small></span>
+              <span><strong>Ollama</strong><small>inkling-2-mini</small></span>
             </li>
           </ul>
         </figure>
@@ -96,7 +96,7 @@
           <p class="label">Quickstart</p>
           <h2>Make the first call.</h2>
           <p>Build with Go 1.25.4 or later. This example uses a local Ollama instance so you can try the proxy without a hosted API key.</p>
-          <p>Start Ollama and run <code>ollama pull llama3.2</code> first. Save the <a href="ollama.yaml" download>example config</a> as <code>ollama.yaml</code> in the cloned repository.</p>
+          <p>Start Ollama and run <code>ollama pull inkling-2-mini</code>. <a href="https://ollama.com/library/inkling-2-mini">Inkling 2 Mini</a> is a 20 GB download. Save the <a href="ollama.yaml" download>example config</a> as <code>ollama.yaml</code> in the cloned repository.</p>
           <a class="text-link" href="https://github.com/pridkett/simple-llm-proxy#quick-start">Read the full quickstart</a>
         </div>
         <div class="steps">
@@ -114,7 +114,7 @@ export PROXY_MASTER_KEY="$(openssl rand -hex 32)"
             <pre tabindex="0"><code>curl http://127.0.0.1:8080/v1/chat/completions \
   -H "Authorization: Bearer $PROXY_MASTER_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"llama3.2","messages":[{"role":"user","content":"Describe a fictional moon in one sentence."}]}'</code></pre>
+  -d '{"model":"inkling-2-mini","messages":[{"role":"user","content":"Describe a fictional moon in one sentence."}]}'</code></pre>
             <p class="copy-status" role="status"></p>
           </div>
           <p>Once the listener starts, run the request in the same terminal. Run <code>fg</code> followed by Ctrl+C to stop the proxy.</p>

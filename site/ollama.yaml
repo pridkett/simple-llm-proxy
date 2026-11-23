@@ -1,7 +1,7 @@
 model_list:
-  - model_name: llama3.2
+  - model_name: inkling-2-mini
     litellm_params:
-      model: ollama/llama3.2
+      model: ollama/inkling-2-mini
       api_base: http://127.0.0.1:11434/v1
 
 general_settings:
