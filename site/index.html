@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Simple LLM Proxy is a Go gateway for model routing, per-app keys, usage reporting, and cost attribution.">
+  <meta name="description" content="A lightweight, self-hosted LLM gateway for your laptop or homelab. Store provider keys once, switch models, and track usage and cost.">
   <meta name="theme-color" content="#faf7ff">
   <title>Simple LLM Proxy · One endpoint, many models</title>
   <link rel="icon" href="assets/mark.png" type="image/png">
@@ -23,13 +23,28 @@
   </header>
   <main id="main">
     <section class="hero wrap">
-      <p class="label">Self-hosted model gateway</p>
+      <p class="label">Lightweight, self-hosted LLM gateway</p>
       <h1>One endpoint.<br><em>Many models.</em></h1>
-      <p class="intro">Give each app its own key. Route OpenAI-compatible chat and Anthropic Messages through one Go service, with a record of usage and cost on each request.</p>
+      <p class="intro">Keep provider keys in one place, switch models behind a stable alias, and see what your apps call and spend. Run the proxy on your laptop or alongside your homelab services.</p>
       <div class="actions">
         <a class="button primary" href="#start">Run the proxy</a>
         <a class="button" href="#console">See the console</a>
       </div>
+    </section>
+
+    <section class="wrap deployment">
+      <div>
+        <h2>At home. At your desk.</h2>
+        <p>One small Go service can keep request logs in SQLite. All features are available without a paid tier. Hosted model providers bill for usage as usual.</p>
+      </div>
+      <article>
+        <h3>Keep provider keys in the homelab</h3>
+        <p>Configure each upstream credential once on the proxy. Give each app its own restricted proxy key and see how much each service uses.</p>
+      </article>
+      <article>
+        <h3>See what your agents call</h3>
+        <p>Run the proxy on your laptop to inspect the outbound LLM requests it handles. Change the upstream model while your agents keep calling the same alias.</p>
+      </article>
     </section>
 
     <section class="routing" id="routing">
@@ -135,7 +150,10 @@ export PROXY_MASTER_KEY="$(openssl rand -hex 32)"
   </main>
   <footer class="wrap footer">
     <span>Simple LLM Proxy</span>
-    <a href="https://github.com/pridkett/simple-llm-proxy">Source on GitHub</a>
+    <div class="footer-links">
+      <a href="https://github.com/pridkett/simple-llm-proxy/blob/main/LICENSE">BSD 3-Clause License</a>
+      <a href="https://github.com/pridkett/simple-llm-proxy">Source on GitHub</a>
+    </div>
   </footer>
 </body>
 </html>
