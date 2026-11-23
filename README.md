@@ -2,7 +2,17 @@
 
 [Project site and quickstart](https://pridkett.github.io/simple-llm-proxy/)
 
-A Go proxy for apps using OpenAI-compatible chat completions or Anthropic-compatible Messages. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
+A lightweight, self-hosted LLM gateway for homelabbers, developers, and
+hobbyists. Run it at home to store upstream provider credentials once and issue
+each app its own proxy key. Run it on your laptop to see which model providers
+your agents call, track tokens and cost, and switch deployments behind a stable
+model alias.
+
+The Go service supports OpenAI-compatible chat completions and
+Anthropic-compatible Messages, with routing to providers including OpenAI,
+OpenRouter, Anthropic, and Ollama. SQLite can store usage logs locally. Every
+proxy feature is available without a paid tier. Hosted providers still bill
+for model usage.
 
 For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
 
@@ -814,3 +824,7 @@ unique IDs (for example, an application prefix plus a UUID): reusing an ID
 combines its requests, even across keys. Session attribution does not change
 routing affinity or infer sessions from `user`, message contents, or
 `previous_response_id`; clients must supply the ID on every request.
+
+## License
+
+Licensed under the [BSD 3-Clause License](LICENSE).

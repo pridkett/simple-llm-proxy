@@ -30,6 +30,7 @@ RUN apk add --no-cache ca-certificates tzdata && adduser -D -H proxy
 WORKDIR /app
 RUN mkdir -p /data && chown proxy:proxy /data
 COPY --from=backend /out/proxy /app/proxy
+COPY LICENSE /app/LICENSE
 # Default FrontendDir fallback is ./frontend/dist relative to the workdir,
 # so the SPA is served at / with no extra config.
 COPY --from=frontend /src/frontend/dist /app/frontend/dist
