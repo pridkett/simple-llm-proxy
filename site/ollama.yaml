@@ -1,0 +1,13 @@
+model_list:
+  - model_name: llama3.2
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: http://127.0.0.1:11434/v1
+
+general_settings:
+  port: 8080
+  master_key: os.environ/PROXY_MASTER_KEY
+  database_url: ./proxy.db
+
+local_admin:
+  enabled: true

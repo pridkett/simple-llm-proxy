@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Simple LLM Proxy is a Go gateway for model routing, per-app keys, usage reporting, and cost attribution.">
+  <meta name="theme-color" content="#faf7ff">
+  <title>Simple LLM Proxy · One endpoint, many models</title>
+  <link rel="icon" href="assets/mark.png" type="image/png">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/copy.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="wrap navigation">
+    <a class="brand" href="./"><img src="assets/mark.png" width="32" height="32" alt="">Simple LLM Proxy</a>
+    <nav aria-label="Main navigation">
+      <a href="#routing">Routing</a>
+      <a href="#console">Console</a>
+      <a href="#start">Quickstart</a>
+      <a href="https://github.com/pridkett/simple-llm-proxy">GitHub</a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <p class="label">Self-hosted model gateway</p>
+      <h1>One endpoint.<br><em>Many models.</em></h1>
+      <p class="intro">Give each app its own key. Route OpenAI-compatible chat and Anthropic Messages through one Go service, with a record of usage and cost on each request.</p>
+      <div class="actions">
+        <a class="button primary" href="#start">Run the proxy</a>
+        <a class="button" href="#console">See the console</a>
+      </div>
+    </section>
+
+    <section class="routing" id="routing">
+      <div class="wrap routing-grid">
+        <div>
+          <h2>Pick a model by alias.</h2>
+          <p>Apps send a model alias. The proxy selects a configured deployment and keeps provider credentials on the server. Group compatible deployments under one alias for balancing and failover.</p>
+          <a class="text-link" href="https://github.com/pridkett/simple-llm-proxy#configuration">Read the configuration guide</a>
+        </div>
+        <figure class="routes">
+          <figcaption>Example model routes</figcaption>
+          <ul>
+            <li>
+              <code>draft</code>
+              <span><strong>OpenAI</strong><small>gpt-5.4-mini</small></span>
+            </li>
+            <li>
+              <code>review</code>
+              <span><strong>Anthropic</strong><small>claude-sonnet-4-6</small></span>
+            </li>
+            <li>
+              <code>local-chat</code>
+              <span><strong>Ollama</strong><small>llama3.2</small></span>
+            </li>
+          </ul>
+        </figure>
+      </div>
+    </section>
+
+    <section class="wrap console" id="console">
+      <div class="section-heading">
+        <h2>Account for every request.</h2>
+        <p>Drill into a request to see which model served it, how many tokens it used, and where the cost figure came from.</p>
+      </div>
+      <figure class="capture">
+        <a href="assets/request-logs.webp" aria-label="Open the full-size request logs screenshot">
+          <img src="assets/request-logs.webp" alt="Proxy request logs with synthetic traffic, showing configured models, providers, status, token counts, and cost." width="1420" height="820" loading="lazy" decoding="async">
+        </a>
+        <figcaption>Request logs populated with synthetic traffic. Open the image to see the full console.</figcaption>
+      </figure>
+      <div class="features">
+        <article>
+          <h3>Issue keys per app</h3>
+          <p>Restrict which models a key can call, revoke it independently, and attribute traffic to applications and teams.</p>
+          <a href="https://github.com/pridkett/simple-llm-proxy/blob/main/docs/management-mcp.md">Key management</a>
+        </article>
+        <article>
+          <h3>Understand usage and cost</h3>
+          <p>Track calls, tokens, and spend over time. Inspect what an upstream reported and how each request was accounted for.</p>
+          <a href="https://github.com/pridkett/simple-llm-proxy/blob/main/docs/accounting.md">Request accounting</a>
+        </article>
+        <article>
+          <h3>Connect more than chat</h3>
+          <p>Serve embeddings and decision models, or give applications access to registered MCP servers through the gateway.</p>
+          <a href="https://github.com/pridkett/simple-llm-proxy/blob/main/docs/decision-models.md">Decision models</a>
+          <a href="https://github.com/pridkett/simple-llm-proxy/blob/main/docs/mcp.md">MCP gateway</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="start" id="start">
+      <div class="wrap start-grid">
+        <div>
+          <p class="label">Quickstart</p>
+          <h2>Make the first call.</h2>
+          <p>Build with Go 1.25.4 or later. This example uses a local Ollama instance so you can try the proxy without a hosted API key.</p>
+          <p>Start Ollama and run <code>ollama pull llama3.2</code> first. Save the <a href="ollama.yaml" download>example config</a> as <code>ollama.yaml</code> in the cloned repository.</p>
+          <a class="text-link" href="https://github.com/pridkett/simple-llm-proxy#quick-start">Read the full quickstart</a>
+        </div>
+        <div class="steps">
+          <div class="code-box">
+            <div class="code-head"><span>Start the proxy</span><button type="button" data-copy hidden>Copy</button></div>
+            <pre tabindex="0"><code>git clone https://github.com/pridkett/simple-llm-proxy.git
+cd simple-llm-proxy
+go build -o proxy ./cmd/proxy
+export PROXY_MASTER_KEY="$(openssl rand -hex 32)"
+./proxy -config ollama.yaml &amp;</code></pre>
+            <p class="copy-status" role="status"></p>
+          </div>
+          <div class="code-box">
+            <div class="code-head"><span>Call it from the same terminal</span><button type="button" data-copy hidden>Copy</button></div>
+            <pre tabindex="0"><code>curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $PROXY_MASTER_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"llama3.2","messages":[{"role":"user","content":"Describe a fictional moon in one sentence."}]}'</code></pre>
+            <p class="copy-status" role="status"></p>
+          </div>
+          <p>Once the listener starts, run the request in the same terminal. Run <code>fg</code> followed by Ctrl+C to stop the proxy.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap companion">
+      <div>
+        <h2>See the request in context.</h2>
+        <p>Export OpenTelemetry spans to Simple Agent Tracer to see proxy calls alongside agent turns and tool activity.</p>
+      </div>
+      <div class="actions">
+        <a class="button primary" href="https://pridkett.github.io/simple-agent-tracer/">Simple Agent Tracer</a>
+        <a class="button" href="https://github.com/pridkett/simple-agent-tracer/blob/main/DESIGN.md#proxy-integration-setup">OTLP setup</a>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap footer">
+    <span>Simple LLM Proxy</span>
+    <a href="https://github.com/pridkett/simple-llm-proxy">Source on GitHub</a>
+  </footer>
+</body>
+</html>

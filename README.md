@@ -1,5 +1,7 @@
 # Simple LLM Proxy
 
+[Project site and quickstart](https://pridkett.github.io/simple-llm-proxy/)
+
 A Go proxy for apps using OpenAI-compatible chat completions or Anthropic-compatible Messages. Keep upstream OpenAI, OpenRouter, Anthropic, and Ollama credentials in one service, and issue separate keys to client apps.
 
 For the LiteLLM replacement checklist, tested behavior, limitations, and staged OpenWebUI cutover, see [the pilot guide](deploy/openwebui-pilot/README.md).
