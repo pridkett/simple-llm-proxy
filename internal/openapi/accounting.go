@@ -19,18 +19,27 @@ func accountingSchema() *openapi3.SchemaRef {
 func accountingPath() *openapi3.PathItem {
 	return &openapi3.PathItem{Get: &openapi3.Operation{
 		Tags: []string{"Accounting"}, Summary: "Get request accounting", OperationID: "getAccounting",
-		Description: "Returns pending or final cost and token evidence, including retries. App keys can read only their own records; master keys can read all records. Missing and inaccessible records both return 404.",
+		Description: "Returns pending or final cost and token evidence, including retries. The x-litellm-response-cost header contains the selected USD amount when final and known. App keys can read only their own records; master keys can read all records. Missing and inaccessible records both return 404.",
 		Security:    &openapi3.SecurityRequirements{{bearerAuthName: []string{}}},
 		Parameters:  openapi3.Parameters{&openapi3.ParameterRef{Value: openapi3.NewPathParameter("id").WithSchema(openapi3.NewStringSchema())}},
-		Responses:   openapi3.NewResponses(openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{Value: &openapi3.Response{Description: strPtr("Accounting record"), Content: openapi3.Content{"application/json": &openapi3.MediaType{Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/AccountingRecord"}}}}}), openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Accounting unavailable or inaccessible")), openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication required"))),
+		Responses:   openapi3.NewResponses(openapi3.WithStatus(http.StatusOK, &openapi3.ResponseRef{Value: &openapi3.Response{Description: strPtr("Accounting record"), Headers: accountingHeaders(), Content: openapi3.Content{"application/json": &openapi3.MediaType{Schema: &openapi3.SchemaRef{Ref: "#/components/schemas/AccountingRecord"}}}}}), openapi3.WithStatus(http.StatusNotFound, errorResponseRef("Accounting unavailable or inaccessible")), openapi3.WithStatus(http.StatusUnauthorized, errorResponseRef("Authentication required"))),
 	}}
 }
+
+func accountingHeaders() openapi3.Headers {
+	headers := openapi3.Headers{}
+	for _, name := range []string{"X-LLM-Accounting-ID", "X-LLM-Accounting-State", "X-LLM-Accounting-Coverage", "X-LLM-Cost-USD", "X-LLM-Cost-Source", accounting.ResponseCostHeader, "x-litellm-total-tokens"} {
+		headers[name] = &openapi3.HeaderRef{Value: &openapi3.Header{Parameter: openapi3.Parameter{Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}}}}
+	}
+	return headers
+}
+
 func addAccountingContract(paths *openapi3.Paths) {
 	paths.Set("/v1/accounting/{id}", accountingPath())
 	for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/embeddings", "/v1/responses"} {
 		op := paths.Value(path).Post
 		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{Value: openapi3.NewHeaderParameter("X-LLM-Include-Accounting").WithSchema(openapi3.NewBoolSchema()).WithDescription("Opt in to proxy_accounting in JSON responses or a final accounting SSE chunk/event. Default false; never forwarded upstream.")})
-		op.Description += " Every call returns X-LLM-Accounting-ID, X-LLM-Accounting-State, and X-LLM-Accounting-Coverage. Final non-streaming calls include X-LLM-Cost-USD and X-LLM-Cost-Source when known, plus LiteLLM cost/token aliases. Streaming headers remain pending; fetch /v1/accounting/{id} after completion or opt in to inline accounting. Chat emits a final choices:[] chunk with proxy_accounting before [DONE]; Responses emits event: proxy.accounting."
+		op.Description += " Every call returns X-LLM-Accounting-ID, X-LLM-Accounting-State, and X-LLM-Accounting-Coverage. Final non-streaming calls include X-LLM-Cost-USD and X-LLM-Cost-Source when known, plus LiteLLM cost/token aliases. Streaming replies can return x-litellm-response-cost in the initial headers when the full cost is known upfront, or as an HTTP trailer once accounting finishes. Clients can also fetch /v1/accounting/{id} after completion or opt in to inline accounting. Chat emits a final choices:[] chunk with proxy_accounting before [DONE]. Responses emits event: proxy.accounting."
 		for _, response := range op.Responses.Map() {
 			if response.Value == nil {
 				continue
@@ -38,8 +47,8 @@ func addAccountingContract(paths *openapi3.Paths) {
 			if response.Value.Headers == nil {
 				response.Value.Headers = openapi3.Headers{}
 			}
-			for _, name := range []string{"X-LLM-Accounting-ID", "X-LLM-Accounting-State", "X-LLM-Accounting-Coverage", "X-LLM-Cost-USD", "X-LLM-Cost-Source", "x-litellm-response-cost", "x-litellm-total-tokens"} {
-				response.Value.Headers[name] = &openapi3.HeaderRef{Value: &openapi3.Header{Parameter: openapi3.Parameter{Schema: &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}}}}
+			for name, header := range accountingHeaders() {
+				response.Value.Headers[name] = header
 			}
 		}
 	}

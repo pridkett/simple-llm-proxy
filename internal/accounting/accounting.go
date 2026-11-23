@@ -18,6 +18,11 @@ import (
 	"github.com/pwagstro/simple_llm_proxy/internal/model"
 )
 
+// ResponseCostHeader carries the USD cost selected for an HTTP request.
+const ResponseCostHeader = "x-litellm-response-cost"
+
+const reportedViaCostHeader = "header:" + ResponseCostHeader
+
 type Usage struct {
 	Source        string        `json:"source"`
 	InputTokens   *int64        `json:"input_tokens"`
@@ -279,8 +284,8 @@ func ObserveHeaders(ctx context.Context, h http.Header) {
 	ref.c.mu.Lock()
 	defer ref.c.mu.Unlock()
 	a := &ref.c.record.Attempts[ref.index]
-	if v := h.Get("x-litellm-response-cost"); v != "" {
-		setReported(a, v, "header:x-litellm-response-cost")
+	if v := h.Get(ResponseCostHeader); v != "" {
+		setReported(a, v, reportedViaCostHeader)
 	}
 	if v := h.Get("x-litellm-total-tokens"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
@@ -298,7 +303,7 @@ func setReported(a *Attempt, s, via string) {
 		warn(a, "invalid upstream cost from "+via)
 		return
 	}
-	if a.Cost.ReportedVia == "header:x-litellm-response-cost" && via != "header:x-litellm-response-cost" {
+	if a.Cost.ReportedVia == reportedViaCostHeader && via != reportedViaCostHeader {
 		return
 	}
 	a.Cost.ReportedAmount = &v

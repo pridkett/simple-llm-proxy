@@ -34,6 +34,7 @@ type callAccounting struct {
 	router                              *router.Router
 	writer                              http.ResponseWriter
 	inline, streaming, background, done bool
+	costTrailer                         bool
 	model, endpoint, session            string
 	start                               time.Time
 	deployment                          *provider.Deployment
@@ -127,6 +128,9 @@ func (s *callAccounting) complete() *accounting.Record {
 	if !s.streaming && s.responseStatus == 0 {
 		setAccountingHeaders(s.writer, rec)
 	}
+	if s.costTrailer && rec.Cost.Amount != nil {
+		s.writer.Header().Set(http.TrailerPrefix+accounting.ResponseCostHeader, *rec.Cost.Amount)
+	}
 	return rec
 }
 func creditAccounting(rec *accounting.Record, sa *keystore.SpendAccumulator, budget *router.PoolBudgetManager) {
@@ -195,6 +199,27 @@ func (s *callAccounting) emitStream(w http.ResponseWriter, responses bool) {
 	}
 	fmt.Fprintf(w, "data: %s\n\n", data)
 }
+
+// prepareResponseCost runs before a streamed or relayed body commits the headers.
+func (s *callAccounting) prepareResponseCost(allowTrailer bool) {
+	rec := s.collector.Snapshot(false)
+	// Only upstream header costs are fixed before the body is read. A cost in
+	// a usage event or an estimate can change as more usage arrives.
+	known := rec.Coverage == "complete" && rec.Cost.Source == "upstream"
+	for _, attempt := range rec.Attempts {
+		if attempt.Cost.ReportedVia != "header:"+accounting.ResponseCostHeader {
+			known = false
+			break
+		}
+	}
+	if known {
+		s.writer.Header().Set(accounting.ResponseCostHeader, *rec.Cost.Amount)
+	} else if allowTrailer {
+		s.writer.Header().Add("Trailer", accounting.ResponseCostHeader)
+		s.costTrailer = true
+	}
+}
+
 func setAccountingHeaders(w http.ResponseWriter, r *accounting.Record) {
 	h := w.Header()
 	h.Set("X-LLM-Accounting-ID", r.ID)
@@ -206,7 +231,7 @@ func setAccountingHeaders(w http.ResponseWriter, r *accounting.Record) {
 	if r.Cost.Amount != nil {
 		h.Set("X-LLM-Cost-USD", *r.Cost.Amount)
 		h.Set("X-LLM-Cost-Source", r.Cost.Source)
-		h.Set("x-litellm-response-cost", *r.Cost.Amount)
+		h.Set(accounting.ResponseCostHeader, *r.Cost.Amount)
 	}
 	if r.Usage.TotalTokens != nil {
 		h.Set("x-litellm-total-tokens", strconv.FormatInt(*r.Usage.TotalTokens, 10))
@@ -244,6 +269,7 @@ func AccountingDetail(store storage.Storage, admin bool) http.HandlerFunc {
 			model.WriteError(w, model.ErrNotFound("accounting not found"))
 			return
 		}
+		setAccountingHeaders(w, rec)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(rec)
